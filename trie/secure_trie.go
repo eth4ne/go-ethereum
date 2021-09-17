@@ -20,8 +20,8 @@ import (
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/ethdb/memorydb"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // SecureTrie wraps a trie with key hashing. In a secure trie, all
@@ -220,4 +220,14 @@ func (t *SecureTrie) Trie() *Trie {
 
 func (t *SecureTrie) MyCommit() {
 	t.trie.MyCommit()
+}
+
+// trie/secure_trie.go
+
+func (t *SecureTrie) InspectTrie() TrieInspectResult {
+	return t.trie.InspectTrie()
+}
+
+func (t *SecureTrie) InspectStorageTrie() TrieInspectResult {
+	return t.trie.InspectStorageTrie()
 }
