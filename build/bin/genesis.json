@@ -9,7 +9,7 @@
     "timestamp": "0x0",
      "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
     "extraData": "",
-    "gasLimit": "0xffffffff",
+    "gasLimit": "0xfffffffff",
     "config": {
        "chainId": 4224,
        "homesteadBlock": 0,

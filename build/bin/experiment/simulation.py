@@ -16,7 +16,7 @@ PASSWORD = "1234"
 
 # Account number
 ACCOUNT_NUM = int(sys.argv[1])
-TX_PER_BLOCK = 200
+TX_PER_BLOCK = 5 # 200
 
 # multiprocessing
 THREAD_COUNT = 1
@@ -103,7 +103,7 @@ def sendTransactions(num, offset):
         else:
             amount = int(1)
 
-        # print("to: ", to, "/ from: ", fullnode.eth.coinbase, "/ amount:", amount)
+        print("to: ", to, "/ from: ", fullnode.eth.coinbase, "/ amount:", amount)
 
         while True:
             try:

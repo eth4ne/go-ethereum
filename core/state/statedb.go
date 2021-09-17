@@ -534,7 +534,7 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 	// enough to track account updates at commit time, deletions need tracking
 	// at transaction boundary level to ensure we capture state clearing.
 	if s.snap != nil {
-		s.snapAccounts[obj.addrHash] = snapshot.SlimAccountRLP(obj.data.Nonce, obj.data.Balance, obj.data.Root, obj.data.CodeHash)
+		s.snapAccounts[obj.addrHash] = snapshot.SlimAccountRLP(obj.data.Nonce, obj.data.Balance, obj.data.Root, obj.data.CodeHash) 
 	}
 }
 
@@ -598,6 +598,7 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 				Balance:  acc.Balance,
 				CodeHash: acc.CodeHash,
 				Root:     common.BytesToHash(acc.Root),
+				// Addr:	  addr, // acc.Addr, // 1 check (joonha) (or 'addr' might be ok.) --> Snapshot
 			}
 			if len(data.CodeHash) == 0 {
 				data.CodeHash = emptyCodeHash
@@ -605,6 +606,8 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 			if data.Root == (common.Hash{}) {
 				data.Root = emptyRoot
 			}
+			// 8 check (joonha)
+			data.Addr = addr
 		}
 	}
 	// If snapshot unavailable or reading from it failed, load from the database

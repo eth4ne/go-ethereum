@@ -37,7 +37,7 @@ func (c Code) String() string {
 	return string(c) //strings.Join(Disassemble(c), " ")
 }
 
-type Storage map[common.Hash]common.Hash
+type Storage map[common.Hash]common.Hash 
 
 func (s Storage) String() (str string) {
 	for key, value := range s {
@@ -104,6 +104,7 @@ type Account struct {
 	Balance  *big.Int
 	Root     common.Hash // merkle root of the storage trie
 	CodeHash []byte
+	Addr	 common.Address // 3 check (joonha) Addr will be added here.
 }
 
 // newObject creates a state object.
@@ -117,6 +118,10 @@ func newObject(db *StateDB, address common.Address, data Account) *stateObject {
 	if data.Root == (common.Hash{}) {
 		data.Root = emptyRoot
 	}
+	
+	// 2 check (joonha) Addr should be assigned here.
+	data.Addr = address
+	
 	
 	// set addrHash as a specific key value to implement compactTrie (jmlee)
 	addressHash, doExist := db.AddrToKeyDirty[address]
@@ -561,6 +566,11 @@ func (s *stateObject) CodeHash() []byte {
 	return s.data.CodeHash
 }
 
+// 5 check (joonha) should 'func Addr()' be added?
+func (s *stateObject) Addr() common.Address {
+	return s.data.Addr
+}
+
 func (s *stateObject) Balance() *big.Int {
 	return s.data.Balance
 }
@@ -584,6 +594,9 @@ func NewObject(db *StateDB, address common.Address, data Account) *stateObject {
 	if data.CodeHash == nil {
 		data.CodeHash = emptyCodeHash
 	}
+	// 6 check (joonha) don't know the use of this function, but adding Addr might be useful.
+	data.Addr = address 
+
 	return &stateObject{
 		db:            db,
 		address:       address,
