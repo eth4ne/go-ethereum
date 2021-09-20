@@ -270,6 +270,7 @@ func (s *StateDB) Empty(addr common.Address) bool {
 	return so == nil || so.empty()
 }
 
+// (step3) (joonha)
 // GetBalance retrieves the balance from the given address or 0 if object not found
 func (s *StateDB) GetBalance(addr common.Address) *big.Int {
 	stateObject := s.getStateObject(addr)
@@ -532,14 +533,14 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 		newAddrHash := common.HexToHash(strconv.FormatInt(s.NextKey, 16))
 		// s.AddrToKeyDirty[addr] = newAddrHash
 		_, doExist := s.AddrToKeyDirty[addr]
-		if !doExist { // (joonha)
+		if !doExist { // If it's a first appearance, allocate. (joonha)
 			s.AddrToKeyDirty[addr] = &emptyKeyAndMap
 		}
-		s.AddrToKeyDirty[addr].Key = newAddrHash 
+		s.AddrToKeyDirty[addr].Key = newAddrHash // no update for the Map
 		if err = s.trie.TryUpdate_SetKey(newAddrHash[:], data); err != nil {
 			s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
 		}
-		obj.addrHash = newAddrHash
+		obj.addrHash = newAddrHash // no update for the Map
 		s.NextKey += 1
 	}
 
@@ -595,6 +596,8 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 		data *Account
 		err  error
 	)
+	
+	// now s.snap is nil so skip this (joonha)
 	if s.snap != nil {
 		if metrics.EnabledExpensive {
 			defer func(start time.Time) { s.SnapshotAccountReads += time.Since(start) }(time.Now())
@@ -633,6 +636,7 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 			data.Addr = addr
 		}
 	}
+	// now s.snap is nil so consider this (joonha)
 	// If snapshot unavailable or reading from it failed, load from the database
 	if s.snap == nil || err != nil {
 		if metrics.EnabledExpensive {
@@ -685,7 +689,7 @@ func (s *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) 
 	_, doExist := common.AddrToKey[addr] // (joonha)
 	if !doExist && addr != common.ZeroAddress {
 		newAddrKey := common.HexToHash(strconv.FormatInt(s.NextKey, 16))
-		s.AddrToKeyDirty[addr] = &emptyKeyAndMap
+		s.AddrToKeyDirty[addr] = &emptyKeyAndMap // Map is empty
 		s.AddrToKeyDirty[addr].Key = newAddrKey 
 		s.NextKey += 1
 	}
@@ -791,7 +795,13 @@ func (s *StateDB) Copy() *StateDB {
 			state.AddrToKeyDirty[keyX] = &emptyKeyAndMap
 		}
 		state.AddrToKeyDirty[keyX].Key = valueX.Key
-	}
+		// state.AddrToKeyDirty[keyX].Map = valueX.Map // also Copy Map of KeyAndMap (joonha)
+		// deep copy of the Map
+		for key, value := range s.AddrToKeyDirty[keyX].Map {
+			state.AddrToKeyDirty[keyX].Map[key] = value
+		}
+	}	
+
 	for addr := range s.journal.dirties {
 		// As documented [here](https://github.com/ethereum/go-ethereum/pull/16485#issuecomment-380438527),
 		// and in the Finalise-method, there is a case where an object is in the journal but not
