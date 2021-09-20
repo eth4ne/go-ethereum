@@ -203,7 +203,8 @@ func (t *SecureTrie) hashKey(key []byte) []byte {
 	// change keys of a secure trie to make compactTrie (jmlee)
 	hash, doExist := common.AddrToKey[common.BytesToAddress(key)]
 	if doExist {
-		return hash[:]
+		// return hash[:]
+		return hash.Key[:] // (joonha)
 	} else {
 		return common.NoExistKey[:]
 	}

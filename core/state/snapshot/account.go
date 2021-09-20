@@ -33,7 +33,7 @@ type Account struct {
 	Balance  *big.Int
 	Root     []byte
 	CodeHash []byte
-	// Addr 	 common.Address // 10 check (joonha)
+	// Addr 	 common.Address // 10 check (joonha) about Snapshot?
 }
 
 // SlimAccount converts a state.Account content into a slim snapshot account

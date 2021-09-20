@@ -43,12 +43,19 @@ const (
 	AddressLength = 20
 )
 
+// KeyAndMap structure which will be used as a value of AddrToKey mapping (joonha)
+type KeyAndMap struct {
+	Key          Hash 		   // location of the Account in a state trie
+	Map			 map[Hash]Hash // (variable ID / Location) mapping variable ID to Location in a storage trie
+}
+
 var (
 	hashT    = reflect.TypeOf(Hash{})
 	addressT = reflect.TypeOf(Address{})
 
 	// temp map for verifying compactTrie idea (address: real address of the account / hash: specific key for the account in the state trie) (jmlee)
-	AddrToKey = make(map[Address]Hash)
+	// AddrToKey = make(map[Address]Hash)
+	AddrToKey = make(map[Address]*KeyAndMap) // (joonha)
 	AddrToKeyMapMutex = sync.RWMutex{} // to avoid fatal error: "concurrent map read and map write"
 	AddrToKeyPath = "" // disk path to save AddrToKey (will be set as [datadir]/geth/chaindata/)
 	NoExistKey = HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff") // very large key which will not be reached forever

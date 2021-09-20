@@ -44,6 +44,9 @@ type revision struct {
 var (
 	// emptyRoot is the known root hash of an empty trie.
 	emptyRoot = common.HexToHash("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
+
+	// empty KeyAndMap (joonha)
+	emptyKeyAndMap = common.KeyAndMap{common.Hash{}, nil}
 )
 
 type proofList [][]byte
@@ -122,7 +125,10 @@ type StateDB struct {
 	// to implement compact MPT (jmlee)
 	NextKey				int64 // key of the first 'will be inserted' account
 	CheckpointKey		int64 // save initial NextKey value to determine whether move leaf nodes or not
-	AddrToKeyDirty		map[common.Address]common.Hash // dirty cache for common.AddrToKey
+	// AddrToKeyDirty		map[common.Address]common.Hash // dirty cache for common.AddrToKey
+
+	// (joonha)
+	AddrToKeyDirty		map[common.Address]*common.KeyAndMap // dirty cache for common.AddrToKey
 }
 
 // New creates a new state from a given trie.
@@ -151,7 +157,8 @@ func New(root common.Hash, db Database, snaps *snapshot.Tree) (*StateDB, error) 
 		hasher:              crypto.NewKeccakState(),
 		NextKey:		 	 counter.Int64(),
 		CheckpointKey: 		 counter.Int64(),
-		AddrToKeyDirty:	 	 make(map[common.Address]common.Hash),
+		// AddrToKeyDirty:	 	 make(map[common.Address]common.Hash),
+		AddrToKeyDirty:	 	 make(map[common.Address]*common.KeyAndMap), // (joonha)
 	}
 	if sdb.snaps != nil {
 		if sdb.snap = sdb.snaps.Snapshot(root); sdb.snap != nil {
@@ -490,9 +497,16 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 
 	// codes for compact trie (jmlee)
 	// get addrKey of this address 
-	addrKey, doExist := s.AddrToKeyDirty[addr]
+	// addrKey, doExist := s.AddrToKeyDirty[addr]
+	_, doExist := s.AddrToKeyDirty[addr] // (joonha)
+	addrKey := common.Hash{} // (joonha)
 	if !doExist {
-		addrKey = common.AddrToKey[addr]
+		// addrKey = common.AddrToKey[addr]
+		addrKeyTemp, err := common.AddrToKey[addr] // (joonha)
+		if !err {
+			addrKeyTemp = &emptyKeyAndMap // (joonha)
+		}
+		addrKey = addrKeyTemp.Key
 	}
 	addrKey_bigint := new(big.Int)
 	addrKey_bigint.SetString(addrKey.Hex()[2:], 16)
@@ -516,7 +530,12 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 
 		// insert new leaf node at right side
 		newAddrHash := common.HexToHash(strconv.FormatInt(s.NextKey, 16))
-		s.AddrToKeyDirty[addr] = newAddrHash
+		// s.AddrToKeyDirty[addr] = newAddrHash
+		_, doExist := s.AddrToKeyDirty[addr]
+		if !doExist { // (joonha)
+			s.AddrToKeyDirty[addr] = &emptyKeyAndMap
+		}
+		s.AddrToKeyDirty[addr].Key = newAddrHash 
 		if err = s.trie.TryUpdate_SetKey(newAddrHash[:], data); err != nil {
 			s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
 		}
@@ -583,9 +602,13 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 		var acc *snapshot.Account
 
 		// change key to make compactTrie (jmlee)
-		key, doExist := common.AddrToKey[addr]
+		// key, doExist := common.AddrToKey[addr]
+		keyAndMap, doExist := common.AddrToKey[addr] // (joonha)
+		key := common.Hash{} // (joonha)
 		if !doExist {
 			key = common.NoExistKey
+		} else { // (joonha)
+			key = keyAndMap.Key
 		}
 		fmt.Println("Try to find account at the snapshot -> addr:", addr.Hex(), "/ key:", key.Hex())
 		if acc, err = s.snap.Account(key); err == nil {
@@ -653,10 +676,17 @@ func (s *StateDB) GetOrNewStateObject(addr common.Address) *stateObject {
 func (s *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) {
 
 	// insert to map to make compactTrie (jmlee)
-	_, doExist := common.AddrToKey[addr]
+	// _, doExist := common.AddrToKey[addr]
+	// if !doExist && addr != common.ZeroAddress {
+	// 	newAddrKey := common.HexToHash(strconv.FormatInt(s.NextKey, 16))
+	// 	s.AddrToKeyDirty[addr] = newAddrKey
+	// 	s.NextKey += 1
+	// }
+	_, doExist := common.AddrToKey[addr] // (joonha)
 	if !doExist && addr != common.ZeroAddress {
 		newAddrKey := common.HexToHash(strconv.FormatInt(s.NextKey, 16))
-		s.AddrToKeyDirty[addr] = newAddrKey
+		s.AddrToKeyDirty[addr] = &emptyKeyAndMap
+		s.AddrToKeyDirty[addr].Key = newAddrKey 
 		s.NextKey += 1
 	}
 	
@@ -747,11 +777,20 @@ func (s *StateDB) Copy() *StateDB {
 		hasher:              crypto.NewKeccakState(),
 		NextKey:		 	 s.NextKey,
 		CheckpointKey: 		 s.CheckpointKey,
-		AddrToKeyDirty:		 make(map[common.Address]common.Hash, len(s.AddrToKeyDirty)),
+		// AddrToKeyDirty:		 make(map[common.Address]common.Hash, len(s.AddrToKeyDirty)),
+		AddrToKeyDirty:		 make(map[common.Address]*common.KeyAndMap, len(s.AddrToKeyDirty)), // (joonha)
 	}
 	// Copy the dirty states, logs, and preimages
-	for key, value := range s.AddrToKeyDirty {
-		state.AddrToKeyDirty[key] = value
+	// for key, value := range s.AddrToKeyDirty {
+	// 	state.AddrToKeyDirty[key] = value
+	// }
+	for keyX, valueX := range s.AddrToKeyDirty { // (joonha)
+		state.AddrToKeyDirty[keyX] = valueX
+		_, err := state.AddrToKeyDirty[keyX]
+		if !err {
+			state.AddrToKeyDirty[keyX] = &emptyKeyAndMap
+		}
+		state.AddrToKeyDirty[keyX].Key = valueX.Key
 	}
 	for addr := range s.journal.dirties {
 		// As documented [here](https://github.com/ethereum/go-ethereum/pull/16485#issuecomment-380438527),
@@ -1013,8 +1052,12 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 	}
 	// apply dirties to common.AddrToKey (jmlee)
 	common.AddrToKeyMapMutex.Lock()
-	for key, value := range s.AddrToKeyDirty {
-		common.AddrToKey[key] = value
+	// for key, value := range s.AddrToKeyDirty {
+	// 	common.AddrToKey[key] = value
+	// }
+	for key, value := range s.AddrToKeyDirty { // (joonha)
+		common.AddrToKey[key] = &emptyKeyAndMap
+		common.AddrToKey[key].Key = value.Key
 	}
 	common.AddrToKeyMapMutex.Unlock()
 

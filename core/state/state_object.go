@@ -31,6 +31,8 @@ import (
 
 var emptyCodeHash = crypto.Keccak256(nil)
 
+
+
 type Code []byte
 
 func (c Code) String() string {
@@ -104,7 +106,7 @@ type Account struct {
 	Balance  *big.Int
 	Root     common.Hash // merkle root of the storage trie
 	CodeHash []byte
-	Addr	 common.Address // 3 check (joonha) Addr will be added here.
+	Addr	 common.Address // 3 check (joonha)
 }
 
 // newObject creates a state object.
@@ -124,17 +126,24 @@ func newObject(db *StateDB, address common.Address, data Account) *stateObject {
 	
 	
 	// set addrHash as a specific key value to implement compactTrie (jmlee)
-	addressHash, doExist := db.AddrToKeyDirty[address]
+	_, doExist := db.AddrToKeyDirty[address]
+	addressHashTemp := common.Hash{}
 	if !doExist {
 	common.AddrToKeyMapMutex.Lock() // to avoid fatal error: "concurrent map read and map write"
-		addressHash = common.AddrToKey[address]
+		// addressHash = common.AddrToKey[address]
+		addressHashX, err := common.AddrToKey[address] // (joonha)
+		if !err {
+			addressHashX = &emptyKeyAndMap
+		}
+		addressHashTemp = addressHashX.Key
 	common.AddrToKeyMapMutex.Unlock()
 	}
 	
 	return &stateObject{
 		db:             db,
 		address:        address,
-		addrHash:       addressHash,
+		// addrHash:       addressHash,
+		addrHash:       addressHashTemp, // (joonha)
 		data:           data,
 		originStorage:  make(Storage),
 		pendingStorage: make(Storage),
