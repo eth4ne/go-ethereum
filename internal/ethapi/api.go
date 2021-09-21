@@ -674,6 +674,7 @@ func (s *PublicBlockChainAPI) GetBlockByNumber(ctx context.Context, number rpc.B
 		tir := stateTrie.InspectTrie()
 		elapsedTime := time.Since(startTime)
 		// fmt.Println("\n\n\ntrie inspect result at block", block.NumberU64(), "(it took", int(elapsedTime.Seconds()), "seconds)")
+		fmt.Println("\ntrie inspect result at block", block.NumberU64(), "(it took", elapsedTime.Milliseconds(), "ms)")
 		tir.PrintTrieInspectResult(block.NumberU64(), int(elapsedTime.Seconds()))
 		fmt.Println("")
 	}
@@ -1760,7 +1761,7 @@ func SubmitTransaction(ctx context.Context, b Backend, tx *types.Transaction) (c
 		addr := crypto.CreateAddress(from, tx.Nonce())
 		log.Info("Submitted contract creation", "hash", tx.Hash().Hex(), "from", from, "nonce", tx.Nonce(), "contract", addr.Hex(), "value", tx.Value())
 	} else {
-		log.Info("Submitted transaction", "hash", tx.Hash().Hex(), "from", from, "nonce", tx.Nonce(), "recipient", tx.To(), "value", tx.Value())
+		// log.Info("Submitted transaction", "hash", tx.Hash().Hex(), "from", from, "nonce", tx.Nonce(), "recipient", tx.To(), "value", tx.Value())
 	}
 	return tx.Hash(), nil
 }

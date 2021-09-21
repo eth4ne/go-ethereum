@@ -18,6 +18,7 @@ package trie
 
 import (
 	"fmt"
+	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb/memorydb"
@@ -188,6 +189,10 @@ func (t *SecureTrie) hashKey(key []byte) []byte {
 	h.sha.Write(key)
 	h.sha.Read(t.hashKeyBuf[:])
 	returnHasherToPool(h)
+
+	// fmt.Println("hashKey:", t.hashKeyBuf[:])
+	// fmt.Println("at hashKey:", common.BytesToHash(t.hashKeyBuf[:]).Hex())
+
 	return t.hashKeyBuf[:]
 }
 
@@ -230,4 +235,9 @@ func (t *SecureTrie) InspectTrie() TrieInspectResult {
 
 func (t *SecureTrie) InspectStorageTrie() TrieInspectResult {
 	return t.trie.InspectStorageTrie()
+}
+
+// get last key among leaf nodes (i.e., right-most key value) (jmlee)
+func (t *SecureTrie) GetLastKey() (*big.Int) {
+	return t.trie.GetLastKey()
 }

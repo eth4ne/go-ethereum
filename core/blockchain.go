@@ -1586,14 +1586,17 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	}
 
 	// print database inspect result (jmlee)
-	if block.Header().Number.Int64()%1 == 0 {
+	if block.Header().Number.Int64() % 10000 == 0 {
 		rawdb.InspectDatabase(rawdb.GlobalDB, nil, nil)
 
-		// print state trie (jmlee)
-		fmt.Println("$$$ print state trie at block", bc.CurrentBlock().Header().Number)
-		ldb := trie.NewDatabase(bc.db)
-		stateTrie, _ := trie.New(bc.CurrentBlock().Root(), ldb)
-		stateTrie.Print()
+		// // print state trie (jmlee)
+		// fmt.Println("$$$ print state trie at block", bc.CurrentBlock().Header().Number)
+		// ldb := trie.NewDatabase(bc.db)
+		// // stateTrie, _ := trie.New(bc.CurrentBlock().Root(), ldb)
+		// stateTrie, _ := trie.NewSecure(bc.CurrentBlock().Root(), ldb)
+		// stateTrie.Print()
+		// fmt.Println("trie's last key:", stateTrie.GetLastKey())
+		// fmt.Println("trie's last key hash:", common.HexToHash(stateTrie.GetLastKey().Text(16)))
 	}
 
 	return status, nil

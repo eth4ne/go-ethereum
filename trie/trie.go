@@ -26,6 +26,8 @@ import (
 	"runtime/debug"
 	"strconv"
 	"sync"
+	"math/big"
+	// "strconv"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -594,6 +596,7 @@ func NewEmpty() *Trie {
 	return trie
 }
 
+// (jmlee)
 func (t *Trie) MyCommit() {
 	// triedb.Commit(root, false, nil)
 	t.db.Commit(t.Hash(), false, nil)
@@ -626,7 +629,7 @@ type TrieInspectResult struct {
 }
 
 func (tir *TrieInspectResult) PrintTrieInspectResult(blockNumber uint64, elapsedTime int) {
-	f1, err := os.Create("/home/jhkim/go/src/github.com/ethereum/result_" + strconv.FormatUint(blockNumber, 10) + ".txt")
+	f1, err := os.Create("./trieInpectResult_" + strconv.FormatUint(blockNumber, 10) + ".txt")
 	if err != nil {
 		fmt.Printf("Cannot create result file.\n")
 		os.Exit(1)
@@ -722,7 +725,7 @@ func (t *Trie) InspectStorageTrie() TrieInspectResult {
 
 var cnt = 0
 var rwMutex = new(sync.RWMutex)
-var maxGoroutine = 10000
+var maxGoroutine = 1
 
 func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGroup, depth int, trie string) {
 
@@ -901,4 +904,47 @@ func increaseSize(nodeSize int, node string, tir *TrieInspectResult, depth int) 
 		os.Exit(1)
 	}
 	rwMutex.Unlock()
+}
+
+// get last key among leaf nodes (i.e., right-most key value) (jmlee)
+func (t *Trie) GetLastKey() (*big.Int) {
+	lastKey := t.getLastKey(t.root, nil)
+	// fmt.Println("lastKey:", lastKey)
+	return lastKey
+}
+
+// get last key among leaf nodes (i.e., right-most key value) (jmlee)
+func (t *Trie) getLastKey(origNode node, lastKey []byte) (*big.Int) {
+	switch n := (origNode).(type) {
+	case nil:
+		return big.NewInt(0)
+	case valueNode:
+		hexToInt := new(big.Int)
+		hexToInt.SetString(common.BytesToHash(hexToKeybytes(lastKey)).Hex()[2:], 16)
+		return hexToInt
+	case *shortNode:
+		lastKey = append(lastKey, n.Key...)
+		// fmt.Println("at getLastKey -> lastKey: ", lastKey, "/ appended key:", n.Key, " (short node)")
+		return t.getLastKey(n.Val, lastKey)
+	case *fullNode:
+		last := 0
+		for i, node := range &n.Children {
+			if node != nil {
+				last = i
+			}
+		}
+		lastByte := common.HexToHash("0x" + indices[last])
+		lastKey = append(lastKey, lastByte[len(lastByte)-1])
+		// fmt.Println("at getLastKey -> lastKey: ", indices[last], "/ appended key:", indices[last], " (full node)")
+		return t.getLastKey(n.Children[last], lastKey)
+	case hashNode:
+		child, err := t.resolveHash(n, nil)
+		if err != nil {
+			lastKey = nil
+			return big.NewInt(0)
+		}
+		return t.getLastKey(child, lastKey)
+	default:
+		panic(fmt.Sprintf("%T: invalid node: %v", origNode, origNode))
+	}
 }

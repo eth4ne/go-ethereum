@@ -23,6 +23,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"fmt"
 
 	mapset "github.com/deckarep/golang-set"
 	"github.com/ethereum/go-ethereum/common"
@@ -910,6 +911,9 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		}
 	}
 	// Could potentially happen if starting to mine in an odd state.
+	// 여기 makeCurrent 함수를 통해 tx를 시작하기 전, 즉 이전 블록 헤더의 state로 돌아감 (jmlee)
+	// 그래서 stateDB에다가 AccountCounter 값을 넣어두고서, 그때 당시의 AccountCounter 값을 알아와야 할듯
+	// 그러려면 compact Trie의 가장 오른쪽 leaf node의 key값이 뭔지 알아내는 함수를 추가하면 될 것 같음 [중요, TODO]
 	err := w.makeCurrent(parent, header)
 	if err != nil {
 		log.Error("Failed to create mining context", "err", err)
@@ -965,6 +969,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		return
 	}
 	// Split the pending transactions into locals and remotes
+	fmt.Println("split the pending transactions into locals and remotes")
 	localTxs, remoteTxs := make(map[common.Address]types.Transactions), pending
 	for _, account := range w.eth.TxPool().Locals() {
 		if txs := remoteTxs[account]; len(txs) > 0 {
@@ -973,12 +978,14 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		}
 	}
 	if len(localTxs) > 0 {
+		fmt.Println("commit local tranactions") // call IntermediateRoot() after applying a transaction
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, localTxs)
 		if w.commitTransactions(txs, w.coinbase, interrupt) {
 			return
 		}
 	}
 	if len(remoteTxs) > 0 {
+		fmt.Println("commit remote transactions") // call IntermediateRoot() after applying a transaction
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, remoteTxs)
 		if w.commitTransactions(txs, w.coinbase, interrupt) {
 			return
@@ -993,6 +1000,7 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 	// Deep copy receipts here to avoid interaction between different tasks.
 	receipts := copyReceipts(w.current.receipts)
 	s := w.current.state.Copy()
+	// 여기서 block reward 를 반영하고 IntermediateRoot()를 호출하게 됨 (jmlee)
 	block, err := w.engine.FinalizeAndAssemble(w.chain, w.current.header, s, w.current.txs, uncles, receipts)
 	if err != nil {
 		return err
