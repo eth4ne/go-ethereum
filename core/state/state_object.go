@@ -127,23 +127,26 @@ func newObject(db *StateDB, address common.Address, data Account) *stateObject {
 	
 	// set addrHash as a specific key value to implement compactTrie (jmlee)
 	_, doExist := db.AddrToKeyDirty[address]
-	addressHashTemp := common.Hash{}
+	// (joonha)
+	addressHash := common.Hash{}
 	if !doExist {
-	common.AddrToKeyMapMutex.Lock() // to avoid fatal error: "concurrent map read and map write"
+		common.AddrToKeyMapMutex.Lock() // to avoid fatal error: "concurrent map read and map write"
 		// addressHash = common.AddrToKey[address]
-		addressHashX, err := common.AddrToKey[address] // (joonha)
+		addressHashX, err := common.AddrToKey[address]
 		if !err {
 			addressHashX = &emptyKeyAndMap
 		}
-		addressHashTemp = addressHashX.Key
-	common.AddrToKeyMapMutex.Unlock()
+		addressHash = addressHashX.Key
+		common.AddrToKeyMapMutex.Unlock()
+	} else {
+		addressHash = db.AddrToKeyDirty[address].Key
 	}
 	
 	return &stateObject{
 		db:             db,
 		address:        address,
 		// addrHash:       addressHash,
-		addrHash:       addressHashTemp, // (joonha)
+		addrHash:       addressHash, // (joonha)
 		data:           data,
 		originStorage:  make(Storage),
 		pendingStorage: make(Storage),
@@ -603,13 +606,30 @@ func NewObject(db *StateDB, address common.Address, data Account) *stateObject {
 	if data.CodeHash == nil {
 		data.CodeHash = emptyCodeHash
 	}
-	// 6 check (joonha) don't know the use of this function, but adding Addr might be useful.
+	// don't know the use of this function, but adding Addr might be useful. (joonha)
 	data.Addr = address 
+
+	// (joonha)
+	_, doExist := db.AddrToKeyDirty[address]
+	addressHash := common.Hash{}
+	if !doExist {
+		common.AddrToKeyMapMutex.Lock() // to avoid fatal error: "concurrent map read and map write"
+		// addressHash = common.AddrToKey[address]
+		addressHashX, err := common.AddrToKey[address]
+		if !err {
+			addressHashX = &emptyKeyAndMap
+		}
+		addressHash = addressHashX.Key
+		common.AddrToKeyMapMutex.Unlock()
+	} else {
+		addressHash = db.AddrToKeyDirty[address].Key
+	}
 
 	return &stateObject{
 		db:            db,
 		address:       address,
-		addrHash:      crypto.Keccak256Hash(address[:]),
+		// addrHash:      crypto.Keccak256Hash(address[:]),
+		addrHash:      addressHash, // (joonha)
 		data:          data,
 		originStorage: make(Storage),
 		dirtyStorage:  make(Storage),

@@ -266,7 +266,7 @@ type Account struct {
 	Balance  *big.Int
 	Root     common.Hash // merkle root of the storage trie
 	CodeHash []byte
-	Addr	 common.Address // 9 check (joonha) 
+	Addr	 common.Address // (joonha) 
 }
 func (n valueNode) toString(ind string, db *Database) string {
 	// decode data into account & print account

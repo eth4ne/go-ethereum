@@ -270,7 +270,6 @@ func (s *StateDB) Empty(addr common.Address) bool {
 	return so == nil || so.empty()
 }
 
-// (step3) (joonha)
 // GetBalance retrieves the balance from the given address or 0 if object not found
 func (s *StateDB) GetBalance(addr common.Address) *big.Int {
 	stateObject := s.getStateObject(addr)
@@ -499,16 +498,20 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 	// codes for compact trie (jmlee)
 	// get addrKey of this address 
 	// addrKey, doExist := s.AddrToKeyDirty[addr]
-	_, doExist := s.AddrToKeyDirty[addr] // (joonha)
-	addrKey := common.Hash{} // (joonha)
+
+	// (joonha)
+	addrKey := common.Hash{} 
+	_, doExist := s.AddrToKeyDirty[addr] 
 	if !doExist {
-		// addrKey = common.AddrToKey[addr]
-		addrKeyTemp, err := common.AddrToKey[addr] // (joonha)
+		addrKeyTemp, err := common.AddrToKey[addr] 
 		if !err {
-			addrKeyTemp = &emptyKeyAndMap // (joonha)
+			addrKeyTemp = &emptyKeyAndMap
 		}
 		addrKey = addrKeyTemp.Key
+	} else {
+		addrKey = s.AddrToKeyDirty[addr].Key
 	}
+
 	addrKey_bigint := new(big.Int)
 	addrKey_bigint.SetString(addrKey.Hex()[2:], 16)
 	if addrKey_bigint.Int64() >= s.CheckpointKey {
@@ -531,12 +534,14 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 
 		// insert new leaf node at right side
 		newAddrHash := common.HexToHash(strconv.FormatInt(s.NextKey, 16))
+		
 		// s.AddrToKeyDirty[addr] = newAddrHash
 		_, doExist := s.AddrToKeyDirty[addr]
 		if !doExist { // If it's a first appearance, allocate. (joonha)
 			s.AddrToKeyDirty[addr] = &emptyKeyAndMap
 		}
 		s.AddrToKeyDirty[addr].Key = newAddrHash // no update for the Map
+
 		if err = s.trie.TryUpdate_SetKey(newAddrHash[:], data); err != nil {
 			s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
 		}
@@ -606,12 +611,15 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 
 		// change key to make compactTrie (jmlee)
 		// key, doExist := common.AddrToKey[addr]
-		keyAndMap, doExist := common.AddrToKey[addr] // (joonha)
-		key := common.Hash{} // (joonha)
+		// (joonha)
+		keyAndMap, doExist := common.AddrToKey[addr] 
+		key := common.Hash{}
 		if !doExist {
 			key = common.NoExistKey
-		} else { // (joonha)
+			// map
+		} else {
 			key = keyAndMap.Key
+			// map
 		}
 		fmt.Println("Try to find account at the snapshot -> addr:", addr.Hex(), "/ key:", key.Hex())
 		if acc, err = s.snap.Account(key); err == nil {
@@ -632,7 +640,7 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 			if data.Root == (common.Hash{}) {
 				data.Root = emptyRoot
 			}
-			// 8 check (joonha)
+			// (joonha)
 			data.Addr = addr
 		}
 	}
@@ -686,7 +694,9 @@ func (s *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) 
 	// 	s.AddrToKeyDirty[addr] = newAddrKey
 	// 	s.NextKey += 1
 	// }
-	_, doExist := common.AddrToKey[addr] // (joonha)
+
+	// (joonha)
+	_, doExist := common.AddrToKey[addr] 
 	if !doExist && addr != common.ZeroAddress {
 		newAddrKey := common.HexToHash(strconv.FormatInt(s.NextKey, 16))
 		s.AddrToKeyDirty[addr] = &emptyKeyAndMap // Map is empty
@@ -788,14 +798,15 @@ func (s *StateDB) Copy() *StateDB {
 	// for key, value := range s.AddrToKeyDirty {
 	// 	state.AddrToKeyDirty[key] = value
 	// }
-	for keyX, valueX := range s.AddrToKeyDirty { // (joonha)
+
+	// (joonha)
+	for keyX, valueX := range s.AddrToKeyDirty { 
 		state.AddrToKeyDirty[keyX] = valueX
-		_, err := state.AddrToKeyDirty[keyX]
-		if !err {
-			state.AddrToKeyDirty[keyX] = &emptyKeyAndMap
-		}
+		// _, err := state.AddrToKeyDirty[keyX]
+		// if !err {
+		// 	state.AddrToKeyDirty[keyX] = &emptyKeyAndMap
+		// }
 		state.AddrToKeyDirty[keyX].Key = valueX.Key
-		// state.AddrToKeyDirty[keyX].Map = valueX.Map // also Copy Map of KeyAndMap (joonha)
 		// deep copy of the Map
 		for key, value := range s.AddrToKeyDirty[keyX].Map {
 			state.AddrToKeyDirty[keyX].Map[key] = value
@@ -1065,10 +1076,17 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 	// for key, value := range s.AddrToKeyDirty {
 	// 	common.AddrToKey[key] = value
 	// }
-	for key, value := range s.AddrToKeyDirty { // (joonha)
+
+	// (joonha)
+	for key, value := range s.AddrToKeyDirty { 
 		common.AddrToKey[key] = &emptyKeyAndMap
 		common.AddrToKey[key].Key = value.Key
+		// deep copy of the Map
+		for keyM, valueM := range s.AddrToKeyDirty[key].Map {
+			common.AddrToKey[key].Map[keyM] = valueM
+		}
 	}
+
 	common.AddrToKeyMapMutex.Unlock()
 
 	if len(s.stateObjectsDirty) > 0 {
