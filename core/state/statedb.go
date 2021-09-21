@@ -522,10 +522,12 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 	} else {
 		// this address is already in the trie, so move the previous leaf node to the right side (delete & insert)
 
-		// delete previous leaf node (comment out this block if you want to leave previous leaf nodes)
-		if err = s.trie.TryUpdate_SetKey(addrKey[:], nil); err != nil {
-			s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
-		}
+		// flag (joonha)
+		// // delete previous leaf node (comment out this block if you want to leave previous leaf nodes)
+		// if err = s.trie.TryUpdate_SetKey(addrKey[:], nil); err != nil {
+		// 	s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
+		// }
+
 		// additional update to delete this leaf node from snapshot
 		if s.snap != nil {
 			delete(s.snapAccounts, obj.addrHash) // delete this from snapshot's update list
