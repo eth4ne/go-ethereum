@@ -510,7 +510,7 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 		addrKey = addrKeyTemp.Key
 	} else {
 		addrKey = s.AddrToKeyDirty[addr].Key
-	}
+	}	
 
 	addrKey_bigint := new(big.Int)
 	addrKey_bigint.SetString(addrKey.Hex()[2:], 16)
@@ -518,7 +518,7 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 		// this address is newly created address OR already moved address. so just update
 		if err = s.trie.TryUpdate_SetKey(addrKey[:], data); err != nil {
 		s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
-	}
+		}
 	} else {
 		// this address is already in the trie, so move the previous leaf node to the right side (delete & insert)
 
@@ -539,12 +539,13 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 		
 		// s.AddrToKeyDirty[addr] = newAddrHash
 		_, doExist := s.AddrToKeyDirty[addr]
-		if !doExist { // If it's a first appearance, allocate. (joonha)
+		// (joonha)
+		if !doExist { // If it's a first appearance, allocate.
 			s.AddrToKeyDirty[addr] = &emptyKeyAndMap
 		}
-		s.AddrToKeyDirty[addr].Key = newAddrHash // no update for the Map
+		s.AddrToKeyDirty[addr].Key = newAddrHash // update the key (no update for the Map)
 
-		if err = s.trie.TryUpdate_SetKey(newAddrHash[:], data); err != nil {
+		if err = s.trie.TryUpdate_SetKey(newAddrHash[:], data); err != nil { // data is not modified (joonha)
 			s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
 		}
 		obj.addrHash = newAddrHash // no update for the Map
@@ -642,7 +643,7 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 			if data.Root == (common.Hash{}) {
 				data.Root = emptyRoot
 			}
-			// (joonha)
+			// about snapshot (joonha)
 			data.Addr = addr
 		}
 	}
