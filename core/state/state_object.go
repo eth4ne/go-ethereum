@@ -22,6 +22,7 @@ import (
 	"io"
 	"math/big"
 	"time"
+	// "strconv"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -121,25 +122,27 @@ func newObject(db *StateDB, address common.Address, data Account) *stateObject {
 		data.Root = emptyRoot
 	}
 	
-	// (joonha) Addr should be assigned here.
+	// Just in case, Addr should be assigned here. (joonha)
 	data.Addr = address
 	
 	
 	// set addrHash as a specific key value to implement compactTrie (jmlee)
 	_, doExist := db.AddrToKeyDirty[address]
-	
 	// (joonha)
 	addressHash := common.Hash{}
 	if !doExist {
 		common.AddrToKeyMapMutex.Lock() // to avoid fatal error: "concurrent map read and map write"
-		// addressHash = common.AddrToKey[address]
+		// addressHash = common.AddrToKey[address] // -> jmlee
 		addressHashX, err := common.AddrToKey[address]
 		if !err {
+			// fmt.Println("\n00000000000000000000000000000000joonha\n")
 			addressHashX = &emptyKeyAndMap
 		}
+		// fmt.Println("\n1111111111111111111111111111joonha\n")
 		addressHash = addressHashX.Key
 		common.AddrToKeyMapMutex.Unlock()
 	} else {
+		// fmt.Println("\n2222222222222222222222222222joonha\n")
 		addressHash = db.AddrToKeyDirty[address].Key
 	}
 	
@@ -574,6 +577,19 @@ func (s *stateObject) setNonce(nonce uint64) {
 	s.data.Nonce = nonce
 }
 
+// (joonha)
+func (s *stateObject) SetAddr(addr common.Address) {
+	// change in DB?
+	s.db.journal.append(addrChange{
+		account: &s.address, // addr may be ok...
+	})
+	s.setAddr(addr)
+}
+func (s *stateObject) setAddr(addr common.Address) {
+	s.data.Addr = addr
+}
+
+
 func (s *stateObject) CodeHash() []byte {
 	return s.data.CodeHash
 }
@@ -612,18 +628,21 @@ func NewObject(db *StateDB, address common.Address, data Account) *stateObject {
 	// (joonha)
 	_, doExist := db.AddrToKeyDirty[address]
 	addressHash := common.Hash{}
+	common.AddrToKeyMapMutex.Lock() // to avoid fatal error: "concurrent map read and map write"
 	if !doExist {
-		common.AddrToKeyMapMutex.Lock() // to avoid fatal error: "concurrent map read and map write"
+		// common.AddrToKeyMapMutex.Lock() // to avoid fatal error: "concurrent map read and map write"
 		// addressHash = common.AddrToKey[address]
 		addressHashX, err := common.AddrToKey[address]
 		if !err {
 			addressHashX = &emptyKeyAndMap
 		}
 		addressHash = addressHashX.Key
-		common.AddrToKeyMapMutex.Unlock()
+		// common.AddrToKeyMapMutex.Unlock()
 	} else {
 		addressHash = db.AddrToKeyDirty[address].Key
 	}
+	common.AddrToKeyMapMutex.Unlock()
+
 
 	return &stateObject{
 		db:            db,

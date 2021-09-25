@@ -46,7 +46,7 @@ var (
 	emptyRoot = common.HexToHash("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
 
 	// empty KeyAndMap (joonha)
-	emptyKeyAndMap = common.KeyAndMap{common.Hash{}, nil}
+	emptyKeyAndMap = common.KeyAndMap{common.NoExistKey, nil}
 )
 
 type proofList [][]byte
@@ -440,6 +440,14 @@ func (s *StateDB) SetCode(addr common.Address, code []byte) {
 	}
 }
 
+// (joonha)
+func (s *StateDB) SetAddr(addr common.Address) {
+	stateObject := s.GetOrNewStateObject(addr)
+	if stateObject != nil {
+		stateObject.SetAddr(addr)
+	}
+}
+
 func (s *StateDB) SetState(addr common.Address, key, value common.Hash) {
 	stateObject := s.GetOrNewStateObject(addr)
 	if stateObject != nil {
@@ -498,17 +506,23 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 	// codes for compact trie (jmlee)
 	// get addrKey of this address 
 	// addrKey, doExist := s.AddrToKeyDirty[addr]
+	// if !doExist {
+	// 	addrKey = common.AddrToKey[addr]
+	// }
 
 	// (joonha)
 	addrKey := common.Hash{} 
 	_, doExist := s.AddrToKeyDirty[addr] 
 	if !doExist {
+		fmt.Println("\n1111111111111111111111111111joonha\n")
 		addrKeyTemp, err := common.AddrToKey[addr] 
 		if !err {
+			fmt.Println("\n00000000000000000000000000000000joonha\n")
 			addrKeyTemp = &emptyKeyAndMap
 		}
 		addrKey = addrKeyTemp.Key
 	} else {
+		fmt.Println("\n2222222222222222222222222222joonha\n")
 		addrKey = s.AddrToKeyDirty[addr].Key
 	}	
 
@@ -524,9 +538,9 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 
 		// flag (joonha)
 		// delete previous leaf node (comment out this block if you want to leave previous leaf nodes)
-		if err = s.trie.TryUpdate_SetKey(addrKey[:], nil); err != nil {
-			s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
-		}
+		// if err = s.trie.TryUpdate_SetKey(addrKey[:], nil); err != nil {
+		// 	s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
+		// }
 
 		// additional update to delete this leaf node from snapshot
 		if s.snap != nil {
