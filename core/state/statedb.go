@@ -514,26 +514,32 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 	addrKey := common.Hash{} 
 	_, doExist := s.AddrToKeyDirty[addr] 
 	if !doExist {
-		fmt.Println("\n1111111111111111111111111111joonha\n")
 		addrKeyTemp, err := common.AddrToKey[addr] 
 		if !err {
-			fmt.Println("\n00000000000000000000000000000000joonha\n")
 			addrKeyTemp = &emptyKeyAndMap
 		}
 		addrKey = addrKeyTemp.Key
 	} else {
-		fmt.Println("\n2222222222222222222222222222joonha\n")
 		addrKey = s.AddrToKeyDirty[addr].Key
 	}	
 
 	addrKey_bigint := new(big.Int)
 	addrKey_bigint.SetString(addrKey.Hex()[2:], 16)
+
+	fmt.Printf("\n=======================================================") // (joonha)
+	fmt.Printf("\naddrKey_bigint.Int64() : %d", addrKey_bigint.Int64()) // (joonha)
+	fmt.Printf("\ns.CheckpointKey        : %d", s.CheckpointKey) // (joonha)
+
 	if addrKey_bigint.Int64() >= s.CheckpointKey {
+		fmt.Printf("\nI am a newly created addresss or already moved address.\n") // (joonha)
+
 		// this address is newly created address OR already moved address. so just update
 		if err = s.trie.TryUpdate_SetKey(addrKey[:], data); err != nil {
 		s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
 		}
 	} else {
+		fmt.Printf("\nSIMPLE moving\n") // (joonha)
+
 		// this address is already in the trie, so move the previous leaf node to the right side (delete & insert)
 
 		// flag (joonha)
