@@ -127,25 +127,31 @@ func newObject(db *StateDB, address common.Address, data Account) *stateObject {
 	
 	
 	// set addrHash as a specific key value to implement compactTrie (jmlee)
-	_, doExist := db.AddrToKeyDirty[address]
+	// addressHash, doExist := db.AddrToKeyDirty[address]
+	// if !doExist {
+	// common.AddrToKeyMapMutex.Lock() // to avoid fatal error: "concurrent map read and map write"
+	// 	addressHash = common.AddrToKey[address]
+	// common.AddrToKeyMapMutex.Unlock()
+	// }
+	
 	// (joonha)
+	_, doExist := db.AddrToKeyDirty[address]
 	addressHash := common.Hash{}
 	if !doExist {
 		common.AddrToKeyMapMutex.Lock() // to avoid fatal error: "concurrent map read and map write"
 		// addressHash = common.AddrToKey[address] // -> jmlee
 		addressHashX, err := common.AddrToKey[address]
 		if !err {
-			// fmt.Println("\n00000000000000000000000000000000joonha\n")
 			addressHashX = &emptyKeyAndMap
 		}
-		// fmt.Println("\n1111111111111111111111111111joonha\n")
 		addressHash = addressHashX.Key
 		common.AddrToKeyMapMutex.Unlock()
 	} else {
-		// fmt.Println("\n2222222222222222222222222222joonha\n")
 		addressHash = db.AddrToKeyDirty[address].Key
 	}
-	
+
+	fmt.Printf("\n # addressHash at state_object.go newObject() : %s\n", addressHash) // (joonha)
+
 	return &stateObject{
 		db:             db,
 		address:        address,
@@ -581,7 +587,7 @@ func (s *stateObject) setNonce(nonce uint64) {
 func (s *stateObject) SetAddr(addr common.Address) {
 	// change in DB?
 	s.db.journal.append(addrChange{
-		account: &s.address, // addr may be ok...
+		account: &addr, // &s.address may be ok...
 	})
 	s.setAddr(addr)
 }
@@ -594,7 +600,7 @@ func (s *stateObject) CodeHash() []byte {
 	return s.data.CodeHash
 }
 
-// (joonha) should 'func Addr()' be added?
+// (joonha) would be used in snapshot
 func (s *stateObject) Addr() common.Address {
 	return s.data.Addr
 }
@@ -623,25 +629,22 @@ func NewObject(db *StateDB, address common.Address, data Account) *stateObject {
 		data.CodeHash = emptyCodeHash
 	}
 	// don't know the use of this function, but adding Addr might be useful. (joonha)
-	data.Addr = address 
+	// data.Addr = address 
 
 	// (joonha)
 	_, doExist := db.AddrToKeyDirty[address]
 	addressHash := common.Hash{}
-	common.AddrToKeyMapMutex.Lock() // to avoid fatal error: "concurrent map read and map write"
 	if !doExist {
-		// common.AddrToKeyMapMutex.Lock() // to avoid fatal error: "concurrent map read and map write"
-		// addressHash = common.AddrToKey[address]
+		common.AddrToKeyMapMutex.Lock() // to avoid fatal error: "concurrent map read and map write"
 		addressHashX, err := common.AddrToKey[address]
 		if !err {
 			addressHashX = &emptyKeyAndMap
 		}
 		addressHash = addressHashX.Key
-		// common.AddrToKeyMapMutex.Unlock()
+		common.AddrToKeyMapMutex.Unlock()
 	} else {
 		addressHash = db.AddrToKeyDirty[address].Key
 	}
-	common.AddrToKeyMapMutex.Unlock()
 
 
 	return &stateObject{
