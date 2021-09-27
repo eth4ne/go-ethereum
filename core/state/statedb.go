@@ -513,7 +513,7 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 	fmt.Printf("\n=======================================================") // (joonha)
 
 	// (joonha)
-	addrKey := common.Hash{} 
+	addrKey := common.NoExistKey
 	_, doExist := s.AddrToKeyDirty[addr] 
 	if !doExist {
 		addrKeyTemp, err := common.AddrToKey[addr] 
@@ -523,17 +523,13 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 		addrKey = addrKeyTemp.Key
 	} else {
 		addrKey = s.AddrToKeyDirty[addr].Key
-	}	
+	}
+
 	fmt.Printf("\naddr                   : %s", addr) // (joonha)
 	fmt.Printf("\naddrKey                : %s", addrKey) // (joonha)
 
-
 	addrKey_bigint := new(big.Int)
 	addrKey_bigint.SetString(addrKey.Hex()[2:], 16)
-	// addrKey_bigint.SetString(addrKey.Hex()[:], 16) // (joonha)
-
-	// addrKeyInt, err := strconv.Atoi(addrKey.Hex())
-	// addrKeyInt, err := strconv.Atoi(addrKey_bigint)
 
 	fmt.Printf("\naddrKeyHex             : %d", addrKey_bigint) // (joonha)
 	fmt.Printf("\naddrKey_bigint.Int64() : %d", addrKey_bigint.Int64()) // (joonha)

@@ -150,7 +150,7 @@ func newObject(db *StateDB, address common.Address, data Account) *stateObject {
 		addressHash = db.AddrToKeyDirty[address].Key
 	}
 
-	fmt.Printf("\n # addressHash at state_object.go newObject() : %s\n", addressHash) // (joonha)
+	// fmt.Printf("\n # addressHash at state_object.go newObject() : %s\n", addressHash) // (joonha)
 
 	return &stateObject{
 		db:             db,
