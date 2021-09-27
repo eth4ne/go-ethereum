@@ -139,10 +139,8 @@ func newObject(db *StateDB, address common.Address, data Account) *stateObject {
 	addressHash := common.Hash{}
 	if !doExist {
 		common.AddrToKeyMapMutex.Lock() // to avoid fatal error: "concurrent map read and map write"
-		// addressHash = common.AddrToKey[address] // -> jmlee
 		addressHashX, err := common.AddrToKey[address]
 		if !err {
-			// addressHashX = &emptyKeyAndMap
 			addressHashX = &common.KeyAndMap{common.NoExistKey, nil}
 		}
 		addressHash = addressHashX.Key
@@ -587,7 +585,7 @@ func (s *stateObject) setNonce(nonce uint64) {
 func (s *stateObject) SetAddr(addr common.Address) {
 	// change in DB?
 	s.db.journal.append(addrChange{
-		account: &addr, // &s.address may be ok...
+		account: &addr, // &s.address is ok
 	})
 	s.setAddr(addr)
 }
@@ -638,7 +636,6 @@ func NewObject(db *StateDB, address common.Address, data Account) *stateObject {
 		common.AddrToKeyMapMutex.Lock() // to avoid fatal error: "concurrent map read and map write"
 		addressHashX, err := common.AddrToKey[address]
 		if !err {
-			// addressHashX = &emptyKeyAndMap
 			addressHashX = &common.KeyAndMap{common.NoExistKey, nil}
 		}
 		addressHash = addressHashX.Key

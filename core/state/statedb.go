@@ -44,9 +44,6 @@ type revision struct {
 var (
 	// emptyRoot is the known root hash of an empty trie.
 	emptyRoot = common.HexToHash("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
-
-	// empty KeyAndMap (joonha)
-	// emptyKeyAndMap = common.KeyAndMap{common.NoExistKey, nil}
 )
 
 type proofList [][]byte
@@ -517,7 +514,6 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 	if !doExist {
 		addrKeyTemp, err := common.AddrToKey[addr] 
 		if !err {
-			// addrKeyTemp = &emptyKeyAndMap
 			addrKeyTemp = &common.KeyAndMap{common.NoExistKey, nil}
 		}
 		addrKey = addrKeyTemp.Key
@@ -559,7 +555,6 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 		// (joonha)
 		_, doExist := s.AddrToKeyDirty[addr]
 		if !doExist { // If it's a first appearance, allocate.
-			// s.AddrToKeyDirty[addr] = &emptyKeyAndMap
 			s.AddrToKeyDirty[addr] = &common.KeyAndMap{common.NoExistKey, nil}
 		}
 		s.AddrToKeyDirty[addr].Key = newAddrHash // update the key (no update for the Map)
@@ -724,7 +719,6 @@ func (s *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) 
 		newAddrKey := common.HexToHash(strconv.FormatInt(s.NextKey, 16))
 		_, err := s.AddrToKeyDirty[addr]
 		if !err {
-			// s.AddrToKeyDirty[addr] = &emptyKeyAndMap
 			s.AddrToKeyDirty[addr] = &common.KeyAndMap{common.NoExistKey, nil}
 		}	
 		s.AddrToKeyDirty[addr].Key = newAddrKey 
@@ -1104,7 +1098,7 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 
 	// (joonha)
 	for key, value := range s.AddrToKeyDirty { 
-		common.AddrToKey[key] = value // Debug Key
+		common.AddrToKey[key] = value
 		common.AddrToKey[key].Key = value.Key
 		// deep copy of the Map
 		for keyM, valueM := range s.AddrToKeyDirty[key].Map {
