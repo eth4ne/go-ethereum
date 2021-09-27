@@ -143,7 +143,8 @@ func newObject(db *StateDB, address common.Address, data Account) *stateObject {
 		// addressHash = common.AddrToKey[address] // -> jmlee
 		addressHashX, err := common.AddrToKey[address]
 		if !err {
-			addressHashX = &emptyKeyAndMap
+			// addressHashX = &emptyKeyAndMap
+			addressHashX = &common.KeyAndMap{common.NoExistKey, nil}
 		}
 		addressHash = addressHashX.Key
 		common.AddrToKeyMapMutex.Unlock()
@@ -639,7 +640,8 @@ func NewObject(db *StateDB, address common.Address, data Account) *stateObject {
 		common.AddrToKeyMapMutex.Lock() // to avoid fatal error: "concurrent map read and map write"
 		addressHashX, err := common.AddrToKey[address]
 		if !err {
-			addressHashX = &emptyKeyAndMap
+			// addressHashX = &emptyKeyAndMap
+			addressHashX = &common.KeyAndMap{common.NoExistKey, nil}
 		}
 		addressHash = addressHashX.Key
 		common.AddrToKeyMapMutex.Unlock()

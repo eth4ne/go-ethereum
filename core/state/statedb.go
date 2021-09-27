@@ -518,7 +518,8 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 	if !doExist {
 		addrKeyTemp, err := common.AddrToKey[addr] 
 		if !err {
-			addrKeyTemp = &emptyKeyAndMap
+			// addrKeyTemp = &emptyKeyAndMap
+			addrKeyTemp = &common.KeyAndMap{common.NoExistKey, nil}
 		}
 		addrKey = addrKeyTemp.Key
 	} else {
@@ -561,20 +562,31 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 
 		// insert new leaf node at right side
 		newAddrHash := common.HexToHash(strconv.FormatInt(s.NextKey, 16))
+
+		fmt.Printf("\nDEBUG: newAddrHash: %s\n", newAddrHash) // (joonha)
 		
 		// s.AddrToKeyDirty[addr] = newAddrHash
 
 		// (joonha)
+		fmt.Printf("DEBUG: addrKey: %s\n", addrKey) // (joonha)
 		_, doExist := s.AddrToKeyDirty[addr]
 		if !doExist { // If it's a first appearance, allocate.
-			s.AddrToKeyDirty[addr] = &emptyKeyAndMap
+			// s.AddrToKeyDirty[addr] = &emptyKeyAndMap
+			s.AddrToKeyDirty[addr] = &common.KeyAndMap{common.NoExistKey, nil}
+			fmt.Printf("DEBUG: emptyKeyAndMap's Key: %s\n", emptyKeyAndMap.Key) // (joonha)
+			fmt.Printf("DEBUG: IF TEST\n") // (joonha)
 		}
+		fmt.Printf("Old addrKey: %s\n", s.AddrToKeyDirty[addr].Key) // (joonha)
+		fmt.Printf("DEBUG: addrKey: %s\n", addrKey) // (joonha)
+
+
 		s.AddrToKeyDirty[addr].Key = newAddrHash // update the key (no update for the Map)
 
 		fmt.Printf("New addrKey: %s\n", s.AddrToKeyDirty[addr].Key) // (joonha)
-		// fmt.Printf("s.AddrToKeyDirty Map   : %s\n\n", s.AddrToKeyDirty[addr].Map) // (joonha)
 
-		if err = s.trie.TryUpdate_SetKey(newAddrHash[:], data); err != nil { // data is not modified (joonha)
+
+
+		if err = s.trie.TryUpdate_SetKey(newAddrHash[:], data); err != nil { // data is set for newAddrHash (joonha)
 			s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
 		}
 		obj.addrHash = newAddrHash
@@ -727,13 +739,14 @@ func (s *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) 
 	// 	s.NextKey += 1
 	// }
 
-	// (joonha)
+	// insert to map (joonha)
 	_, doExist := common.AddrToKey[addr] 
 	if !doExist && addr != common.ZeroAddress {
 		newAddrKey := common.HexToHash(strconv.FormatInt(s.NextKey, 16))
 		_, err := s.AddrToKeyDirty[addr]
 		if !err {
-			s.AddrToKeyDirty[addr] = &emptyKeyAndMap
+			// s.AddrToKeyDirty[addr] = &emptyKeyAndMap
+			s.AddrToKeyDirty[addr] = &common.KeyAndMap{common.NoExistKey, nil}
 		}	
 		s.AddrToKeyDirty[addr].Key = newAddrKey 
 		s.NextKey += 1
