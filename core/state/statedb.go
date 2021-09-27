@@ -525,25 +525,25 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 		addrKey = s.AddrToKeyDirty[addr].Key
 	}
 
-	fmt.Printf("\naddr                   : %s", addr) // (joonha)
-	fmt.Printf("\naddrKey                : %s", addrKey) // (joonha)
+	fmt.Printf("\naddr: %s", addr) // (joonha)
+	fmt.Printf("\naddrKey: %s", addrKey) // (joonha)
 
 	addrKey_bigint := new(big.Int)
 	addrKey_bigint.SetString(addrKey.Hex()[2:], 16)
 
-	fmt.Printf("\naddrKeyHex             : %d", addrKey_bigint) // (joonha)
-	fmt.Printf("\naddrKey_bigint.Int64() : %d", addrKey_bigint.Int64()) // (joonha)
-	fmt.Printf("\ns.CheckpointKey (1)    : %d", s.CheckpointKey) // (joonha)
+	fmt.Printf("\naddrKey_bigint: %d", addrKey_bigint) // (joonha)
+	// fmt.Printf("\naddrKey_bigint.Int64(): %d", addrKey_bigint.Int64()) // (joonha)
+	// fmt.Printf("\ns.CheckpointKey: %d", s.CheckpointKey) // (joonha)
 
 	if addrKey_bigint.Int64() >= s.CheckpointKey {
-		fmt.Printf("\n\n<<<    NO UPDATE    >>>\n") // (joonha)
+		fmt.Printf("\n<<< JUST UPDATE >>>") // (joonha)
 
 		// this address is newly created address OR already moved address. so just update
 		if err = s.trie.TryUpdate_SetKey(addrKey[:], data); err != nil {
-		s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
+			s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
 		}
 	} else {
-		fmt.Printf("\n\n<<<   SIMPLE MOVING    >>>\n\n") // (joonha)
+		fmt.Printf("\n<<< SIMPLE MOVING >>>\n") // (joonha)
 
 		// this address is already in the trie, so move the previous leaf node to the right side (delete & insert)
 
@@ -563,16 +563,16 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 		newAddrHash := common.HexToHash(strconv.FormatInt(s.NextKey, 16))
 		
 		// s.AddrToKeyDirty[addr] = newAddrHash
-		_, doExist := s.AddrToKeyDirty[addr]
+
 		// (joonha)
+		_, doExist := s.AddrToKeyDirty[addr]
 		if !doExist { // If it's a first appearance, allocate.
 			s.AddrToKeyDirty[addr] = &emptyKeyAndMap
 		}
 		s.AddrToKeyDirty[addr].Key = newAddrHash // update the key (no update for the Map)
 
-		fmt.Printf("New Address            : %s\n", s.AddrToKeyDirty[addr].Key) // (joonha)
+		fmt.Printf("New addrKey: %s\n", s.AddrToKeyDirty[addr].Key) // (joonha)
 		// fmt.Printf("s.AddrToKeyDirty Map   : %s\n\n", s.AddrToKeyDirty[addr].Map) // (joonha)
-
 
 		if err = s.trie.TryUpdate_SetKey(newAddrHash[:], data); err != nil { // data is not modified (joonha)
 			s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
@@ -838,12 +838,6 @@ func (s *StateDB) Copy() *StateDB {
 	// (joonha)
 	for keyX, valueX := range s.AddrToKeyDirty { 
 		state.AddrToKeyDirty[keyX] = valueX
-		// _, err := state.AddrToKeyDirty[keyX]
-		// if !err {
-		// 	state.AddrToKeyDirty[keyX] = &emptyKeyAndMap
-		// }
-		// fmt.Printf("->->-> COPY MAP   ->-> %s\n", state.AddrToKeyDirty[keyX].Map) // (joonha)
-		// fmt.Printf("->->-> COPY KEY   ->-> %s\n", state.AddrToKeyDirty[keyX].Key) // (joonha)
 		state.AddrToKeyDirty[keyX].Key = valueX.Key
 		// deep copy of the Map
 		for key, value := range s.AddrToKeyDirty[keyX].Map {
@@ -1118,7 +1112,7 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 
 	// (joonha)
 	for key, value := range s.AddrToKeyDirty { 
-		common.AddrToKey[key] = &emptyKeyAndMap
+		common.AddrToKey[key] = value // Debug Key
 		common.AddrToKey[key].Key = value.Key
 		// deep copy of the Map
 		for keyM, valueM := range s.AddrToKeyDirty[key].Map {
