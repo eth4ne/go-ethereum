@@ -125,7 +125,6 @@ func newObject(db *StateDB, address common.Address, data Account) *stateObject {
 	// Just in case, Addr should be assigned here. (joonha)
 	data.Addr = address
 	
-	fmt.Printf("\nnewObject(1)address: %s", address) // (joonha)
 	
 	// set addrHash as a specific key value to implement compactTrie (jmlee)
 	// addressHash, doExist := db.AddrToKeyDirty[address]
@@ -152,7 +151,6 @@ func newObject(db *StateDB, address common.Address, data Account) *stateObject {
 		addressHash = db.AddrToKeyDirty[address].Key
 	}
 
-	fmt.Printf("\nnewObject(2)addrKey: %s\n", addressHash) // (joonha)
 
 	return &stateObject{
 		db:             db,
