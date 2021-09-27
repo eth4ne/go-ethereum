@@ -46,7 +46,7 @@ var (
 	emptyRoot = common.HexToHash("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
 
 	// empty KeyAndMap (joonha)
-	emptyKeyAndMap = common.KeyAndMap{common.NoExistKey, nil}
+	// emptyKeyAndMap = common.KeyAndMap{common.NoExistKey, nil}
 )
 
 type proofList [][]byte
@@ -633,7 +633,8 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 
 		// change key to make compactTrie (jmlee)
 		// key, doExist := common.AddrToKey[addr]
-		// about snapshot (joonha)
+		
+		// temp to remove error (joonha)
 		keyAndMap, doExist := common.AddrToKey[addr] 
 		key := common.Hash{}
 		if !doExist {
@@ -654,7 +655,7 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 				Balance:  acc.Balance,
 				CodeHash: acc.CodeHash,
 				Root:     common.BytesToHash(acc.Root),
-				// Addr:	  addr, // acc.Addr, // 1 check (joonha) (or 'addr' might be ok.) --> Snapshot
+				// Addr:	  addr, // acc.Addr, // snapshot (joonha)
 			}
 			if len(data.CodeHash) == 0 {
 				data.CodeHash = emptyCodeHash

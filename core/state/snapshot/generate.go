@@ -626,7 +626,7 @@ func (dl *diskLayer) generate(stats *generatorStats) {
 				}
 				snapRecoveredAccountMeter.Mark(1)
 			} else {
-				data := SlimAccountRLP(acc.Nonce, acc.Balance, acc.Root, acc.CodeHash) // 1 snapshot (joonha) add acc.Addr here.
+				data := SlimAccountRLP(acc.Nonce, acc.Balance, acc.Root, acc.CodeHash) // snapshot (joonha) add acc.Addr here.
 				dataLen = len(data)
 				rawdb.WriteAccountSnapshot(batch, accountHash, data)
 				snapGeneratedAccountMeter.Mark(1)
