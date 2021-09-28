@@ -127,7 +127,7 @@ func (t *odrTrie) TryGet(key []byte) ([]byte, error) {
 	return res, err
 }
 
-func (t *odrTrie) TryUpdate(key, value []byte) error {
+func (t *odrTrie) TryUpdate(key, value []byte) error { // flag 5 (joonha)
 	key = crypto.Keccak256(key)
 	return t.do(key, func() error {
 		return t.trie.TryUpdate(key, value)

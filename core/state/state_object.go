@@ -93,6 +93,10 @@ type stateObject struct {
 	dirtyCode bool // true if the code was updated
 	suicided  bool
 	deleted   bool
+
+	// to implement storage compcat MPT (joonha)
+	nextLocation		int64 // location of the first 'will be inserted' variable
+	AddrToKeyMapDirty	map[common.Hash]common.Hash // dirty cache for common.AddrToKey.Map (variableID -> Location)
 }
 
 // empty returns whether the account is considered empty.
@@ -158,6 +162,9 @@ func newObject(db *StateDB, address common.Address, data Account) *stateObject {
 		originStorage:  make(Storage),
 		pendingStorage: make(Storage),
 		dirtyStorage:   make(Storage),
+
+		nextLocation:	   0, // (joonha)
+		AddrToKeyMapDirty: make(map[common.Hash]common.Hash), // (joonha)
 	}
 	// original code
 	// return &stateObject{
@@ -400,7 +407,7 @@ func (s *stateObject) updateTrie(db Database) Trie {
 		} else {
 			// Encoding []byte cannot fail, ok to ignore the error.
 			v, _ = rlp.EncodeToBytes(common.TrimLeftZeroes(value[:]))
-			s.setError(tr.TryUpdate(key[:], v))
+			s.setError(tr.TryUpdate(key[:], v)) // flag 5 (joonha) converting Mapping into Trie format
 		}
 		// If state snapshotting is active, cache the data til commit
 		if s.db.snap != nil {
@@ -508,6 +515,9 @@ func (s *stateObject) deepCopy(db *StateDB) *stateObject {
 	stateObject.suicided = s.suicided
 	stateObject.dirtyCode = s.dirtyCode
 	stateObject.deleted = s.deleted
+
+	// should deep copy instances be added? (joonha)
+
 	return stateObject
 }
 

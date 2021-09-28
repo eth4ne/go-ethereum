@@ -112,7 +112,7 @@ func (t *SecureTrie) Update(key, value []byte) {
 // stored in the trie.
 //
 // If a node was not found in the database, a MissingNodeError is returned.
-func (t *SecureTrie) TryUpdate(key, value []byte) error {
+func (t *SecureTrie) TryUpdate(key, value []byte) error { // flag 5 (joonha)
 	hk := t.hashKey(key)
 	err := t.trie.TryUpdate(hk, value)
 	if err != nil {

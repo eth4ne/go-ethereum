@@ -124,7 +124,7 @@ type StateDB struct {
 	CheckpointKey		int64 // save initial NextKey value to determine whether move leaf nodes or not
 	// AddrToKeyDirty		map[common.Address]common.Hash // dirty cache for common.AddrToKey
 
-	// (joonha)
+	// to implement storage compact MPT (joonha)
 	AddrToKeyDirty		map[common.Address]*common.KeyAndMap // dirty cache for common.AddrToKey
 }
 
@@ -322,8 +322,13 @@ func (s *StateDB) GetCodeHash(addr common.Address) common.Hash {
 // GetState retrieves a value from the given account's storage trie.
 func (s *StateDB) GetState(addr common.Address, hash common.Hash) common.Hash {
 	stateObject := s.getStateObject(addr)
+	
+	// flag 5 (joonha) read the value by the Location retrieved from AddrToKey[addr].Map
+	location := stateObject.AddrToKeyMapDirty[hash] // or get from common.AddrToKey[addr].Map
+
 	if stateObject != nil {
-		return stateObject.GetState(s.db, hash)
+		// return stateObject.GetState(s.db, hash) // -> original code
+		return stateObject.GetState(s.db, location) // hand over the location instead of the hash (joonha)
 	}
 	return common.Hash{}
 }
@@ -447,11 +452,27 @@ func (s *StateDB) SetAddr(addr common.Address) {
 
 func (s *StateDB) SetState(addr common.Address, key, value common.Hash) {
 	stateObject := s.GetOrNewStateObject(addr)
+	
+	// flag 5 (joonha) Let's get a Location from the key using AddrToKey.Map and hand over the Location instead of the key to stateObject.SetState
+	//     1. Write AddrToKey[addr].Map
+	//     2. Hand over the Location and the value
+
+	// set AddrToKey.Map of this address (joonha)
+	newLocation := common.HexToHash(strconv.FormatInt(stateObject.nextLocation, 16))
+	stateObject.AddrToKeyMapDirty[key] = newLocation
+	stateObject.nextLocation += 1
+
+	for k, v := range stateObject.AddrToKeyMapDirty {
+		common.AddrToKey[addr].Map[k] = v // maybe maybe maybe error will occur...!
+	}
+
 	if stateObject != nil {
-		stateObject.SetState(s.db, key, value)
+		// stateObject.SetState(s.db, key, value) // -> original code
+		stateObject.SetState(s.db, newLocation, value) // From now on, newLocation would be the key in the storage trie. (joonha)
 	}
 }
 
+// will not modify this function as it is just for debugging. (joonha)
 // SetStorage replaces the entire storage for the specified account with given
 // storage. This function should only be used for debugging.
 func (s *StateDB) SetStorage(addr common.Address, storage map[common.Hash]common.Hash) {
@@ -713,7 +734,7 @@ func (s *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) 
 	// 	s.NextKey += 1
 	// }
 
-	// insert to map (joonha)
+	// insert to map to make storage compactTrie (joonha)
 	_, doExist := common.AddrToKey[addr] 
 	if !doExist && addr != common.ZeroAddress {
 		newAddrKey := common.HexToHash(strconv.FormatInt(s.NextKey, 16))
