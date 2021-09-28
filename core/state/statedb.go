@@ -463,7 +463,15 @@ func (s *StateDB) SetState(addr common.Address, key, value common.Hash) {
 	stateObject.nextLocation += 1
 
 	for k, v := range stateObject.AddrToKeyMapDirty {
-		common.AddrToKey[addr].Map[k] = v // maybe maybe maybe error will occur...!
+		_, doExist := common.AddrToKey[addr]
+		if !doExist {
+			common.AddrToKey[addr] = &common.KeyAndMap{common.NoExistKey, nil}
+			common.AddrToKey[addr].Map[k] = v 
+		} else {
+			if common.AddrToKey[addr].Map != nil {
+				common.AddrToKey[addr].Map[k] = v 
+			} // else ... ?
+		}
 	}
 
 	if stateObject != nil {
