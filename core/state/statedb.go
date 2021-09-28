@@ -456,6 +456,18 @@ func (s *StateDB) SetState(addr common.Address, key, value common.Hash) {
 	// flag 5 (joonha) Let's get a Location from the key using AddrToKey.Map and hand over the Location instead of the key to stateObject.SetState
 	//     1. Write AddrToKey[addr].Map
 	//     2. Hand over the Location and the value
+	//
+	//	   case 1) New Key : Update Location and Value
+	//     case 2) Exist Key : Update Value
+	
+	// if already exist in the map, reuse the location
+	if location, ok := stateObject.AddrToKeyMapDirty[key]; ok {
+		if stateObject != nil {
+			stateObject.SetState(s.db, location, value) // From now on, newLocation would be the key in the storage trie. (joonha)
+		}
+		fmt.Printf("\nkey: %s\nlocation: %s\nvalue: %s\n", key, location, value)
+		return
+	}
 
 	// set AddrToKey.Map of this address (joonha)
 	newLocation := common.HexToHash(strconv.FormatInt(stateObject.nextLocation, 16))
@@ -470,9 +482,11 @@ func (s *StateDB) SetState(addr common.Address, key, value common.Hash) {
 		} else {
 			if common.AddrToKey[addr].Map != nil {
 				common.AddrToKey[addr].Map[k] = v 
-			} // else ... ?
+			}
 		}
 	}
+
+	fmt.Printf("\nkey: %s\nlocation: %s\nvalue: %s\n", key, newLocation, value)
 
 	if stateObject != nil {
 		// stateObject.SetState(s.db, key, value) // -> original code
