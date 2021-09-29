@@ -457,13 +457,13 @@ func (s *StateDB) SetState(addr common.Address, key, value common.Hash) {
 	//     1. Write AddrToKey[addr].Map
 	//     2. Hand over the Location and the value
 	//
-	//	   case 1) New Key : Update Location and Value
+	//     case 1) New Key : Update Location and Value
 	//     case 2) Exist Key : Update Value
 	
-	// if already exist in the map, reuse the location
+	// if already exists in the map, reuse the location
 	if location, ok := stateObject.AddrToKeyMapDirty[key]; ok {
 		if stateObject != nil {
-			stateObject.SetState(s.db, location, value) // From now on, newLocation would be the key in the storage trie. (joonha)
+			stateObject.SetState(s.db, location, value)
 		}
 		fmt.Printf("\nkey: %s\nlocation: %s\nvalue: %s\n", key, location, value)
 		return
@@ -477,11 +477,17 @@ func (s *StateDB) SetState(addr common.Address, key, value common.Hash) {
 	for k, v := range stateObject.AddrToKeyMapDirty {
 		_, doExist := common.AddrToKey[addr]
 		if !doExist {
-			common.AddrToKey[addr] = &common.KeyAndMap{common.NoExistKey, nil}
+			common.AddrToKey[addr] = &common.KeyAndMap{common.NoExistKey, nil} // initialization
 			common.AddrToKey[addr].Map[k] = v 
+			// fmt.Printf("\nCASE A\n")
 		} else {
 			if common.AddrToKey[addr].Map != nil {
 				common.AddrToKey[addr].Map[k] = v 
+				// fmt.Printf("\nCASE B\n")
+			} else { // Map is nil
+				common.AddrToKey[addr].Map = make(map[common.Hash]common.Hash) // initialization
+				common.AddrToKey[addr].Map[k] = v 
+				// fmt.Printf("\nCASE C\n")
 			}
 		}
 	}
