@@ -256,7 +256,7 @@ func (t *Trie) Update(key, value []byte) {
 // stored in the trie.
 //
 // If a node was not found in the database, a MissingNodeError is returned.
-func (t *Trie) TryUpdate(key, value []byte) error {
+func (t *Trie) TryUpdate(key, value []byte) error { // flag 5 (joonha)
 	t.unhashed++
 	k := keybytesToHex(key)
 	if len(value) != 0 {

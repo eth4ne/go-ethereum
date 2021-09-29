@@ -99,6 +99,12 @@ type stateObject struct {
 	AddrToKeyMapDirty	map[common.Hash]common.Hash // dirty cache for common.AddrToKey.Map (variableID -> Location)
 }
 
+// flag 5 (joonha) temp structure to combine varID and value into one.
+type storageLeaf struct {
+	varID	common.Hash
+	value	common.Hash
+}
+
 // empty returns whether the account is considered empty.
 func (s *stateObject) empty() bool {
 	return s.data.Nonce == 0 && s.data.Balance.Sign() == 0 && bytes.Equal(s.data.CodeHash, emptyCodeHash)
@@ -302,20 +308,37 @@ func (s *stateObject) GetCommittedState(db Database, key common.Hash) common.Has
 			return common.Hash{}
 		}
 	}
+
 	var value common.Hash
+	var data *storageLeaf // flag 5 (joonha)
+	
 	if len(enc) > 0 {
-		_, content, _, err := rlp.Split(enc)
-		if err != nil {
-			s.setError(err)
+		// (original code)
+		// _, content, _, err := rlp.Split(enc)
+		// if err != nil {
+		// 	s.setError(err)
+		// }
+		// value.SetBytes(content)
+		
+		// flag 5 (joonha)
+		content, _ := s.trie.TryGet(key.Bytes())
+		data = new(storageLeaf)
+		if err := rlp.DecodeBytes(content, data); err != nil {
+			return common.Hash{}
 		}
-		value.SetBytes(content)
+		value = data.value 
 	}
-	s.originStorage[key] = value
+	
+	s.originStorage[key] = value // <-- didn't touch the storage map. (joonha)
 	return value
 }
 
 // SetState updates a value in account storage.
-func (s *stateObject) SetState(db Database, key, value common.Hash) {
+// func (s *stateObject) SetState(db Database, key, value common.Hash) {
+func (s *stateObject) SetState(db Database, key common.Hash, data *storageLeaf) { // flag 5 (joonha) storageLeaf structure comes as a value
+	// flag 5 (joonha)
+	value := data.value
+	
 	// If the fake storage is set, put the temporary state update here.
 	if s.fakeStorage != nil {
 		s.fakeStorage[key] = value
@@ -406,7 +429,8 @@ func (s *stateObject) updateTrie(db Database) Trie {
 			s.setError(tr.TryDelete(key[:]))
 		} else {
 			// Encoding []byte cannot fail, ok to ignore the error.
-			v, _ = rlp.EncodeToBytes(common.TrimLeftZeroes(value[:]))
+			// v, _ = rlp.EncodeToBytes(common.TrimLeftZeroes(value[:])) // maybe Trimming should be deleted if value has a sturct format (joonha) flag 5
+			v, _ = rlp.EncodeToBytes(value) // maybe Trimming should be deleted if value has a sturct format (joonha) flag 5
 			s.setError(tr.TryUpdate(key[:], v)) // flag 5 (joonha) converting Mapping into Trie format
 		}
 		// If state snapshotting is active, cache the data til commit

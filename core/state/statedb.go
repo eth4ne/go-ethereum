@@ -328,6 +328,7 @@ func (s *StateDB) GetState(addr common.Address, hash common.Hash) common.Hash {
 
 	if stateObject != nil {
 		// return stateObject.GetState(s.db, hash) // -> original code
+		fmt.Printf("\nkey: %s(GETSTATE)\nloc: %s(GETSTATE)\nval: %s(GETSTATE)\n", hash, location, stateObject.GetState(s.db, location))
 		return stateObject.GetState(s.db, location) // hand over the location instead of the hash (joonha)
 	}
 	return common.Hash{}
@@ -453,19 +454,27 @@ func (s *StateDB) SetAddr(addr common.Address) {
 func (s *StateDB) SetState(addr common.Address, key, value common.Hash) {
 	stateObject := s.GetOrNewStateObject(addr)
 	
+	/****************************************************************/
 	// flag 5 (joonha) Let's get a Location from the key using AddrToKey.Map and hand over the Location instead of the key to stateObject.SetState
 	//     1. Write AddrToKey[addr].Map
 	//     2. Hand over the Location and the value
 	//
 	//     case 1) New Key : Update Location and Value
 	//     case 2) Exist Key : Update Value
-	
+	// 
+	// Data = key (+) value
+	/****************************************************************/
+	Data := new(storageLeaf)
+	Data.varID = key
+	Data.value = value
+
 	// if already exists in the map, reuse the location
 	if location, ok := stateObject.AddrToKeyMapDirty[key]; ok {
 		if stateObject != nil {
-			stateObject.SetState(s.db, location, value)
+			// stateObject.SetState(s.db, location, value)
+			stateObject.SetState(s.db, location, Data) // varID + value as a value
 		}
-		fmt.Printf("\nkey: %s\nlocation: %s\nvalue: %s\n", key, location, value)
+		fmt.Printf("\n*REUSE THE LOCATION*\nkey: %s\nloc: %s\nval: %s\n", key, location, value)
 		return
 	}
 
@@ -492,11 +501,12 @@ func (s *StateDB) SetState(addr common.Address, key, value common.Hash) {
 		}
 	}
 
-	fmt.Printf("\nkey: %s\nlocation: %s\nvalue: %s\n", key, newLocation, value)
+	fmt.Printf("\nkey: %s\nloc: %s\nval: %s\n", key, newLocation, value)
 
 	if stateObject != nil {
 		// stateObject.SetState(s.db, key, value) // -> original code
-		stateObject.SetState(s.db, newLocation, value) // From now on, newLocation would be the key in the storage trie. (joonha)
+		// stateObject.SetState(s.db, newLocation, value) // From now on, newLocation would be the key in the storage trie. (joonha)
+		stateObject.SetState(s.db, newLocation, Data) // From now on, newLocation would be the key in the storage trie. (joonha)
 	}
 }
 
