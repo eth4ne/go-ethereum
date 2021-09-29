@@ -508,6 +508,9 @@ func (s *StateDB) SetState(addr common.Address, key, value common.Hash) {
 		// stateObject.SetState(s.db, newLocation, value) // From now on, newLocation would be the key in the storage trie. (joonha)
 		stateObject.SetState(s.db, newLocation, Data) // From now on, newLocation would be the key in the storage trie. (joonha)
 	}
+
+	// for test flag 5 (joonha) -> comment this out afterward
+	s.GetState(addr, key)
 }
 
 // will not modify this function as it is just for debugging. (joonha)
