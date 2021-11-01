@@ -24,6 +24,9 @@ import (
 	"sort"
 	"time"
 
+	// (joonha)
+	"os"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state/snapshot"
@@ -528,7 +531,48 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 			defer func(start time.Time) { s.SnapshotAccountReads += time.Since(start) }(time.Now())
 		}
 		var acc *snapshot.Account
+
+		// snapshot performance test (joonha)
+		sLogger_1, err := os.OpenFile("Snap1.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666) // (joonha)
+		sLogger_2, err := os.OpenFile("Snap2.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666) // (joonha)
+		sLogger_3, err := os.OpenFile("Snap3.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666) // (joonha)
+		// sLogger_4, err := os.OpenFile("SnapMEAN.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666) // (joonha)
+		// sLogger_5, err := os.OpenFile("SnapMEDIAN.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666) // (joonha)
+		// sLogger_6, err := os.OpenFile("SnapMin.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666) // (joonha)
+
 		if acc, err = s.snap.Account(crypto.HashData(s.hasher, addr.Bytes())); err == nil {
+			
+			// # 1
+			snapStart := time.Now() // (joonha)
+			s.snap.AccountRLP(crypto.HashData(s.hasher, addr.Bytes())) // (joonha)
+			elapsedTimeSnap1 := time.Since(snapStart) // (joonha)
+			fmt.Fprintln(sLogger_1, elapsedTimeSnap1.Nanoseconds()) // (joonha)
+
+			// # 2
+			snapStart = time.Now() // (joonha)
+			s.snap.AccountRLP(crypto.HashData(s.hasher, addr.Bytes())) // (joonha)
+			elapsedTimeSnap2 := time.Since(snapStart) // (joonha)
+			fmt.Fprintln(sLogger_2, elapsedTimeSnap2.Nanoseconds()) // (joonha)
+			
+			// # 3
+			snapStart = time.Now() // (joonha)
+			s.snap.AccountRLP(crypto.HashData(s.hasher, addr.Bytes())) // (joonha)
+			elapsedTimeSnap3 := time.Since(snapStart) // (joonha)
+			fmt.Fprintln(sLogger_3, elapsedTimeSnap3.Nanoseconds()) // (joonha)
+
+			// // snap time mean
+			// fmt.Fprintln(sLogger_4, (elapsedTimeSnap1.Nanoseconds()+elapsedTimeSnap2.Nanoseconds()+elapsedTimeSnap3.Nanoseconds()) / 3) // (joonha)
+
+			// // snap time median
+			// Sd := []float64{float64(elapsedTimeSnap1.Nanoseconds()), float64(elapsedTimeSnap2.Nanoseconds()), float64(elapsedTimeSnap3.Nanoseconds())} // (joonha)
+			// snapMedian, _ := stats.Median(Sd) // (joonha)
+			// fmt.Fprintln(sLogger_5, snapMedian) // (joonha)
+
+			// // min
+			// d := []float64{float64(elapsedTimeSnap1.Nanoseconds()), float64(elapsedTimeSnap2.Nanoseconds()), float64(elapsedTimeSnap3.Nanoseconds())} // (joonha)
+			// snapMin, _ := stats.Min(d)
+			// fmt.Fprintln(sLogger_6, snapMin) // (joonha)
+
 			if acc == nil {
 				return nil
 			}
@@ -546,12 +590,53 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 			}
 		}
 	}
+
 	// If snapshot unavailable or reading from it failed, load from the database
-	if s.snap == nil || err != nil {
+	// if s.snap == nil || err != nil { //--> original code
+	if err == nil { // Snapshot performance test (to compare the snapshot and the trie at once) (joonha)
 		if metrics.EnabledExpensive {
 			defer func(start time.Time) { s.AccountReads += time.Since(start) }(time.Now())
 		}
+		// Trie performance test (joonha)
+		tLogger_1, err := os.OpenFile("Trie1.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666) // (joonha)
+		tLogger_2, err := os.OpenFile("Trie2.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666) // (joonha)
+		tLogger_3, err := os.OpenFile("Trie3.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666) // (joonha)
+		// tLogger_4, err := os.OpenFile("TrieMEAN.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666) // (joonha)
+		// tLogger_5, err := os.OpenFile("TrieMEDIAN.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666) // (joonha)
+		// tLogger_6, err := os.OpenFile("TrieMin.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666) // (joonha)
+
+		// # 1
+		trieStart := time.Now() // (joonha)
 		enc, err := s.trie.TryGet(addr.Bytes())
+		elapsedTimeTrie1 := time.Since(trieStart) // (joonha)
+		fmt.Fprintln(tLogger_1, elapsedTimeTrie1.Nanoseconds()) // (joonha)
+
+		// # 2
+		trieStart = time.Now() // (joonha)
+		enc, err = s.trie.TryGet(addr.Bytes())
+		elapsedTimeTrie2 := time.Since(trieStart) // (joonha)
+		fmt.Fprintln(tLogger_2, elapsedTimeTrie2.Nanoseconds()) // (joonha)
+		
+		// # 3
+		trieStart = time.Now() // (joonha)
+		enc, err = s.trie.TryGet(addr.Bytes())
+		elapsedTimeTrie3 := time.Since(trieStart) // (joonha)
+		fmt.Fprintln(tLogger_3, elapsedTimeTrie3.Nanoseconds()) // (joonha)
+
+		// // trie time mean
+		// fmt.Fprintln(tLogger_4, (elapsedTimeTrie1.Nanoseconds()+elapsedTimeTrie2.Nanoseconds()+elapsedTimeTrie3.Nanoseconds()) / 3) // (joonha)
+
+		// // trie time median
+		// Td := []float64{float64(elapsedTimeTrie1.Nanoseconds()), float64(elapsedTimeTrie2.Nanoseconds()), float64(elapsedTimeTrie3.Nanoseconds())} // (joonha)
+		// trieMedian, _ := stats.Median(Td) // (joonha)
+		// fmt.Fprintln(tLogger_5, trieMedian) // (joonha)
+
+		// // min
+		// dd := []float64{float64(elapsedTimeTrie1.Nanoseconds()), float64(elapsedTimeTrie2.Nanoseconds()), float64(elapsedTimeTrie3.Nanoseconds())} // (joonha)
+		// trieMin, _ := stats.Min(dd)
+		// fmt.Fprintln(tLogger_6, trieMin) // (joonha)
+		
+
 		if err != nil {
 			s.setError(fmt.Errorf("getDeleteStateObject (%x) error: %v", addr.Bytes(), err))
 			return nil

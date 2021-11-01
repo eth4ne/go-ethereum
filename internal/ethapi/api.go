@@ -45,7 +45,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/ethereum/go-ethereum/trie"
+	// "github.com/ethereum/go-ethereum/trie"
 	"github.com/tyler-smith/go-bip39"
 )
 
@@ -669,13 +669,13 @@ func (s *PublicBlockChainAPI) GetBlockByNumber(ctx context.Context, number rpc.B
 		fmt.Println("start inspecting state trie at block", block.NumberU64())
 
 		startTime := time.Now()
-		triedb := core.GlobalBC.StateCache().TrieDB()        // get leveldb (codes from eth/api.go L:501)
-		stateTrie, _ := trie.NewSecure(block.Root(), triedb) // get the state trie (triedb is same as stateTrie.db)
-		tir := stateTrie.InspectTrie()
+		// triedb := core.GlobalBC.StateCache().TrieDB()        // get leveldb (codes from eth/api.go L:501)
+		// stateTrie, _ := trie.NewSecure(block.Root(), triedb) // get the state trie (triedb is same as stateTrie.db)
+		// tir := stateTrie.InspectTrie()
 		elapsedTime := time.Since(startTime)
 		// fmt.Println("\n\n\ntrie inspect result at block", block.NumberU64(), "(it took", int(elapsedTime.Seconds()), "seconds)")
 		fmt.Println("\ntrie inspect result at block", block.NumberU64(), "(it took", elapsedTime.Milliseconds(), "ms)")
-		tir.PrintTrieInspectResult(block.NumberU64(), int(elapsedTime.Seconds()))
+		// tir.PrintTrieInspectResult(block.NumberU64(), int(elapsedTime.Seconds()))
 		fmt.Println("")
 	}
 	if block != nil && err == nil {

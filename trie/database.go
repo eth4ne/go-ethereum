@@ -25,6 +25,9 @@ import (
 	"sync"
 	"time"
 
+	// (joonha)
+	"os"
+
 	"github.com/VictoriaMetrics/fastcache"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -373,6 +376,8 @@ func (db *Database) insertPreimage(hash common.Hash, preimage []byte) {
 // node retrieves a cached trie node from memory, or returns nil if none can be
 // found in the memory cache.
 func (db *Database) node(hash common.Hash) node {
+	
+	/*
 	// Retrieve the node from the clean cache if available
 	if db.cleans != nil {
 		if enc := db.cleans.Get(nil, hash[:]); enc != nil {
@@ -393,8 +398,18 @@ func (db *Database) node(hash common.Hash) node {
 	}
 	memcacheDirtyMissMeter.Mark(1)
 
+	*/
+	
 	// Content unavailable in memory, attempt to retrieve from disk
+	sLogger_1, err := os.OpenFile("db.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666) // (joonha)
+
+	snapStart := time.Now() // (joonha)
+	
 	enc, err := db.diskdb.Get(hash[:])
+
+	elapsedTimeSnap1 := time.Since(snapStart) // (joonha)
+	fmt.Fprintln(sLogger_1, elapsedTimeSnap1.Nanoseconds(),"	", hash.Hex()) // (joonha)
+	
 	if err != nil || enc == nil {
 		return nil
 	}

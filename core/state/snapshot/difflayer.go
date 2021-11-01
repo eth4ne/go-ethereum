@@ -26,6 +26,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	// (joonha)
+	"unsafe"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/rlp"
 	bloomfilter "github.com/holiman/bloomfilter/v2"
@@ -164,6 +167,11 @@ func (h storageBloomHasher) Size() int                         { return 8 }
 func (h storageBloomHasher) Sum64() uint64 {
 	return binary.BigEndian.Uint64(h[0][bloomStorageHasherOffset:bloomStorageHasherOffset+8]) ^
 		binary.BigEndian.Uint64(h[1][bloomStorageHasherOffset:bloomStorageHasherOffset+8])
+}
+
+func (dl *diffLayer) Size() uintptr {
+	const diskSize = unsafe.Sizeof(dl.origin.diskdb)
+	return diskSize
 }
 
 // newDiffLayer creates a new diff on top of an existing snapshot, whether that's a low

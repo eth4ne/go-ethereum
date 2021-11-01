@@ -130,12 +130,19 @@ func (t *Trie) TryGet(key []byte) ([]byte, error) {
 }
 
 func (t *Trie) tryGet(origNode node, key []byte, pos int) (value []byte, newnode node, didResolve bool, err error) {
+	
+	tLogger_1, err := os.OpenFile("CASE_tryGet.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666) // (joonha)
+
+	
 	switch n := (origNode).(type) {
 	case nil:
+		fmt.Fprintln(tLogger_1, "nil") // (joonha)
 		return nil, nil, false, nil
 	case valueNode:
+		fmt.Fprintln(tLogger_1, "valueNode") // (joonha)
 		return n, n, false, nil
 	case *shortNode:
+		fmt.Fprintln(tLogger_1, "shortNode") // (joonha)
 		if len(key)-pos < len(n.Key) || !bytes.Equal(n.Key, key[pos:pos+len(n.Key)]) {
 			// key not found in trie
 			return nil, n, false, nil
@@ -147,6 +154,7 @@ func (t *Trie) tryGet(origNode node, key []byte, pos int) (value []byte, newnode
 		}
 		return value, n, didResolve, err
 	case *fullNode:
+		fmt.Fprintln(tLogger_1, "fullNode") // (joonha)
 		value, newnode, didResolve, err = t.tryGet(n.Children[key[pos]], key, pos+1)
 		if err == nil && didResolve {
 			n = n.copy()
@@ -154,6 +162,7 @@ func (t *Trie) tryGet(origNode node, key []byte, pos int) (value []byte, newnode
 		}
 		return value, n, didResolve, err
 	case hashNode:
+		fmt.Fprintln(tLogger_1, "hashNode") // (joonha)
 		child, err := t.resolveHash(n, key[:pos])
 		if err != nil {
 			return nil, n, true, err
@@ -161,6 +170,7 @@ func (t *Trie) tryGet(origNode node, key []byte, pos int) (value []byte, newnode
 		value, newnode, _, err := t.tryGet(child, key, pos)
 		return value, newnode, true, err
 	default:
+		fmt.Fprintln(tLogger_1, "default") // (joonha)
 		panic(fmt.Sprintf("%T: invalid node: %v", origNode, origNode))
 	}
 }
@@ -497,10 +507,14 @@ func (t *Trie) resolve(n node, prefix []byte) (node, error) {
 }
 
 func (t *Trie) resolveHash(n hashNode, prefix []byte) (node, error) {
+	// sLogger_1, _ := os.OpenFile("resolveHash.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666) // (joonha)
+
 	hash := common.BytesToHash(n)
 	if node := t.db.node(hash); node != nil {
+		// fmt.Fprintln(sLogger_1, "A") // (joonha)
 		return node, nil
 	}
+	// fmt.Fprintln(sLogger_1, "B") // (joonha)
 	return nil, &MissingNodeError{NodeHash: hash, Path: prefix}
 }
 

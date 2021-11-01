@@ -100,11 +100,14 @@ func (dl *diskLayer) AccountRLP(hash common.Hash) ([]byte, error) {
 	snapshotDirtyAccountMissMeter.Mark(1)
 
 	// Try to retrieve the account from the memory cache
+	
+	/*
 	if blob, found := dl.cache.HasGet(nil, hash[:]); found {
 		snapshotCleanAccountHitMeter.Mark(1)
 		snapshotCleanAccountReadMeter.Mark(int64(len(blob)))
 		return blob, nil
-	}
+	}*/
+	
 	// Cache doesn't contain account, pull from disk and cache for later
 	blob := rawdb.ReadAccountSnapshot(dl.diskdb, hash)
 	dl.cache.Set(hash[:], blob)
