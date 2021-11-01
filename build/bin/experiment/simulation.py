@@ -11,7 +11,7 @@ from datetime import datetime
 from multiprocessing import Pool
 
 # Settings
-FULL_PORT = "8081"
+FULL_PORT = "8082"
 PASSWORD = "1234"
 
 # Account number
@@ -52,25 +52,29 @@ def main():
     offset = 1
     txNums = [int(TX_PER_BLOCK/THREAD_COUNT)]*THREAD_COUNT
     txNums[0] += TX_PER_BLOCK%THREAD_COUNT
-    for i in range(int(ACCOUNT_NUM / TX_PER_BLOCK)):
-        # set arguments for multithreading function
-        arguments = []
-        for j in range(THREAD_COUNT):
-            arguments.append((txNums[j], offset))
-            offset += txNums[j]
+    
+    # for i in range(int(ACCOUNT_NUM / TX_PER_BLOCK)):
+    #     # set arguments for multithreading function
+    #     arguments = []
+    #     for j in range(THREAD_COUNT):
+    #         arguments.append((txNums[j], offset))
+    #         offset += txNums[j]
 
-        # send transactions
-        sendPool.starmap(sendTransactions, arguments)
-        print("inserted ", (i+1)*TX_PER_BLOCK, "accounts")
+    #     # send transactions
+    #     sendPool.starmap(sendTransactions, arguments)
+    #     print("inserted ", (i+1)*TX_PER_BLOCK, "accounts")
 
-        # mining
-        fullnode.geth.miner.start(1)  # start mining
-        while (fullnode.eth.blockNumber == currentBlock):
-            pass # just wait for mining
-        fullnode.geth.miner.stop()  # stop mining
-        currentBlock = fullnode.eth.blockNumber
-
-
+    #     # mining
+    #     fullnode.geth.miner.start(1)  # start mining
+    #     while (fullnode.eth.blockNumber == currentBlock):
+    #         pass # just wait for mining
+    #     fullnode.geth.miner.stop()  # stop mining
+    #     currentBlock = fullnode.eth.blockNumber
+    
+    # snapshot performance test (joonha)
+    fullnode.eth.getBalance(fullnode.eth.coinbase)
+    for i in range(1, ACCOUNT_NUM):
+        fullnode.eth.getBalance(intToAddr(i))
 
 def sendTransaction(to):
     #print("start try to send tx to full node")
