@@ -305,7 +305,8 @@ func (bc *BlockChain) State() (*state.StateDB, error) {
 
 // StateAt returns a new mutable state based on a particular point in time.
 func (bc *BlockChain) StateAt(root common.Hash) (*state.StateDB, error) {
-	return state.New(root, bc.stateCache, bc.snaps)
+	// return state.New(root, bc.stateCache, bc.snaps) // --> original code
+	return state.New_inactiveSnapshot(root, bc.stateCache, bc.snaps, bc.snaps_inactive) // (joonha)
 }
 
 // Config retrieves the chain's fork configuration.
@@ -314,6 +315,7 @@ func (bc *BlockChain) Config() *params.ChainConfig { return bc.chainConfig }
 // Engine retrieves the blockchain's consensus engine.
 func (bc *BlockChain) Engine() consensus.Engine { return bc.engine }
 
+// flag(joonha)
 // Snapshots returns the blockchain snapshot tree.
 func (bc *BlockChain) Snapshots() *snapshot.Tree {
 	return bc.snaps

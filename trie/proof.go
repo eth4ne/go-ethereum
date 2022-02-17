@@ -21,12 +21,32 @@ import (
 	"errors"
 	"fmt"
 
+	// (joonha)
+	"math/big"
+	"strconv"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/ethdb/memorydb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 )
+
+// (joonha) TODO: 이거 사용되는지 확인하고, 아니면 지우기
+// type ProofList [][]byte // for external use
+type ProofList common.ProofList
+
+// (joonha)
+func (n *ProofList) Has(key []byte) (bool, error) {
+	panic("not supported")
+}
+
+// (joonha)
+func (n *ProofList) Get(key []byte) ([]byte, error) {
+	x := (*n)[0]
+	*n = (*n)[1:]
+	return x, nil
+}
 
 // Prove constructs a merkle proof for key. The result contains all encoded nodes
 // on the path to the value at key. The value itself is also included in the last
@@ -115,6 +135,7 @@ func VerifyProof(rootHash common.Hash, key []byte, proofDb ethdb.KeyValueReader)
 		if err != nil {
 			return nil, fmt.Errorf("bad proof node %d: %v", i, err)
 		}
+		// get returns the child's key of the node n (joonha)
 		keyrest, cld := get(n, key, true)
 		switch cld := cld.(type) {
 		case nil:
@@ -126,6 +147,256 @@ func VerifyProof(rootHash common.Hash, key []byte, proofDb ethdb.KeyValueReader)
 		case valueNode:
 			return cld, nil
 		}
+	}
+}
+
+// Only difference with VerifyProof is proofDb's type (joonha)
+func VerifyProof_ProofList(rootHash common.Hash, key []byte, proofDb common.ProofList) (value []byte, err error) {
+	key = keybytesToHex(key)
+	wantHash := rootHash
+	for i := 0; ; i++ {
+		buf, _ := proofDb.Get(wantHash[:])
+		if buf == nil {
+			return nil, fmt.Errorf("proof node %d (hash %064x) missing", i, wantHash)
+		}
+		n, err := decodeNode(wantHash[:], buf)
+		if err != nil {
+			return nil, fmt.Errorf("bad proof node %d: %v", i, err)
+		}
+		// get returns the child's key of the node n (joonha)
+		keyrest, cld := get(n, key, true)
+		switch cld := cld.(type) {
+		case nil:
+			// The trie doesn't contain the key.
+			return nil, nil
+		case hashNode:
+			key = keyrest
+			copy(wantHash[:], cld)
+		case valueNode:
+			return cld, nil
+		}
+	}
+}
+
+// optimized above proving function to compare only the top node of the merkleProof and the blockRoot (joonha)
+func VerifyProof_restore(rootHash common.Hash, proofDb common.ProofList) (value []byte, err error) {
+	wantHash := rootHash
+
+	buf, _ := proofDb.Get(wantHash[:])
+	if buf == nil {
+		return nil, fmt.Errorf("proof node (hash %064x) missing", wantHash)
+	}
+	_, err = decodeNode(wantHash[:], buf)
+	if err != nil {
+		return nil, fmt.Errorf("bad proof node: %v", err)
+	}
+	return nil, err
+}
+
+// GetKeyFromMerkleProof returns the leaf account and its key from merkle proof (joonha)
+func GetKeyFromMerkleProof(rootHash common.Hash, proofDb common.ProofList) ([]byte, common.Hash) {
+	
+	// start iteration from the root node
+	targetNode, tKey := getKeyFromMerkleProof(rootHash, nil, nil, proofDb)
+
+	// convert to a key format (hash)
+	tKey_i := tKey.Int64() // big.Int -> int64
+	retrievedKey := common.HexToHash(strconv.FormatInt(tKey_i, 16)) // int64 -> hex -> hash
+
+	return targetNode, retrievedKey
+}
+
+// internal function of GetKeyFromMerkleProof (joonha)
+func getKeyFromMerkleProof(nodeHash common.Hash, origNode node, tKey []byte, proofDb common.ProofList) ([]byte, *big.Int) {
+
+	fmt.Println("\n=============================================================================")
+	fmt.Println("=============================================================================\n")
+	
+	/*************************************************************/
+	// README
+	/*************************************************************/
+	// There is NO HASHNODE in the proofDb buffer (just short, full, and value)
+	// nodeHash: for retrieving a currNode
+	// origNode: previous node
+	// tKey: target Key that may be complete reaching a value node
+	// proofDb: merkle proof stream
+	// At first, origNode is nil.
+	//
+	// Last shortNode's child is a valueNode, the target account we want to retrieve.
+
+
+	/*************************************************************/
+	// TOOLS
+	/*************************************************************/
+	// resolveNode retrieves and resolves trie node from merkle proof stream
+	resolveNode := func(hash common.Hash) (node, error) {
+		buf, _ := proofDb.Get(hash[:])
+		if buf == nil {
+			return nil, fmt.Errorf("proof node (hash %064x) missing", hash)
+		}
+		n, err := decodeNode(hash[:], buf)
+		if err != nil {
+			return nil, fmt.Errorf("bad proof node %v", err)
+		}
+		return n, err
+	}
+
+
+	/*************************************************************/
+	// GET CURRENT NODE
+	/*************************************************************/
+	// get a node from proofDb representing the nodeHash
+	
+	fmt.Println("proofDb: ", proofDb)
+
+	// Reaching the END
+	if len(proofDb) == 0 { // Reaching the valueNode, return.
+		fmt.Println("proofDb is nil") 
+
+		hexToInt := new(big.Int)
+		hexToInt.SetString(common.BytesToHash(hexToKeybytes(tKey)).Hex()[2:], 16)
+		
+		// get the target valueNode
+		for i := 0; ; i++ {
+			_, cld := get(origNode, tKey[len(tKey)-1:], true)
+			// fmt.Println("tKey is ", tKey[len(tKey)-1:])
+			switch cld := cld.(type) {
+			case nil:
+				// The trie doesn't contain the key.
+				fmt.Println("nil")
+				return nil, hexToInt
+			case hashNode:
+				copy(nodeHash[:], cld)
+				fmt.Println("hashNode")
+			case valueNode:
+				fmt.Println("valueNode")
+				return cld, hexToInt
+			default:
+				fmt.Println("default")
+			}
+		}
+		return nil, hexToInt
+
+	} else {
+		fmt.Println("proofDb is not nil")
+	}
+
+	// Not reaching the end. Go more.
+	currNode, err := resolveNode(nodeHash)
+	if err != nil {
+		fmt.Errorf("bad proof node: %v", err)
+		return nil, nil
+	} 
+
+
+	/*************************************************************/
+	// PREVIOUS NODE
+	/*************************************************************/
+	// if previous node(=origNode) is a fullNode, 
+	// extract key digit and append it to tKey
+	switch n := (origNode).(type) {
+	case *fullNode:
+		fmt.Println("Prev: full")
+
+		switch cur := (currNode).(type){
+		case *fullNode:
+			hasher := newHasher(false)
+			defer returnHasherToPool(hasher)
+			nn := hasher.fullnodeToHash(cur, false)
+			fmt.Println("selected branch: ", nn)
+
+			i := 0
+			for i < 16 {
+				if common.BytesToHash(nn.(hashNode)) == common.BytesToHash((n.Children[i]).(hashNode)) {
+					// key append
+					selectedByte := common.HexToHash("0x" + indices[i])
+					tKey = append(tKey, selectedByte[len(selectedByte)-1])
+					break
+				}
+				i++
+			}
+		case *shortNode:
+			hasher := newHasher(false)
+			defer returnHasherToPool(hasher)
+
+			collapsed, _ := hasher.hashShortNodeChildren(cur) // should hash the child valueNode first
+			nn := hasher.shortnodeToHash(collapsed, false) // nn: hashnode
+			fmt.Println("selected branch: ", nn)
+
+			i := 15 // from the latest
+			for i >= 0 {
+				fmt.Println("common.BytesToHash(nn.(hashNode)): ", common.BytesToHash(nn.(hashNode)))
+				// to avoid panic
+				if n.Children[i] == nil {
+					i--
+					continue
+				}
+
+				// if it is already used, continue to search another inactive account
+
+
+				fmt.Println("common.BytesToHash((n.Children[i]).(hashNode)): ", common.BytesToHash((n.Children[i]).(hashNode)))
+				if common.BytesToHash(nn.(hashNode)) == common.BytesToHash((n.Children[i]).(hashNode)) {
+
+					selectedByte := common.HexToHash("0x" + indices[i])
+					
+					// if this is already used, continue to search another inactive account during the epoch
+					// TODO(joonha): simplify this code part
+					tKey_tmp := tKey
+					tKey_tmp = append(tKey_tmp, selectedByte[len(selectedByte)-1])
+					hexToInt_tmp := new(big.Int)
+					hexToInt_tmp.SetString(common.BytesToHash(hexToKeybytes(tKey_tmp)).Hex()[2:], 16)
+					tKey_i := hexToInt_tmp.Int64() // big.Int -> int64
+					retrievedKey_tmp := common.HexToHash(strconv.FormatInt(tKey_i, 16)) // int64 -> hex -> hash
+					_, doExist := common.AlreadyRestored[retrievedKey_tmp]
+					if doExist { // already restored
+						fmt.Println("ALREADY RESTORED, so continue to search")
+						i--
+						continue
+					}
+
+					// key append
+					// selectedByte := common.HexToHash("0x" + indices[i])
+					tKey = append(tKey, selectedByte[len(selectedByte)-1])
+					break
+				}
+				i--
+			}
+		}
+
+	default:
+		fmt.Println("Prev: not full")
+	}
+
+
+	/*************************************************************/
+	// CURRENT NODE
+	/*************************************************************/
+	switch n := (currNode).(type) { // no valueNode and hashNode case (only shortNode and fullNode)
+	case nil:
+		fmt.Println("curr nil")
+		return nil, big.NewInt(0)
+
+	case *shortNode: // should update the key.
+		fmt.Println("curr short")
+		// fmt.Println("n.Key is ", n.Key)
+		// fmt.Println("before tKey: ", tKey)
+		tKey = append(tKey, n.Key...)
+		// fmt.Println("after tKey: ", tKey)
+
+		return getKeyFromMerkleProof(nodeHash, n, tKey, proofDb)
+
+	case *fullNode: // No key update. It is the next node's duty.
+		fmt.Println("curr full")
+		fmt.Println("full node's children: ", n.Children)
+		return getKeyFromMerkleProof(nodeHash, n, tKey, proofDb)
+
+	case hashNode: // there would be no hashNode in proofDb
+		fmt.Println("curr hash")		
+		return getKeyFromMerkleProof(nodeHash, n, tKey, proofDb)
+
+	default:
+		panic(fmt.Sprintf("%T: invalid node: %v", origNode, origNode))
 	}
 }
 

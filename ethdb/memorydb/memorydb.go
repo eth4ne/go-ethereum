@@ -210,6 +210,7 @@ type batch struct {
 
 // Put inserts the given value into the batch for later committing.
 func (b *batch) Put(key, value []byte) error {
+	// 흠 여기서 중복 검사를 했으면 좋았을텐데 안하네 이게 문제인듯? (jmlee)
 	b.writes = append(b.writes, keyvalue{common.CopyBytes(key), common.CopyBytes(value), false})
 	b.size += len(key) + len(value)
 	return nil

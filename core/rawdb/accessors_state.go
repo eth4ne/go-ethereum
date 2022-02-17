@@ -93,6 +93,7 @@ func HasTrieNode(db ethdb.KeyValueReader, hash common.Hash) bool {
 	return ok
 }
 
+// important (jmlee)
 // WriteTrieNode writes the provided trie node database.
 func WriteTrieNode(db ethdb.KeyValueWriter, hash common.Hash, node []byte) {
 	if err := db.Put(hash.Bytes(), node); err != nil {
@@ -100,6 +101,7 @@ func WriteTrieNode(db ethdb.KeyValueWriter, hash common.Hash, node []byte) {
 	}
 }
 
+// flag(joonha)
 // DeleteTrieNode deletes the specified trie node from the database.
 func DeleteTrieNode(db ethdb.KeyValueWriter, hash common.Hash) {
 	if err := db.Delete(hash.Bytes()); err != nil {

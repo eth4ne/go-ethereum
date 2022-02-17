@@ -116,6 +116,10 @@ type (
 		account            *common.Address
 		prevcode, prevhash []byte
 	}
+	// (joonha)
+	addrChange struct {
+		account	*common.Address
+	}
 
 	// Changes to other state values.
 	refundChange struct {

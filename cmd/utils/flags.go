@@ -109,6 +109,16 @@ func printHelp(out io.Writer, templ string, data interface{}) {
 // are the same for all commands.
 
 var (
+	// to turn on/off active snapshot at full.sh (joonha)
+	ActiveSnapshotFlag = cli.BoolTFlag{ // BoolTFlag may mean 'default = true'
+		Name:  "activeSnapshot",
+		Usage: `[Ethane] Enables snapshot-database mode in active trie (default = enable)`,
+	}
+	// to turn on/off inactive storage snapshot at full.sh (joonha)
+	InactiveStorageSnapshotFlag = cli.BoolTFlag{
+		Name:  "inactiveStorageSnapshot",
+		Usage: `[Ethane] Enables snapshot-database mode in inactive storage trie (default = enable)`,
+	}
 	// General settings
 	DataDirFlag = DirectoryFlag{
 		Name:  "datadir",
@@ -1512,6 +1522,15 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 
 	log.Debug("Sanitizing Go's GC trigger", "percent", int(gogc))
 	godebug.SetGCPercent(int(gogc))
+
+	// get active snapshot option input and set it to common's variables (joonha)
+	if ctx.GlobalIsSet(ActiveSnapshotFlag.Name) {
+		common.UsingActiveSnapshot = ctx.GlobalBool(ActiveSnapshotFlag.Name)
+	}
+	// get inactive storage snapshot option input and set it to common's variables (joonha)
+	if ctx.GlobalIsSet(InactiveStorageSnapshotFlag.Name) {
+		common.UsingInactiveStorageSnapshot = ctx.GlobalBool(InactiveStorageSnapshotFlag.Name)
+	}
 
 	if ctx.GlobalIsSet(SyncModeFlag.Name) {
 		cfg.SyncMode = *GlobalTextMarshaler(ctx, SyncModeFlag.Name).(*downloader.SyncMode)

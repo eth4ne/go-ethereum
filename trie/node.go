@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -30,6 +31,9 @@ var indices = []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b
 type node interface {
 	fstring(string) string
 	cache() (hashNode, bool)
+	toString(string, *Database) string // print node details in human readable form (jmlee)
+	toString_storageTrie(string, *Database) string // (joonha)
+	delete_storageTrie(string, *Database) string // (joonha)
 }
 
 type (
@@ -223,3 +227,175 @@ func wrapError(err error, ctx string) error {
 func (err *decodeError) Error() string {
 	return fmt.Sprintf("%v (decode path: %s)", err.what, strings.Join(err.stack, "<-"))
 }
+
+// print node details in human readable form (jmlee)
+func (n *fullNode) toString(ind string, db *Database) string {
+	// print branch node
+	hashnode, _ := n.cache()
+	hash := common.BytesToHash(hashnode)
+	resp := fmt.Sprintf("[\n")
+	resp += fmt.Sprintf("%s fullNode - hash: %s\n", ind, hash.Hex())
+	for i, node := range &n.Children {
+		if node != nil{
+			resp += fmt.Sprintf("%s branch '%s':\n", ind, indices[i])
+			resp += fmt.Sprintf("%s	%v\n", ind, node.toString(ind+"	", db))
+		} 
+	}
+	return resp + fmt.Sprintf("\n%s] ", ind)
+}
+func (n *shortNode) toString(ind string, db *Database) string {
+	// print extension or leaf node
+	// if n.Val is branch node, then this node is extension node & n.Key is common prefix
+	// if n.Val is account, then this node is leaf node & n.Key is left address of the account (along the path)
+	hashnode, _ := n.cache()
+	hash := common.BytesToHash(hashnode)
+	// return fmt.Sprintf("{shortNode hash: %s, key: %x - value: %v} ", hash.Hex(), n.Key, n.Val.toString(ind+"  ", db))
+	// return fmt.Sprintf("\n\t\tshortNode hash: %s, \n\t\tkey:\t\t%x \n\t\t%v ", hash.Hex(), n.Key, n.Val.toString(ind+"  ", db)) // cleaner printing (joonha)
+	return fmt.Sprintf("\n\t\tshortNode hash: %s, \n\t\tkey:\t\t%x \n\t\t%v \nInactiveBoundaryKey is %d ", hash.Hex(), n.Key, n.Val.toString(ind+"  ", db), common.InactiveBoundaryKey) // cleaner printing (joonha)
+}
+func (n hashNode) toString(ind string, db *Database) string {
+	// resolve hashNode (get node from db)
+	hash := common.BytesToHash([]byte(n))
+	if node := db.node(hash); node != nil {
+		return node.toString(ind, db)
+	} else {
+		// error: should not reach here!
+		return fmt.Sprintf("<%x> ", []byte(n))
+	}
+}
+// same struct copied from state_object.go to decode data
+type Account struct {
+	Nonce    uint64
+	Balance  *big.Int
+	Root     common.Hash // merkle root of the storage trie
+	CodeHash []byte
+	Addr	 common.Address
+}
+func (n valueNode) toString(ind string, db *Database) string {
+	// decode data into account & print account
+	var acc Account
+	rlp.DecodeBytes([]byte(n), &acc)
+	// return fmt.Sprintf("[ Nonce: %d / Balance: %s ]", acc.Nonce, acc.Balance.String())
+	return fmt.Sprintf("Nonce:\t\t%d\n\t\tBalance:\t%s\n\t\tstorageRoot:\t%s\n\t\tcodeHash:\t%x\n\t\taddr:\t\t%s\n\t\tkey:\t\t%s\n", acc.Nonce, acc.Balance.String(), acc.Root, acc.CodeHash, acc.Addr, common.AddrToKey[acc.Addr]) // print (joonha)
+
+	// inactive account여도 AddrToKey_inactive 가 아니라 AddrToKey 가 출력되고 있으니 주의! 
+}
+
+/***************************************************/
+// STORAGE TRIE PRINTING (joonha)
+/***************************************************/
+func (n *fullNode) toString_storageTrie(ind string, db *Database) string {
+	fmt.Println("FULLNODE")
+	// print branch node
+	hashnode, _ := n.cache()
+	hash := common.BytesToHash(hashnode)
+	resp := fmt.Sprintf("[\n")
+	resp += fmt.Sprintf("%s fullNode - hash: %s\n", ind, hash.Hex())
+	for i, node := range &n.Children {
+		if node != nil{
+			resp += fmt.Sprintf("%s branch '%s':\n", ind, indices[i])
+			resp += fmt.Sprintf("%s	%v\n", ind, node.toString_storageTrie(ind+"	", db))
+		} 
+	}
+	return resp + fmt.Sprintf("\n%s] ", ind)
+}
+func (n *shortNode) toString_storageTrie(ind string, db *Database) string {
+	fmt.Println("SHORTNODE")
+	// print extension or leaf node
+	// if n.Val is branch node, then this node is extension node & n.Key is common prefix
+	// if n.Val is account, then this node is leaf node & n.Key is left address of the account (along the path)
+	hashnode, _ := n.cache()
+	hash := common.BytesToHash(hashnode)
+
+	return fmt.Sprintf("\n\t\tshortNode hash: %s, \n\t\tkey: %x \n\t\t%v", hash.Hex(), common.BytesToHash(n.Key), n.Val.toString_storageTrie(ind+"  ", db))
+}
+func (n hashNode) toString_storageTrie(ind string, db *Database) string {
+	fmt.Println("HASHNODE")
+	// resolve hashNode (get node from db)
+	hash := common.BytesToHash([]byte(n))
+	fmt.Println("hash: ", hash)
+	if node := db.node(hash); node != nil {
+		return node.toString_storageTrie(ind, db)
+	} else {
+		// error: should not reach here!
+		return fmt.Sprintf("<%x> ", []byte(n))
+	}
+}
+
+func (n valueNode) toString_storageTrie(ind string, db *Database) string {
+	fmt.Println("VALUENODE")
+	return fmt.Sprintf("\t\tn: ", []byte(n))
+}
+
+/***************************************************/
+// DELETE STORAGE TRIE NODES (joonha)
+/***************************************************/
+// Call db.DeleteStorageTrieNode(/* node's accountHash */) to delete node from disk
+func (n *fullNode) delete_storageTrie(ind string, db *Database) string {
+	
+	// fmt.Println("FULLNODE")
+
+	// print branch node
+	hashnode, _ := n.cache()
+	hash := common.BytesToHash(hashnode)
+	// fmt.Println("(fullnode hash: ", hash, ")")
+
+	resp := fmt.Sprintf("[\n")
+	resp += fmt.Sprintf("%s fullNode - hash: %s\n", ind, hash.Hex())
+	for i, node := range &n.Children {
+		if node != nil{
+			resp += fmt.Sprintf("%s branch '%s':\n", ind, indices[i])
+			resp += fmt.Sprintf("%s	%v\n", ind, node.delete_storageTrie(ind+"	", db))
+		} 
+	}
+
+	// delete full node
+	db.DeleteStorageTrieNode(hash)
+
+	return resp + fmt.Sprintf("\n%s] ", ind)
+}
+func (n *shortNode) delete_storageTrie(ind string, db *Database) string {
+	// fmt.Println("SHORTNODE")
+	// print extension or leaf node
+	// if n.Val is branch node, then this node is extension node & n.Key is common prefix
+	// if n.Val is account, then this node is leaf node & n.Key is left address of the account (along the path)
+	hashnode, _ := n.cache()
+	hash := common.BytesToHash(hashnode)
+	// fmt.Println("(shortnode hash: ", hash, ")")
+
+	// delete short node
+	db.DeleteStorageTrieNode(hash)
+
+	return fmt.Sprintf("\n\t\tshortNode hash: %s, \n\t\tkey: %x \n\t\t%v", hash.Hex(), common.BytesToHash(n.Key), n.Val.delete_storageTrie(ind+"  ", db))
+}
+func (n hashNode) delete_storageTrie(ind string, db *Database) string {
+	// fmt.Println("HASHNODE\n")
+	// resolve hashNode (get node from db)
+	hash := common.BytesToHash([]byte(n))
+	// fmt.Println("(hashnode hash: ", hash, ")")
+	if node := db.node(hash); node != nil {
+		
+		// // delete hash node // --> doesn't affect anything
+		// db.DeleteStorageTrieNode(hash)
+
+		return node.delete_storageTrie(ind, db)
+	} else {
+		// error: should not reach here!
+		return fmt.Sprintf("<%x> ", []byte(n))
+	}
+}
+
+func (n valueNode) delete_storageTrie(ind string, db *Database) string {
+	// fmt.Println("VALUENODE\n")
+
+	// // get accountHash of this node
+	// hash := common.BytesToHash(n)
+	// fmt.Println("(valuenode hash: ", hash, ")")
+
+	// // delete value node // --> doesn't affect anything
+	// db.DeleteStorageTrieNode(hash)
+
+	return fmt.Sprintf("n: ", []byte(n))
+}
+
+// TODO(joonha) delete all nodes not only shortnode

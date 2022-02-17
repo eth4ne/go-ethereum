@@ -33,6 +33,7 @@ type Account struct {
 	Balance  *big.Int
 	Root     []byte
 	CodeHash []byte
+	Addr	 common.Address // in compactTrie, addr should be an account instance (joonha)
 }
 
 // SlimAccount converts a state.Account content into a slim snapshot account
@@ -52,7 +53,8 @@ func SlimAccount(nonce uint64, balance *big.Int, root common.Hash, codehash []by
 
 // SlimAccountRLP converts a state.Account content into a slim snapshot
 // version RLP encoded.
-func SlimAccountRLP(nonce uint64, balance *big.Int, root common.Hash, codehash []byte) []byte {
+// func SlimAccountRLP(nonce uint64, balance *big.Int, root common.Hash, codehash []byte) []byte { // --> original code
+func SlimAccountRLP(nonce uint64, balance *big.Int, root common.Hash, codehash []byte, addr common.Address) []byte { // addr is added (joonha)
 	data, err := rlp.EncodeToBytes(SlimAccount(nonce, balance, root, codehash))
 	if err != nil {
 		panic(err)

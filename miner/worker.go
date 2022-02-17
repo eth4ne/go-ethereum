@@ -592,6 +592,7 @@ func (w *worker) mainLoop() {
 				}
 				txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs, w.current.header.BaseFee)
 				tcount := w.current.tcount
+				// just applay transactions to the pending state when we're not mining (jmlee)
 				w.commitTransactions(w.current, txset, nil)
 
 				// Only update the snapshot if any new transactions were added
@@ -1021,7 +1022,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	// Could potentially happen if starting to mine in an odd state.
 	// Note genParams.coinbase can be different with header.Coinbase
 	// since clique algorithm can modify the coinbase field in header.
-	env, err := w.makeEnv(parent, header, genParams.coinbase)
+	env, err := w.makeEnv(parent, header, genParams.coinbase) // load parent block's state before apply pending transactions (jmlee)
 	if err != nil {
 		log.Error("Failed to create sealing context", "err", err)
 		return nil, err
@@ -1052,6 +1053,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 // be customized with the plugin in the future.
 func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 	// Split the pending transactions into locals and remotes
+	// fmt.Println("split the pending transactions into locals and remotes") // (jmlee)
 	// Fill the block with all available pending transactions.
 	pending := w.eth.TxPool().Pending(true)
 	localTxs, remoteTxs := make(map[common.Address]types.Transactions), pending
@@ -1062,16 +1064,35 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 		}
 	}
 	if len(localTxs) > 0 {
+		// fmt.Println("commit local transactions") // call IntermediateRoot() after applying a transaction // (jmlee)
 		txs := types.NewTransactionsByPriceAndNonce(env.signer, localTxs, env.header.BaseFee)
 		if w.commitTransactions(env, txs, interrupt) {
 			return
 		}
 	}
 	if len(remoteTxs) > 0 {
+		// fmt.Println("commit remote transactions") // call IntermediateRoot() after applying a transaction // (jmlee)
 		txs := types.NewTransactionsByPriceAndNonce(env.signer, remoteTxs, env.header.BaseFee)
 		if w.commitTransactions(env, txs, interrupt) {
 			return
 		}
+	}
+
+	// delete previous leaf nodes (jmlee)
+	if env.header.Number.Int64() % common.DeleteLeafNodeEpoch == 0 {
+		keysToDelete := append(common.KeysToDelete, w.current.state.KeysToDeleteDirty...)
+		w.current.state.DeletePreviousLeafNodes(keysToDelete)
+		// reset common.KeysToDelete
+		common.KeysToDelete = make([]common.Hash, 0)
+		// reset common.AlreadyRestored (joonha)
+		common.AlreadyRestored = make(map[common.Hash]common.Empty) 
+	}
+
+	// inactivate inactive accounts (jmlee)
+	if env.header.Number.Int64() % common.InactivateLeafNodeEpoch == 0 {
+		lastKeyToCheck := common.CheckpointKeys[env.header.Number.Int64()-common.InactivateCriterion+1]
+		inactivatedAccountsNum := w.current.state.InactivateLeafNodes(common.InactiveBoundaryKey, lastKeyToCheck)
+		common.InactiveBoundaryKey += inactivatedAccountsNum
 	}
 }
 
@@ -1137,6 +1158,7 @@ func (w *worker) commit(env *environment, interval func(), update bool, start ti
 		// Create a local environment copy, avoid the data race with snapshot state.
 		// https://github.com/ethereum/go-ethereum/issues/24299
 		env := env.copy()
+		// fmt.Println("call FinalizeAndAssemble() at worker.commit()") // (jmlee)
 		block, err := w.engine.FinalizeAndAssemble(w.chain, env.header, env.state, env.txs, env.unclelist(), env.receipts)
 		if err != nil {
 			return err
