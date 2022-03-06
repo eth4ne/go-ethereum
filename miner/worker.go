@@ -1078,22 +1078,77 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 		}
 	}
 
+	////////////////////////////////////////////////////////////////////////////////////
+	// issue: 왜 두 번째 블록에선 env.header.Number.Int64()가 3이고
+	// 세 번째 블록에선 env.header.Number.Int64()가 또 3일까.
+	fmt.Println("----------------------------------------------------------------------------------------------------------------")
+	fmt.Println("\n\n\n env.header.Number.Int64(): ", env.header.Number.Int64())
+	bn := env.header.Number.Int64()
+	fmt.Println("bn: ", bn)
+
+	// exe below only for the first appearance (joonha)
+	if common.IsFirst == false { // 2nd
+		fmt.Println("this is the second time so return")
+		common.IsFirst = true
+		return 
+		// if bn % common.DeleteLeafNodeEpoch == 0 { // delEpoch 때엔 두 번째 시행이 유효
+		// 	fmt.Println("I am here")
+		// } else {
+		// 	return 
+		// }
+	} else if common.IsFirst == true {
+		common.IsFirst = false
+		if bn % common.DeleteLeafNodeEpoch == 0 { // delEpoch 때엔 두 번째 시행이 유효
+			fmt.Println("I am here")
+		} else {
+			fmt.Println("return cuz it's not a deleting epoch")
+			return 
+		}
+	}
+
+	if bn <= 0 {
+		fmt.Println("block number is below 1")
+		return 
+	}
+
+	// env.state.PrintStateTrie()
+
 	// delete previous leaf nodes (jmlee)
-	if env.header.Number.Int64() % common.DeleteLeafNodeEpoch == 0 {
-		keysToDelete := append(common.KeysToDelete, w.current.state.KeysToDeleteDirty...)
-		w.current.state.DeletePreviousLeafNodes(keysToDelete)
+	if true { // bn % common.DeleteLeafNodeEpoch == 0 {
+		fmt.Println("\n\nenv.header.Number.Int64(): ", env.header.Number.Int64())
+		fmt.Println("\n\n/******************************************/")
+		fmt.Println("// delete previous leaf nodes")
+		fmt.Println("/******************************************/\n")
+
+		keysToDelete := append(common.KeysToDelete, env.state.KeysToDeleteDirty...)
+		env.state.DeletePreviousLeafNodes(keysToDelete)
+		
 		// reset common.KeysToDelete
 		common.KeysToDelete = make([]common.Hash, 0)
 		// reset common.AlreadyRestored (joonha)
 		common.AlreadyRestored = make(map[common.Hash]common.Empty) 
 	}
 
+	// env.state.PrintStateTrie()
+
 	// inactivate inactive accounts (jmlee)
-	if env.header.Number.Int64() % common.InactivateLeafNodeEpoch == 0 {
-		lastKeyToCheck := common.CheckpointKeys[env.header.Number.Int64()-common.InactivateCriterion+1]
-		inactivatedAccountsNum := w.current.state.InactivateLeafNodes(common.InactiveBoundaryKey, lastKeyToCheck)
+	if true { // bn % common.InactivateLeafNodeEpoch == 0 {
+		fmt.Println("\n\nenv.header.Number.Int64(): ", env.header.Number.Int64())
+		fmt.Println("\n\n/******************************************/")
+		fmt.Println("// inactivate inactive accounts")
+		fmt.Println("/******************************************/\n")
+		
+		// lastKeyToCheck := common.CheckpointKeys[env.header.Number.Int64()-common.InactivateCriterion+1] // orig
+		lastKeyToCheck := common.CheckpointKeys[env.header.Number.Int64()-common.InactivateCriterion] // v1.10.16 (joonha)
+		fmt.Println("FROM: ", common.InactiveBoundaryKey)
+		fmt.Println("TO: ", lastKeyToCheck)
+		inactivatedAccountsNum := env.state.InactivateLeafNodes(common.InactiveBoundaryKey, lastKeyToCheck)
 		common.InactiveBoundaryKey += inactivatedAccountsNum
 	}
+
+	// fmt.Println("\n\n\nenv.state.PrintStateTrie() ------------------------->")
+	// env.state.PrintStateTrie()
+	///////////////////////////////////////////////////////////////////////////
 }
 
 // generateWork generates a sealing block based on the given parameters.
@@ -1129,6 +1184,11 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 	if err != nil {
 		return
 	}
+
+	if work.header != nil && w.current != nil {
+		common.CheckpointKeys[work.header.Number.Int64()] = w.current.state.NextKey // save this block's initial NextKey (joonha)
+	}
+
 	// Create an empty block based on temporary copied state for
 	// sealing in advance without waiting block execution finished.
 	if !noempty && atomic.LoadUint32(&w.noempty) == 0 {

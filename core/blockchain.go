@@ -1286,58 +1286,6 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		}
 	}
 
-	// print to check disk size before delete leaf nodes (joonha)
-	if block.Header().Number.Int64() % 1 == 0 {
-		// inspect database
-		rawdb.InspectDatabase(rawdb.GlobalDB, nil, nil)
-
-		// print state trie 
-		fmt.Println("(BEFORE DELETION) $$$ print state trie at block", bc.CurrentBlock().Header().Number)
-		// ldb := trie.NewDatabase(bc.db)
-		// stateTrie, _ := trie.NewSecure(bc.CurrentBlock().Root(), ldb)
-		// stateTrie.Print()
-	}
-
-	// delete leaf nodes from disk (joonha)
-	fmt.Println("\nBLOCK NUMBER: ", block.Header().Number.Int64())
-	if (block.Header().Number.Int64()) % common.DeleteLeafNodeEpoch == 0 { // at every delete epoch
-		fmt.Println("THIS IS THE DELETING EPOCH\n")
-		for _, addr := range common.AccountsToDeleteFromDisk {
-			fmt.Println("\nDeleting addr: ", addr)
-
-			// 1. get obj's storage trie
-			storageTrie := state.GetTrie(addr)
-			// fmt.Println("storageTrie: ", storageTrie)
-
-			// 2. delete every nodes found during trie traversing from disk
-			storageTrie.Delete_storageTrie() // --> secure_trie.go >> trie.go >> node.go
-		}
-		// empty the list
-		common.AccountsToDeleteFromDisk = make([]common.Address, 0)
-	}
-
-	// print database inspect result (jmlee)
-	fmt.Println("\nblock inserted -> blocknumber:", block.Header().Number.Int64())
-	fmt.Println("InactiveBoundaryKey:", common.InactiveBoundaryKey)
-	fmt.Println("common.CheckpointKeys:", common.CheckpointKeys)
-	if block.Header().Number.Int64() % 1 == 0 {
-		// inspect database
-		rawdb.InspectDatabase(rawdb.GlobalDB, nil, nil)
-
-		// print state trie (jmlee)
-		fmt.Println("(AFTER DELETION) $$$ print state trie at block", bc.CurrentBlock().Header().Number)
-		ldb := trie.NewDatabase(bc.db)
-		stateTrie, _ := trie.NewSecure(bc.CurrentBlock().Root(), ldb)
-		stateTrie.Print()
-	}
-
-	// set common.DoDeleteLeafNode (jmlee)
-	if (block.Header().Number.Int64()+1) % common.DeleteLeafNodeEpoch == 0 {
-		common.DoDeleteLeafNode = true
-	} else {
-		common.DoDeleteLeafNode = false
-	}
-
 	return nil
 }
 
@@ -1374,6 +1322,9 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	} else {
 		status = SideStatTy
 	}
+
+	// Here, during setting new head, block proceeds from prev to new (joonha)
+
 	// Set new head.
 	if status == CanonStatTy {
 		bc.writeHeadBlock(block)
@@ -1396,6 +1347,94 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	} else {
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
 	}
+
+
+
+	/***********************************************/
+	//print and delete database, set Deletenode
+	/***********************************************/
+	fmt.Println("\n\n11111111111111111111111")
+	fmt.Println("11111111111111111111111")
+	fmt.Println("11111111111111111111111")
+	fmt.Println("11111111111111111111111")
+	fmt.Println("11111111111111111111111\n\n")
+
+	// print to check disk size before delete leaf nodes (joonha)
+	if block.Header().Number.Int64() % 1 == 0 {
+		// inspect database
+		rawdb.InspectDatabase(rawdb.GlobalDB, nil, nil)
+
+		// print state trie 
+		fmt.Println("(BEFORE DELETION) $$$ print state trie at block", bc.CurrentBlock().Header().Number)
+	}
+
+	// delete leaf nodes from disk (joonha)
+	fmt.Println("\nBLOCK NUMBER: ", block.Header().Number.Int64())
+	if (block.Header().Number.Int64()) % common.DeleteLeafNodeEpoch == 0 { // at every delete epoch
+		fmt.Println("THIS IS THE DELETING EPOCH\n")
+		for _, addr := range common.AccountsToDeleteFromDisk {
+			fmt.Println("\nDeleting addr: ", addr)
+
+			// 1. get obj's storage trie
+			storageTrie := state.GetTrie(addr)
+			// fmt.Println("storageTrie: ", storageTrie)
+
+			// 2. delete every nodes found during trie traversing from disk
+			storageTrie.Delete_storageTrie() // --> secure_trie.go >> trie.go >> node.go
+		}
+		// empty the list
+		common.AccountsToDeleteFromDisk = make([]common.Address, 0)
+	} else {
+		fmt.Println("NOT A DELETING EPOCH")
+	}
+
+	// print database inspect result (jmlee)
+	fmt.Println("\nblock inserted -> blocknumber:", block.Header().Number.Int64())
+	fmt.Println("InactiveBoundaryKey:", common.InactiveBoundaryKey)
+	fmt.Println("common.CheckpointKeys:", common.CheckpointKeys)
+	if block.Header().Number.Int64() % 1 == 0 {
+		// inspect database
+		rawdb.InspectDatabase(rawdb.GlobalDB, nil, nil)
+
+		// print state trie (jmlee)
+		fmt.Println("(AFTER DELETION) $$$ print state trie at block", bc.CurrentBlock().Header().Number)
+		ldb := trie.NewDatabase(bc.db)
+		stateTrie, _ := trie.NewSecure(bc.CurrentBlock().Root(), ldb)
+		stateTrie.Print()
+
+		// /******************************************/
+		// // PRINTINNG STATETRIE FROM SOMETHING
+		// /******************************************/
+		// // (temp for debugging) print state trie (joonha)
+		// fmt.Println("(AFTER DELETION) $$$ print state trie at block", bc.CurrentBlock().Header().Number)
+		// ldb := trie.NewDatabase(bc.db)
+		// stateTrie, _ := trie.NewSecure(bc.CurrentBlock().Root(), ldb)
+		// fmt.Println("1 Root: ", bc.CurrentBlock().Root())
+		// if stateTrie != nil {
+		// 	stateTrie.Print()
+		// } else {
+		// 	fmt.Println("stateTrie is nil")
+		// }
+	}
+
+	// set common.DoDeleteLeafNode (jmlee)
+	if (block.Header().Number.Int64()+1) % common.DeleteLeafNodeEpoch == 0 {
+		common.DoDeleteLeafNode = true
+	} else {
+		common.DoDeleteLeafNode = false
+	}
+
+	common.IsFirst = true
+
+	// /*********************************/
+	// // PRINTINNG COMPACTTRIE
+	// /*********************************/
+	// // 여기서도 state trie에 delete와 inactivate가 적용되지 않은 상태인지 확인하기 위해 프린팅을 해보는 것임 (joonha)
+	// fmt.Println("\n\n\n(final) printing state trie from blockchain.go > writeBlockAndSetHead()")
+	// state.PrintStateTrie() // (joonha)
+	// fmt.Println("2 Root: ", state.Hash())
+	// // --> 확인 결과, compactTrie 임.
+
 	return status, nil
 }
 

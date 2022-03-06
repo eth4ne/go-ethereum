@@ -632,12 +632,12 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 	addrKey_bigint.SetString(addrKey.Hex()[2:], 16)
 	// fmt.Println("addrKey_bigint:", addrKey_bigint.Int64(), "/ CheckpointKey:", s.CheckpointKey)
 	
-	fmt.Println("\n[Account]\nNonce: ", obj.data.Nonce)
-	fmt.Println("Balance: ", obj.data.Balance)
-	fmt.Println("CodeHash: ", obj.data.CodeHash)
-	fmt.Println("Root: ", obj.data.Root)
-	fmt.Println("Addr: ", obj.data.Addr)
-	fmt.Println("")
+	// fmt.Println("\n[Account]\nNonce: ", obj.data.Nonce)
+	// fmt.Println("Balance: ", obj.data.Balance)
+	// fmt.Println("CodeHash: ", obj.data.CodeHash)
+	// fmt.Println("Root: ", obj.data.Root)
+	// fmt.Println("Addr: ", obj.data.Addr)
+	// fmt.Println("")
 
 	if addrKey_bigint.Int64() >= s.CheckpointKey {
 		// fmt.Println("\n\nupdateStateObject ----------> first case\n\n")
@@ -1604,12 +1604,12 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 			}
 			storageCommitted += committed
 
-			// printing storage trie (joonha)
-			fmt.Println("\nPrint_storageTrie starts")
-			fmt.Println("( account addr: ", obj.address, ")")
-			fmt.Println("( account addrHash: ", obj.addrHash, ")")
-			obj.Print_storageTrie()
-			fmt.Println("Print_storageTrie ends\n")
+			// // printing storage trie (joonha)
+			// fmt.Println("\nPrint_storageTrie starts")
+			// fmt.Println("( account addr: ", obj.address, ")")
+			// fmt.Println("( account addrHash: ", obj.addrHash, ")")
+			// obj.Print_storageTrie()
+			// fmt.Println("Print_storageTrie ends\n")
 		}
 
 		// // codes for debugging (joonha)
@@ -1715,6 +1715,11 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 		common.KeysToDelete = make([]common.Hash, 0) // only works at the epoch
 	}
 
+	// 여기서도 state trie에 delete와 inactivate가 적용되지 않은 상태인지 확인하기 위해 프린팅을 해보는 것임 (joonha)
+	fmt.Println("\n\n(3) s.db.TrieDB(): ", s.db.TrieDB(), "\n\n")
+
+	// Here, writing to TrieDB is occurred (joonha) (이곳을 기준으로 (3)과 (4)의 프린팅에 차이가 있기 때문임.)
+
 	// The onleaf func is called _serially_, so we can reuse the same account
 	// for unmarshalling every time.
 	var account types.StateAccount
@@ -1730,6 +1735,10 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 	if err != nil {
 		return common.Hash{}, err
 	}
+
+	// 여기서도 state trie에 delete와 inactivate가 적용되지 않은 상태인지 확인하기 위해 프린팅을 해보는 것임 (joonha)
+	fmt.Println("\n\n(4) s.db.TrieDB(): ", s.db.TrieDB(), "\n\n")
+
 	if metrics.EnabledExpensive {
 		s.AccountCommits += time.Since(start)
 
@@ -1805,6 +1814,11 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 			s.snap_inactive, s.snapDestructs_inactive, s.snapAccounts_inactive, s.snapStorage_inactive = nil, nil, nil, nil
 		}
 	}
+
+	// // 여기서도 state trie에 delete와 inactivate가 적용되지 않은 상태인지 확인하기 위해 프린팅을 해보는 것임 (joonha)
+	// fmt.Println("\n\n\n(2) printing state trie from statedb > Commit()")
+	// s.PrintStateTrie()
+	// // --> 확인 결과, 여기서의 state trie는 정상적으로 delete와 inactivate가 적용되어있음.
 
 	return root, err
 }
@@ -2068,4 +2082,18 @@ func (s *StateDB) RebuildStorageTrieFromSnapshot(snapRoot common.Hash, addr comm
 func (s *StateDB) GetTrie(addr common.Address) Trie {
 	obj := s.getStateObject_FromInactiveTrie(addr) 
 	return obj.getTrie(s.db)
+}
+
+// (joonha)
+func (s *StateDB) PrintStateTrie() {
+	s.trie.Print()
+}
+
+// (joonha)
+func (s *StateDB) TrieDB() *trie.Database {
+	return s.db.TrieDB()
+}
+
+func (s *StateDB) Hash() common.Hash {
+	return s.trie.Hash()
 }
