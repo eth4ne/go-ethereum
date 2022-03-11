@@ -22,12 +22,17 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"math/big"
+	"math"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
+
+	// (joonha)
+	"github.com/ethereum/go-ethereum/ethdb/memorydb"
 )
 
 var (
@@ -36,6 +41,11 @@ var (
 
 	// emptyState is the known hash of an empty state trie entry.
 	emptyState = crypto.Keccak256Hash(nil)
+
+	// to save the leaf info while traversing the trie (joonha)
+	Accounts = make([][]byte, 0)
+	Keys = make([]common.Hash, 0)	
+	Slots = make(map[common.Hash][]byte)
 )
 
 // LeafCallback is a callback type invoked when a trie operation reaches a leaf
@@ -156,6 +166,168 @@ func (t *Trie) tryGet(origNode node, key []byte, pos int) (value []byte, newnode
 		return value, newnode, true, err
 	default:
 		panic(fmt.Sprintf("%T: invalid node: %v", origNode, origNode))
+	}
+}
+
+// TryGetAll returns all found accounts and the keys of that accounts (joonha)
+func (t *Trie) TryGetAll(firstKey, lastKey []byte) ([][]byte, []common.Hash, error) {
+	// init
+	Accounts = make([][]byte, 0)
+	Keys = make([]common.Hash, 0)	
+
+	t.tryGetAll(t.root, keybytesToHex(firstKey), keybytesToHex(lastKey), 0)
+	return Accounts, Keys, nil
+}
+
+// RE (220128)
+// TODO(joonha): rename this function. tryGetAll is too vague.
+// DFS by recursion and find all the existing value nodes (joonha)
+func (t *Trie) tryGetAll(currNode node, parentKey, lastKey []byte, pos int) {
+
+	/****************************************************************************/ 
+	// this function does:
+	// [TRAVERSE] from the firstKey to the lastKey
+	// [FIND] non-nil valueNodes to delete
+	// [SAVE] the found account info to the Accounts array and the Keys array
+	//
+	// pos: pointer pointing each digit of the key (related to the trie depth)
+	// n.Key : n's key -> 전체가 아님. 특히 숏노드의 경우, 그 짧은 공통 부분만을 키로 가지고 있음.
+	// n : encountered node
+	/****************************************************************************/
+
+	switch n := (currNode).(type) {
+	case nil:
+		// fmt.Println("NODE IS NIL")
+		return 
+
+	case valueNode: // in this case, should archive the node into the result array
+		// fmt.Println("VALUENODE")
+		if n != nil {
+			// key of that account
+			k := big.NewInt(0)
+			for i := 0; i < len(parentKey[:pos-1]); i++ {
+				k = k.Add(k, big.NewInt(int64(math.Pow(16, float64(i)) * float64(parentKey[len(parentKey[:pos-1]) - i - 1]))))
+			}
+			hk := common.BigToHash(k)
+
+			// boundary check
+			if common.HashToInt64(hk) < common.InactiveBoundaryKey {
+				// fmt.Println("[out of range] key < common.InactiveBoundaryKey\n\n")
+				return 
+			}
+			if bytes.Compare(parentKey, lastKey) >= 0 { // key >= lastKey
+				// fmt.Println("[out of range] key >= lastKey")
+				return 
+			}
+
+			// found non-nil account
+			Accounts = append(Accounts, n)
+			fmt.Println("detected account: ", common.BytesToAddress(n))
+			Keys = append(Keys, hk)
+
+			// // delete the account
+			// t.TryUpdate(hk[:], nil)
+		}
+		return 
+
+	case *shortNode:
+		// fmt.Println("SHORTNODE")
+
+		// shortNode Key copy from n.Key to key (direct key edit affects other nodes, so use tempKey)
+		tempKey := make([]byte, len(parentKey))
+		copy(tempKey, parentKey)
+		for i := 0; i < len(n.Key); i++ {
+			tempKey[pos+i] = n.Key[i] 
+		}
+		t.tryGetAll(n.Val, tempKey, lastKey, pos+len(n.Key))
+		return 
+
+	case *fullNode:
+		// fmt.Println("FULLNODE")	
+		for i := 0; i < 16; i++ {
+			tempKey := make([]byte, len(parentKey))
+			copy(tempKey, parentKey)
+			tempKey[pos] = byte(i)
+			// fmt.Println("tempKey: ", tempKey)
+			t.tryGetAll(n.Children[i], tempKey, lastKey, pos+1)
+		}
+		return 
+
+	case hashNode:
+		// fmt.Println("HASHNODE")
+		child, err := t.resolveHash(n, parentKey[:pos])
+		if err != nil {
+			return 
+		}
+		t.tryGetAll(child, parentKey, lastKey, pos)
+		return 
+
+	default:
+		panic(fmt.Sprintf("%T: invalid node: %v", currNode, currNode))
+	}
+}
+
+// TryGetAllSlots return all the found slots while traversing storage trie (joonha)
+func (t *Trie) TryGetAllSlots() (map[common.Hash][]byte, error) {
+	// init
+	Slots = make(map[common.Hash][]byte)
+	firstKey := common.Int64ToHash(0)
+
+	t.tryGetAllSlots(t.root, keybytesToHex(firstKey[:]), 0)
+	return Slots, nil
+}
+
+// (joonha)
+func (t *Trie) tryGetAllSlots(currNode node, parentKey[]byte, pos int) {
+	switch n := (currNode).(type) {
+	case nil:
+		// fmt.Println("NODE IS NIL")
+		return 
+
+	case valueNode: // in this case, should archive the slot into the result array
+		// fmt.Println("VALUENODE")
+		if n != nil {
+			slotKey := common.BytesToHash(hexToKeybytes(parentKey))
+			Slots[slotKey] = n
+		}
+		return 
+
+	case *shortNode:
+		// fmt.Println("SHORTNODE")
+
+		// shortNode Key copy from n.Key to key
+		// direct key edit affects other nodes, so use tempKey
+		tempKey := make([]byte, len(parentKey))
+		copy(tempKey, parentKey)
+		for i := 0; i < len(n.Key); i++ {
+			tempKey[pos+i] = n.Key[i] 
+		}
+
+		t.tryGetAllSlots(n.Val, tempKey, pos+len(n.Key))
+		return 
+
+	case *fullNode:
+		// fmt.Println("FULLNODE")	
+		for i := 0; i < 16; i++ {
+			tempKey := make([]byte, len(parentKey))
+			copy(tempKey, parentKey)
+			tempKey[pos] = byte(i)
+			// fmt.Println("tempKey: ", tempKey)
+			t.tryGetAllSlots(n.Children[i], tempKey, pos+1)
+		}
+		return 
+
+	case hashNode:
+		// fmt.Println("HASHNODE")
+		child, err := t.resolveHash(n, parentKey[:pos])
+		if err != nil {
+			return 
+		}
+		t.tryGetAllSlots(child, parentKey, pos)
+		return 
+
+	default:
+		panic(fmt.Sprintf("%T: invalid node: %v", currNode, currNode))
 	}
 }
 
@@ -587,3 +759,93 @@ func (t *Trie) Reset() {
 	t.root = nil
 	t.unhashed = 0
 }
+
+// print trie nodes details in human readable form (jmlee)
+func (t *Trie) Print() {
+	fmt.Println(t.root.toString("", t.db))
+}
+
+// Print_storageTrie print storage trie node details in human readable form (joonha)
+func (t *Trie) Print_storageTrie() {
+	if t == nil {
+		return 
+	}
+	if t.root != nil {
+		fmt.Println(t.root.toString_storageTrie("", t.db))
+	} else {
+		fmt.Println("trie's root is nil")
+	}
+}
+
+// Delete_storageTrie deletes storage trie's all nodes from disk (joonha)
+func (t *Trie) Delete_storageTrie() {
+	if t == nil {
+		fmt.Println("t is nil")
+		return 
+	}
+	if t.root != nil {
+		fmt.Println(t.root.delete_storageTrie("", t.db))
+	} else {
+		fmt.Println("trie's root is nil")
+	}
+}
+
+// get trie's db size (jmlee)
+func (t *Trie) Size() common.StorageSize {
+	size, _ := t.db.Size()
+	return size
+}
+
+// make empty trie (jmlee)
+func NewEmpty() *Trie {
+	trie, _ := New(common.Hash{}, NewDatabase(memorydb.New()))
+	return trie
+}
+
+// get last key among leaf nodes (i.e., right-most key value) (jmlee)
+func (t *Trie) GetLastKey() *big.Int {
+	lastKey := t.getLastKey(t.root, nil)
+	// fmt.Println("lastKey:", lastKey)
+	return lastKey
+}
+
+// get last key among leaf nodes (i.e., right-most key value) (jmlee)
+func (t *Trie) getLastKey(origNode node, lastKey []byte) *big.Int {
+	switch n := (origNode).(type) {
+	case nil:
+		return big.NewInt(0)
+	case valueNode:
+		hexToInt := new(big.Int)
+		hexToInt.SetString(common.BytesToHash(hexToKeybytes(lastKey)).Hex()[2:], 16)
+		return hexToInt
+	case *shortNode:
+		lastKey = append(lastKey, n.Key...)
+		// fmt.Println("at getLastKey -> lastKey: ", lastKey, "/ appended key:", n.Key, " (short node)")
+		return t.getLastKey(n.Val, lastKey)
+	case *fullNode:
+		last := 0
+		for i, node := range &n.Children {
+			if node != nil {
+				last = i
+			}
+		}
+		lastByte := common.HexToHash("0x" + indices[last])
+		lastKey = append(lastKey, lastByte[len(lastByte)-1])
+		// fmt.Println("at getLastKey -> lastKey: ", indices[last], "/ appended key:", indices[last], " (full node)")
+		return t.getLastKey(n.Children[last], lastKey)
+	case hashNode:
+		child, err := t.resolveHash(n, nil)
+		if err != nil {
+			lastKey = nil
+			return big.NewInt(0)
+		}
+		return t.getLastKey(child, lastKey)
+	default:
+		panic(fmt.Sprintf("%T: invalid node: %v", origNode, origNode))
+	}
+}
+
+// get trie of trie (actually, this is for SecureTrie) (jmlee)
+func (t *Trie) GetTrie() *Trie {
+	return t
+} 

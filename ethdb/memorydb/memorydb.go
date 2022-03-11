@@ -210,6 +210,7 @@ func (b *batch) Put(key, value []byte) error {
 
 // Delete inserts the a key removal into the batch for later committing.
 func (b *batch) Delete(key []byte) error {
+	// 흠 여기서 중복 검사를 했으면 좋았을텐데 안하네 이게 문제인듯? (jmlee)
 	b.writes = append(b.writes, keyvalue{common.CopyBytes(key), nil, true})
 	b.size += len(key)
 	return nil

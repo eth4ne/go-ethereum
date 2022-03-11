@@ -98,6 +98,9 @@ type rawNode []byte
 
 func (n rawNode) cache() (hashNode, bool)   { panic("this should never end up in a live trie") }
 func (n rawNode) fstring(ind string) string { panic("this should never end up in a live trie") }
+func (n rawNode) toString(ind string, db *Database) string { panic("this should never end up in a live trie") } // (jmlee)
+func (n rawNode) toString_storageTrie(ind string, db *Database) string { panic("this should never end up in a live trie") } // (joonha)
+func (n rawNode) delete_storageTrie(ind string, db *Database) string { panic("this should never end up in a live trie") } // (joonha)
 
 func (n rawNode) EncodeRLP(w io.Writer) error {
 	_, err := w.Write(n)
@@ -111,6 +114,9 @@ type rawFullNode [17]node
 
 func (n rawFullNode) cache() (hashNode, bool)   { panic("this should never end up in a live trie") }
 func (n rawFullNode) fstring(ind string) string { panic("this should never end up in a live trie") }
+func (n rawFullNode) toString(ind string, db *Database) string { panic("this should never end up in a live trie") } // (jmlee)
+func (n rawFullNode) toString_storageTrie(ind string, db *Database) string { panic("this should never end up in a live trie") } // (joonha)
+func (n rawFullNode) delete_storageTrie(ind string, db *Database) string { panic("this should never end up in a live trie") } // (joonha)
 
 func (n rawFullNode) EncodeRLP(w io.Writer) error {
 	var nodes [17]node
@@ -135,6 +141,9 @@ type rawShortNode struct {
 
 func (n rawShortNode) cache() (hashNode, bool)   { panic("this should never end up in a live trie") }
 func (n rawShortNode) fstring(ind string) string { panic("this should never end up in a live trie") }
+func (n rawShortNode) toString(ind string, db *Database) string { panic("this should never end up in a live trie") } // (jmlee)
+func (n rawShortNode) toString_storageTrie(ind string, db *Database) string { panic("this should never end up in a live trie") } // (joonha)
+func (n rawShortNode) delete_storageTrie(ind string, db *Database) string { panic("this should never end up in a live trie") } // (joonha)
 
 // cachedNode is all the information we know about a single cached trie node
 // in the memory database write layer.
@@ -769,7 +778,7 @@ func (db *Database) commit(hash common.Hash, batch ethdb.Batch, uncacher *cleane
 		return err
 	}
 	// If we've reached an optimal batch size, commit and start over
-	rawdb.WriteTrieNode(batch, hash, node.rlp())
+	rawdb.WriteTrieNode(batch, hash, node.rlp()) // this might try to write the already written node (ex. same leaf node) (jmlee)
 	if callback != nil {
 		callback(hash)
 	}
@@ -887,3 +896,45 @@ func (db *Database) SaveCachePeriodically(dir string, interval time.Duration, st
 		}
 	}
 }
+
+// delete storage trie leaf nodes when inactivate or restore (joonha)
+func (db *Database) DeleteStorageTrieNode(accountHash common.Hash) {
+
+	fmt.Println("\nDeleteStorageTrieNode > accountHash: ", accountHash)
+
+	batch := db.diskdb.NewBatch()
+
+	// Move all of the accumulated preimages into a write batch
+	if db.preimages != nil {
+		fmt.Println("db.preimages are not nil")
+		rawdb.WritePreimages(batch, db.preimages)
+		if batch.ValueSize() > ethdb.IdealBatchSize {
+			fmt.Println("batch.ValueSize is bigger than the IdealBatchSize")
+			if err := batch.Write(); err != nil {
+				// return err
+				return 
+			}
+			batch.Reset()
+		}
+		// Since we're going to replay trie node writes into the clean cache, flush out
+		// any batched pre-images before continuing.
+		if err := batch.Write(); err != nil {
+			// return err
+			return 
+		}
+		batch.Reset()
+		fmt.Println("Resetting batch occured")
+	}
+
+	// Delete node according the accountHash from disk
+	rawdb.DeleteTrieNode(batch, accountHash)
+
+	// If we exceeded the ideal batch size, commit and reset
+	if batch.ValueSize() >= 0 /*ethdb.IdealBatchSize*/ {
+		if err := batch.Write(); err != nil {
+			log.Error("Failed to write flush list to disk", "err", err)
+			return
+		}
+		batch.Reset()
+	}
+} 

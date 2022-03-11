@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -101,6 +102,45 @@ type odrTrie struct {
 	id   *TrieID
 	trie *trie.Trie
 }
+
+// temp function for correct build, this will not be called in Ethane (jmlee)
+func (t *odrTrie) GetLastKey() (*big.Int) {
+	return big.NewInt(0)
+}
+
+// temp function for correct build, this will not be called in Ethane (jmlee)
+func (t *odrTrie) GetTrie() (*trie.Trie) {
+	return nil
+}
+
+// temp function for correct build, this will not be called in Ethane (jmlee)
+func (t *odrTrie) TryUpdate_SetKey(key, value []byte) error {
+	return nil
+}
+
+// temp function for correct build, this will not be called in Ethane (jmlee)
+func (t *odrTrie) TryGet_SetKey(key []byte) ([]byte, error) {
+	return nil, nil
+}
+
+// temp function for correct build, this will not be called in Ethane (joonha)
+func (t *odrTrie) TryGetAll_SetKey(firstKey, lastKey []byte) ([][]byte, []common.Hash, error) {
+	return nil, nil, nil
+}
+
+// temp function for correct build, this will not be called in Ethane (joonha)
+func (t *odrTrie) TryGetAllSlots() (map[common.Hash][]byte, error) {
+	return nil, nil
+}
+
+// temp function for correct build, this will not be called in Ethane (joonha)
+func (t *odrTrie) Print() {}
+
+// temp function for correct build, this will not be called in Ethane (joonha)
+func (t *odrTrie) Print_storageTrie() {}
+
+// temp function for correct build, this will not be called in Ethane (joonha)
+func (t *odrTrie) Delete_storageTrie() {}
 
 func (t *odrTrie) TryGet(key []byte) ([]byte, error) {
 	key = crypto.Keccak256(key)

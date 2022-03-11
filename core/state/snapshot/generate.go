@@ -170,6 +170,11 @@ func generateSnapshot(diskdb ethdb.KeyValueStore, triedb *trie.Database, cache i
 	return base
 }
 
+// to export generateSnapshot (joonha) TODO: 안 쓰이나?
+func GenerateSnapshot(diskdb ethdb.KeyValueStore, triedb *trie.Database, cache int, root common.Hash) *diskLayer {
+	return generateSnapshot(diskdb, triedb, cache, root)
+}
+
 // journalProgress persists the generator stats into the database to resume later.
 func journalProgress(db ethdb.KeyValueWriter, marker []byte, stats *generatorStats) {
 	// Write out the generator marker. Note it's a standalone disk layer generator
@@ -616,6 +621,7 @@ func (dl *diskLayer) generate(stats *generatorStats) {
 			Balance  *big.Int
 			Root     common.Hash
 			CodeHash []byte
+			Addr	 common.Address // in compactTrie, addr should be an account instance (joonha)
 		}
 		if err := rlp.DecodeBytes(val, &acc); err != nil {
 			log.Crit("Invalid account encountered during snapshot creation", "err", err)
@@ -632,7 +638,8 @@ func (dl *diskLayer) generate(stats *generatorStats) {
 				}
 				snapRecoveredAccountMeter.Mark(1)
 			} else {
-				data := SlimAccountRLP(acc.Nonce, acc.Balance, acc.Root, acc.CodeHash)
+				// data := SlimAccountRLP(acc.Nonce, acc.Balance, acc.Root, acc.CodeHash)
+				data := SlimAccountRLP(acc.Nonce, acc.Balance, acc.Root, acc.CodeHash, acc.Addr) // addr is added (joonha)
 				dataLen = len(data)
 				rawdb.WriteAccountSnapshot(batch, accountHash, data)
 				snapGeneratedAccountMeter.Mark(1)
@@ -671,6 +678,7 @@ func (dl *diskLayer) generate(stats *generatorStats) {
 			if accMarker != nil && bytes.Equal(accountHash[:], accMarker) && len(dl.genMarker) > common.HashLength {
 				storeMarker = dl.genMarker[common.HashLength:]
 			}
+			// flag(joonha): traversing a storage trie and writing storage snapshots (this may be the generation core)
 			onStorage := func(key []byte, val []byte, write bool, delete bool) error {
 				defer func(start time.Time) {
 					snapStorageWriteCounter.Inc(time.Since(start).Nanoseconds())

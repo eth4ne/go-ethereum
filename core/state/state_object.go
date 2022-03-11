@@ -98,6 +98,17 @@ func (s *stateObject) empty() bool {
 	return s.data.Nonce == 0 && s.data.Balance.Sign() == 0 && bytes.Equal(s.data.CodeHash, emptyCodeHash)
 }
 
+// v1.10.3 (joonha)
+// Account is the Ethereum consensus representation of accounts.
+// These objects are stored in the main account trie.
+type Account struct {
+	Nonce    uint64
+	Balance  *big.Int
+	Root     common.Hash // merkle root of the storage trie
+	CodeHash []byte
+	Addr	 common.Address // in compactTrie, addr should be a node instance (joonha)
+}
+
 // newObject creates a state object.
 func newObject(db *StateDB, address common.Address, data types.StateAccount) *stateObject {
 	if data.Balance == nil {
@@ -109,10 +120,21 @@ func newObject(db *StateDB, address common.Address, data types.StateAccount) *st
 	if data.Root == (common.Hash{}) {
 		data.Root = emptyRoot
 	}
+	data.Addr = address // (joonha)
+
+	// set addrHash as a specific key value to implement compactTrie (jmlee)
+	addressHash, doExist := db.AddrToKeyDirty[address]
+	if !doExist {
+		common.AddrToKeyMapMutex.Lock() // to avoid fatal error: "concurrent map read and map write"
+		addressHash = common.AddrToKey[address]
+		common.AddrToKeyMapMutex.Unlock()
+	}
+
 	return &stateObject{
 		db:             db,
 		address:        address,
-		addrHash:       crypto.Keccak256Hash(address[:]),
+		// addrHash:       crypto.Keccak256Hash(address[:]),
+		addrHash:       addressHash, // (joonha)
 		data:           data,
 		originStorage:  make(Storage),
 		pendingStorage: make(Storage),
@@ -217,6 +239,13 @@ func (s *stateObject) GetCommittedState(db Database, key common.Hash) common.Has
 			s.db.SnapshotStorageReads += time.Since(start)
 		}
 	}
+
+	// hashing (joonha)
+	if enc, err = s.getTrie(db).TryGet(key.Bytes()); err != nil {
+		s.setError(err)
+		return common.Hash{}
+	}
+
 	// If the snapshot is unavailable or reading from it fails, load from the database.
 	if s.db.snap == nil || err != nil {
 		start := time.Now()
@@ -241,8 +270,89 @@ func (s *stateObject) GetCommittedState(db Database, key common.Hash) common.Has
 	return value
 }
 
+// (joonha)
+func (s *stateObject) GetCommittedState_hashedKey(db Database, key common.Hash) common.Hash {
+	// If the fake storage is set, only lookup the state here(in the debugging mode)
+	if s.fakeStorage != nil {
+		return s.fakeStorage[key]
+	}
+	// If we have a pending write or clean cached, return that
+	if value, pending := s.pendingStorage[key]; pending {
+		return value
+	}
+	if value, cached := s.originStorage[key]; cached {
+		return value
+	}
+	// If no live objects are available, attempt to use snapshots
+	var (
+		enc   []byte
+		err   error
+		meter *time.Duration
+	)
+	readStart := time.Now()
+	if metrics.EnabledExpensive {
+		// If the snap is 'under construction', the first lookup may fail. If that
+		// happens, we don't want to double-count the time elapsed. Thus this
+		// dance with the metering.
+		defer func() {
+			if meter != nil {
+				*meter += time.Since(readStart)
+			}
+		}()
+	}
+	if s.db.snap != nil {
+		if metrics.EnabledExpensive {
+			meter = &s.db.SnapshotStorageReads
+		}
+		// If the object was destructed in *this* block (and potentially resurrected),
+		// the storage has been cleared out, and we should *not* consult the previous
+		// snapshot about any storage values. The only possible alternatives are:
+		//   1) resurrect happened, and new slot values were set -- those should
+		//      have been handles via pendingStorage above.
+		//   2) we don't have new values, and can deliver empty response back
+		if _, destructed := s.db.snapDestructs[s.addrHash]; destructed {
+			return common.Hash{}
+		}
+		// enc, err = s.db.snap.Storage(s.addrHash, crypto.Keccak256Hash(key.Bytes())) // --> original code
+		enc, err = s.db.snap.Storage(s.addrHash, key) // (joonha)
+	}
+
+	// no hashing (joonha)
+	if enc, err = s.getTrie(db).TryGet(key.Bytes()); err != nil {
+		s.setError(err)
+		return common.Hash{}
+	}
+
+	// If snapshot unavailable or reading from it failed, load from the database
+	if s.db.snap == nil || err != nil {
+		if meter != nil {
+			// If we already spent time checking the snapshot, account for it
+			// and reset the readStart
+			*meter += time.Since(readStart)
+			readStart = time.Now()
+		}
+		if metrics.EnabledExpensive {
+			meter = &s.db.StorageReads
+		}
+		if enc, err = s.getTrie(db).TryGet_SetKey(key.Bytes()); err != nil { 
+			s.setError(err)
+			return common.Hash{}
+		}
+	}
+	var value common.Hash
+	if len(enc) > 0 {
+		_, content, _, err := rlp.Split(enc)
+		if err != nil {
+			s.setError(err)
+		}
+		value.SetBytes(content)
+	}
+	s.originStorage[key] = value
+	return value
+}
+
 // SetState updates a value in account storage.
-func (s *stateObject) SetState(db Database, key, value common.Hash) {
+func (s *stateObject) SetState(db Database, key, value common.Hash) { // key = slotKey (joonha)
 	// If the fake storage is set, put the temporary state update here.
 	if s.fakeStorage != nil {
 		s.fakeStorage[key] = value
@@ -258,6 +368,17 @@ func (s *stateObject) SetState(db Database, key, value common.Hash) {
 		account:  &s.address,
 		key:      key,
 		prevalue: prev,
+	})
+	s.setState(key, value)
+}
+
+// SetState_Restore set storage slot when restoring CA (joonha)
+func (s *stateObject) SetState_Restore(db Database, key, value common.Hash) {
+	// New value is different, update and journal the change
+	s.db.journal.append(storageChange{
+		account:  &s.address,
+		key:      key,
+		// prevalue: prev,
 	})
 	s.setState(key, value)
 }
@@ -322,6 +443,9 @@ func (s *stateObject) updateTrie(db Database) Trie {
 
 	usedStorage := make([][]byte, 0, len(s.pendingStorage))
 	for key, value := range s.pendingStorage {
+
+		hk := crypto.HashData(hasher, key[:]) // hash the key (joonha)
+
 		// Skip noop changes, persist actual changes
 		if value == s.originStorage[key] {
 			continue
@@ -330,12 +454,15 @@ func (s *stateObject) updateTrie(db Database) Trie {
 
 		var v []byte
 		if (value == common.Hash{}) {
-			s.setError(tr.TryDelete(key[:]))
+			// s.setError(tr.TryDelete(key[:])) // --> original code
+			s.setError(tr.TryUpdate_SetKey(hk[:], nil)) // (joonha)
 			s.db.StorageDeleted += 1
 		} else {
 			// Encoding []byte cannot fail, ok to ignore the error.
 			v, _ = rlp.EncodeToBytes(common.TrimLeftZeroes(value[:]))
-			s.setError(tr.TryUpdate(key[:], v))
+			// s.setError(tr.TryUpdate(key[:], v)) // --> original code 
+			s.setError(tr.TryUpdate_SetKey(hk[:], v)) // TryUpdate's hashKey is modified for compactMPT so we use already hashed key to update trie (joonha)
+			// maybe related to storage trie update? (jmlee)
 			s.db.StorageUpdated += 1
 		}
 		// If state snapshotting is active, cache the data til commit
@@ -348,6 +475,63 @@ func (s *stateObject) updateTrie(db Database) Trie {
 				}
 			}
 			storage[crypto.HashData(hasher, key[:])] = v // v will be nil if it's deleted
+		}
+		usedStorage = append(usedStorage, common.CopyBytes(key[:])) // Copy needed for closure
+	}
+	if s.db.prefetcher != nil {
+		s.db.prefetcher.used(s.data.Root, usedStorage)
+	}
+	if len(s.pendingStorage) > 0 {
+		s.pendingStorage = make(Storage)
+	}
+	return tr
+}
+
+// updateTrie_hashedKey updates trie with already hashed key (joonha)
+func (s *stateObject) updateTrie_hashedKey(db Database) Trie {
+	// Make sure all dirty slots are finalized into the pending storage area
+	s.finalise(false) // Don't prefetch any more, pull directly if need be
+	if len(s.pendingStorage) == 0 {
+		return s.trie
+	}
+	// Track the amount of time wasted on updating the storage trie
+	if metrics.EnabledExpensive {
+		defer func(start time.Time) { s.db.StorageUpdates += time.Since(start) }(time.Now())
+	}
+	// The snapshot storage map for the object
+	var storage map[common.Hash][]byte
+	// Insert all the pending updates into the trie
+	tr := s.getTrie(db)
+	// hasher := s.db.hasher
+
+	usedStorage := make([][]byte, 0, len(s.pendingStorage))
+
+	for key, value := range s.pendingStorage { 
+
+		// Skip noop changes, persist actual changes
+		if value == s.originStorage[key] {
+			continue
+		}
+		s.originStorage[key] = value
+
+		var v []byte
+		if (value == common.Hash{}) {
+			s.setError(tr.TryUpdate_SetKey(key[:], nil))
+		} else {
+			// Encoding []byte cannot fail, ok to ignore the error.
+			v, _ = rlp.EncodeToBytes(common.TrimLeftZeroes(value[:]))
+			s.setError(tr.TryUpdate_SetKey(key[:], v))
+		}
+		// If state snapshotting is active, cache the data til commit
+		if s.db.snap != nil {
+			if storage == nil { 
+				// Retrieve the old storage map, if available, create a new one otherwise
+				if storage = s.db.snapStorage[s.addrHash]; storage == nil {
+					storage = make(map[common.Hash][]byte)
+					s.db.snapStorage[s.addrHash] = storage
+				}
+			} 
+			storage[key] = v
 		}
 		usedStorage = append(usedStorage, common.CopyBytes(key[:])) // Copy needed for closure
 	}
@@ -392,6 +576,26 @@ func (s *stateObject) CommitTrie(db Database) (int, error) {
 		s.data.Root = root
 	}
 	return committed, err
+}
+
+// (joonha)
+func (s *stateObject) CommitTrie_hashedKey(db Database) error {
+	// If nothing changed, don't bother with hashing anything
+	if s.updateTrie_hashedKey(db) == nil {
+		return nil
+	}
+	if s.dbErr != nil {
+		return s.dbErr
+	}
+	// Track the amount of time wasted on committing the storage trie
+	if metrics.EnabledExpensive {
+		defer func(start time.Time) { s.db.StorageCommits += time.Since(start) }(time.Now())
+	}
+	root, _, err := s.trie.Commit(nil)
+	if err == nil {
+		s.data.Root = root
+	}
+	return err
 }
 
 // AddBalance adds amount to s's balance.
@@ -532,3 +736,33 @@ func (s *stateObject) Nonce() uint64 {
 func (s *stateObject) Value() *big.Int {
 	panic("Value on stateObject should never be called")
 }
+
+// // NewObject creates a state object, just for experiment (jmlee)
+// func NewObject(db *StateDB, address common.Address, data Account) *stateObject {
+// 	if data.Balance == nil {
+// 		data.Balance = new(big.Int)
+// 	}
+// 	if data.CodeHash == nil {
+// 		data.CodeHash = emptyCodeHash
+// 	}
+// 	data.Addr = address // (joonha)
+// 	return &stateObject{
+// 		db:            db,
+// 		address:       address,
+// 		addrHash:      crypto.Keccak256Hash(address[:]),
+// 		data:          data,
+// 		originStorage: make(Storage),
+// 		dirtyStorage:  make(Storage),
+// 	}
+// }
+
+// Print_storageTrie prints storage trie (joonha)
+func (s *stateObject) Print_storageTrie() {
+	fmt.Println("state_object > Print Storage > 1")
+	if s.trie == nil {
+		fmt.Println("the storage trie is nil")
+		return 
+	} else {
+		s.trie.Print_storageTrie()
+	}
+} 

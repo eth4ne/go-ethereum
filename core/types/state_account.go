@@ -29,4 +29,5 @@ type StateAccount struct {
 	Balance  *big.Int
 	Root     common.Hash // merkle root of the storage trie
 	CodeHash []byte
+	Addr	 common.Address // in compactTrie, addr should be a node instance (joonha)
 }

@@ -27,6 +27,10 @@ import (
 	"math/rand"
 	"reflect"
 	"strings"
+	"sync"
+	"io"
+	"os"
+	"strconv"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"golang.org/x/crypto/sha3"
@@ -40,10 +44,169 @@ const (
 	AddressLength = 20
 )
 
+// (joonha)
+type ProofList [][]byte
+
+// (joonha)
+func (n *ProofList) Has(key []byte) (bool, error) {
+	panic("not supported")
+}
+
+// (joonha)
+func (n *ProofList) Get(key []byte) ([]byte, error) {
+	x := (*n)[0]
+	*n = (*n)[1:]
+	return x, nil
+}
+
+// (joonha)
+type Empty struct{}
+
 var (
+	// to delete and inactivate the nodes just for the secode appearance (worker.go) (joonha)
+	IsFirst bool
+
+	// inactive storage snapshot ON/OFF option (joonha)
+	UsingActiveSnapshot bool // true: ON, false: OFF
+	UsingInactiveStorageSnapshot bool // true: ON, false: OFF
+
+	// check if it is already restored (for storage optimization, use empty struct as a value) (joonha)
+	AlreadyRestored = make(map[Hash]Empty) 
+	
 	hashT    = reflect.TypeOf(Hash{})
 	addressT = reflect.TypeOf(Address{})
+
+	// temp map for verifying compactTrie idea (address: real address of the account / hash: specific key for the account in the state trie) (jmlee)
+	AddrToKey = make(map[Address]Hash)
+	AddrToKeyMapMutex = sync.RWMutex{} // to avoid fatal error: "concurrent map read and map write"
+	AddrToKeyPath = "" // disk path to save AddrToKey (will be set as [datadir]/geth/chaindata/) (const)
+
+	// map storing inactive accounts list (joonha)
+	AddrToKey_inactive = make(map[Address][]Hash)
+
+	KeysToDelete = make([]Hash, 0) // store previous leaf nodes' keys to delete later
+	AccountsToDeleteFromDisk = make([]Address, 0) // store previous leaf nodes' keys to delete later (joonha)
+	// AddrsToDeleteFromDisk = make(map[Hash][]byte) // store previous leaf nodes(addr) to delete later (joonha)
+	DeleteLeafNodeEpoch = int64(3) // block epoch to delete previous leaf nodes (from active area to temp area) (const)
+	// DeleteLeafNodeEpoch = big.NewInt(3) // block epoch to delete previous leaf nodes (& inactivate inactive leaf nodes) (const)
+	DoDeleteLeafNode bool // flag to determine whether to delete leaf nodes or not
+
+	InactivateLeafNodeEpoch = int64(3) // block epoch to inactivate inactive leaf nodes (from temp area to inactive trie) (joonha)
+	InactiveBoundaryKey = int64(0) // inactive accounts have keys smaller than this key
+	InactivateCriterion = int64(1) // inactive accounts were touched more before than this block timestamp (min: 1) (const)
+	CheckpointKeys = make(map[int64]int64) // initial NextKeys of blocks (CheckpointKeys[blockNumber] = initialNextKeyOfTheBlock)
+
+	NoExistKey = HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff") // very large key which will not be reached forever (const)
+	ToBeDeletedKey = HexToHash("0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe") // very large key which will not be reached forever (const)
+	ZeroAddress = HexToAddress("0x0") // (const)
 )
+
+// Marshal is a function that marshals the object into an io.Reader.
+// By default, it uses the JSON marshaller.
+var Marshal = func(v interface{}) (io.Reader, error) {
+	b, err := json.MarshalIndent(v, "", "\t")
+	if err != nil {
+		return nil, err
+	}
+	return bytes.NewReader(b), nil
+}
+
+// Unmarshal is a function that unmarshals the data from the reader into the specified value.
+// By default, it uses the JSON unmarshaller.
+var Unmarshal = func(r io.Reader, v interface{}) error {
+	return json.NewDecoder(r).Decode(v)
+}
+
+// var lock sync.Mutex
+
+// Save saves a representation of v to the file at path.
+func SaveAsFile(path string, v interface{}) error {
+	// lock.Lock()
+	// defer lock.Unlock()
+	f, err := os.Create(path)
+	if err != nil {
+	  return err
+	}
+	defer f.Close()
+	r, err := Marshal(v)
+	if err != nil {
+	  return err
+	}
+	_, err = io.Copy(f, r)
+	return err
+}
+
+// Load loads the file at path into v.
+// Use os.IsNotExist() to see if the returned error is due to the file being missing.
+func LoadFromFile(path string, v interface{}) error {
+	// lock.Lock()
+	// defer lock.Unlock()
+	f, err := os.Open(path)
+	if err != nil {
+	  return err
+	}
+	defer f.Close()
+	return Unmarshal(f, v)
+}
+
+// save AddrToKey as a file (jmlee)
+func SaveAddrToKey(blockHash string) error {
+
+	// debugging code
+	// for k, v := range AddrToKey {
+	// 	fmt.Println("common.AddrToKey -> k:", k, " / v:", v)
+	// }
+
+	// lock & unlock mutex
+	AddrToKeyMapMutex.Lock()
+	defer AddrToKeyMapMutex.Unlock()
+
+	// check if the file already exists
+	path := AddrToKeyPath + blockHash + ".map"
+	if _, err := os.Stat(path); err == nil {
+		fmt.Println("file already exists, just return")
+		return nil
+	}
+
+	// save it as a file
+	fmt.Println("save AddrToKey path:", path)
+	err := SaveAsFile(path, AddrToKey)
+	if err != nil {
+		fmt.Println("save AddrToKey fail:", err)
+	} else {
+		fmt.Println("save AddrToKey suceess!")
+	}
+	return err
+}
+
+// load AddrToKey from a file (jmlee)
+func LoadAddrToKey(blockHash string) error {
+	AddrToKeyMapMutex.Lock()
+	path := AddrToKeyPath + blockHash + ".map"
+	fmt.Println("load AddrToKey path:", path)
+	err := LoadFromFile(path, &AddrToKey)
+	if err != nil {
+		fmt.Println("load AddrToKey fail:", err)
+	} else {
+		fmt.Println("load AddrToKey suceess!")
+	}
+	AddrToKeyMapMutex.Unlock()
+	// for k, v := range AddrToKey {
+	// 	fmt.Println("common.AddrToKey -> k:", k, " / v:", v)
+	// }
+	return err
+}
+
+// Int64ToHash converts int64 to hex key (ex. 10 -> 0x0...0a) (jmlee)
+func Int64ToHash(i int64) Hash {
+	return HexToHash(strconv.FormatInt(i, 16))
+}
+
+// HashToInt64 converts hash to int64 (ex. 0x0...0a -> 10) (jmlee)
+func HashToInt64(h Hash) int64 {
+	i, _ := strconv.ParseInt(h.Hex()[2:], 16, 64)
+	return i
+}
 
 // Hash represents the 32 byte Keccak256 hash of arbitrary data.
 type Hash [HashLength]byte

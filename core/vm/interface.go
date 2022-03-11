@@ -21,6 +21,9 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+
+	// (joonha)
+	"github.com/ethereum/go-ethereum/core/state"
 )
 
 // StateDB is an EVM database for full state querying.
@@ -74,6 +77,16 @@ type StateDB interface {
 	AddPreimage(common.Hash, []byte)
 
 	ForEachStorage(common.Address, func(common.Hash, common.Hash) bool) error
+
+	// using statedb methods in evm.go (joonha)
+	Database() state.Database
+	DeletePreviousLeafNodes([]common.Hash)
+	CreateAccount_restoring(common.Address)
+	CreateAccount_withBlockNum(common.Address, *big.Int)
+	UpdateAlreadyRestoredDirty(common.Hash)
+	RemoveRestoredKeyFromAddrToKeyDirty_inactive(common.Address)
+	RebuildStorageTrieFromSnapshot(common.Hash, common.Address, common.Hash)
+	SetCode_Restore(common.Address, []byte)
 }
 
 // CallContext provides a basic interface for the EVM calling conventions. The EVM
