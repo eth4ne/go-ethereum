@@ -429,9 +429,29 @@ func (s *StateDB) GetState(addr common.Address, hash common.Hash) common.Hash {
 	return common.Hash{}
 }
 
+// // GetProof returns the Merkle proof for a given account. // --> original code
+// func (s *StateDB) GetProof(addr common.Address) ([][]byte, error) {
+// 	return s.GetProofByHash(crypto.Keccak256Hash(addr.Bytes()))
+// }
+
+// (joonha)
 // GetProof returns the Merkle proof for a given account.
 func (s *StateDB) GetProof(addr common.Address) ([][]byte, error) {
-	return s.GetProofByHash(crypto.Keccak256Hash(addr.Bytes()))
+	if len(common.AddrToKey_inactive[addr]) <= 0 {
+		return nil, errors.New("No Account to Restore (ethane) (1)")
+	}
+	lastIndex := len(common.AddrToKey_inactive[addr]) - 1
+	// fmt.Println("lastIndex is ", lastIndex)
+	// fmt.Println("addrToKey_inactive is ", common.AddrToKey_inactive[addr])
+	if common.AddrToKey_inactive[addr][lastIndex] == common.ToBeDeletedKey {
+		return nil, errors.New("No Account to Restore (ethane) (2)")
+	}
+	_, ok := common.AddrToKey_inactive[addr];
+	if !ok { // empty map
+		fmt.Println("AddrToKey_inactive mapped value does not exist")
+	}
+	key := common.AddrToKey_inactive[addr][lastIndex]
+	return s.GetProofByHash(key)
 }
 
 // GetProofByHash returns the Merkle proof for a given account.
