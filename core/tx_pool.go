@@ -620,31 +620,33 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		return ErrTipAboveFeeCap
 	}
 	// Make sure the transaction is signed properly.
-	from, err := types.Sender(pool.signer, tx)
-	if err != nil {
-		return ErrInvalidSender
-	}
+	//from, err := types.Sender(pool.signer, tx)
+	//if err != nil {
+	//	return ErrInvalidSender
+	//}
 	// Drop non-local transactions under our own minimal accepted gas price or tip
 	if !local && tx.GasTipCapIntCmp(pool.gasPrice) < 0 {
 		return ErrUnderpriced
 	}
 	// Ensure the transaction adheres to nonce ordering
-	if pool.currentState.GetNonce(from) > tx.Nonce() {
-		return ErrNonceTooLow
-	}
+	//if pool.currentState.GetNonce(from) > tx.Nonce() {
+	//	return ErrNonceTooLow
+	//}
 	// Transactor should have enough funds to cover the costs
 	// cost == V + GP * GL
-	if pool.currentState.GetBalance(from).Cmp(tx.Cost()) < 0 {
-		return ErrInsufficientFunds
-	}
+	//Removal of fund calculation
+	//if pool.currentState.GetBalance(from).Cmp(tx.Cost()) < 0 {
+	//	return ErrInsufficientFunds
+	//}
+	//Removal of gas usage
 	// Ensure the transaction has more gas than the basic tx fee.
-	intrGas, err := IntrinsicGas(tx.Data(), tx.AccessList(), tx.To() == nil, true, pool.istanbul)
-	if err != nil {
-		return err
-	}
-	if tx.Gas() < intrGas {
-		return ErrIntrinsicGas
-	}
+	//intrGas, err := IntrinsicGas(tx.Data(), tx.AccessList(), tx.To() == nil, true, pool.istanbul)
+	//if err != nil {
+	//	return err
+	//}
+	//if tx.Gas() < intrGas {
+	//	return ErrIntrinsicGas
+	//}
 	return nil
 }
 
@@ -711,7 +713,15 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 		}
 	}
 	// Try to replace an existing transaction in the pending pool
-	from, _ := types.Sender(pool.signer, tx) // already validated
+	var from common.Address
+	if tx.DelegatedFrom() != nil {
+		from_, _ := types.Sender(pool.delegatedSigner, tx)
+		from = from_
+		log.Trace("[tx_pool.go] Adding a delegated Tx to the pool")
+	} else {
+		from_, _ := types.Sender(pool.signer, tx) // already validated
+		from = from_
+	}
 	if list := pool.pending[from]; list != nil && list.Overlaps(tx) {
 		// Nonce already pending, check if required price bump is met
 		inserted, old := list.Add(tx, pool.config.PriceBump)
@@ -730,7 +740,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 		pool.journalTx(from, tx)
 		pool.queueTxEvent(tx)
 		log.Trace("Pooled new executable transaction", "hash", hash, "from", from, "to", tx.To())
-
+		
 		// Successful promotion, bump the heartbeat
 		pool.beats[from] = time.Now()
 		return old != nil, nil
@@ -905,12 +915,12 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
 		// Exclude transactions with invalid signatures as soon as
 		// possible and cache senders in transactions before
 		// obtaining lock
-		_, err := types.Sender(pool.signer, tx)
-		if err != nil {
-			errs[i] = ErrInvalidSender
-			invalidTxMeter.Mark(1)
-			continue
-		}
+		//_, err := types.Sender(pool.signer, tx)
+		//if err != nil {
+		//	errs[i] = ErrInvalidSender
+		//	invalidTxMeter.Mark(1)
+		//	continue
+		//}
 		// Accumulate all unknown transactions for deeper processing
 		news = append(news, tx)
 	}
@@ -987,6 +997,10 @@ func (pool *TxPool) Get(hash common.Hash) *types.Transaction {
 // given hash.
 func (pool *TxPool) Has(hash common.Hash) bool {
 	return pool.all.Get(hash) != nil
+}
+
+func (pool *TxPool) RemoveTx(hash common.Hash, outofbound bool) {
+	pool.removeTx(hash, outofbound)
 }
 
 // removeTx removes a single transaction from the queue, moving all subsequent
