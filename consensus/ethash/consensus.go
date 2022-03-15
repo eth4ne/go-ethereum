@@ -325,30 +325,34 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 // the difficulty that a new block should have when created at time
 // given the parent block's time and difficulty.
 func (ethash *Ethash) CalcDifficulty(chain consensus.ChainHeaderReader, time uint64, parent *types.Header) *big.Int {
-	return CalcDifficulty(chain.Config(), time, parent)
+	//2022: difficulty lowing
+	return parent.Difficulty
+	//return CalcDifficulty(chain.Config(), time, parent)
 }
 
 // CalcDifficulty is the difficulty adjustment algorithm. It returns
 // the difficulty that a new block should have when created at time
 // given the parent block's time and difficulty.
 func CalcDifficulty(config *params.ChainConfig, time uint64, parent *types.Header) *big.Int {
-	next := new(big.Int).Add(parent.Number, big1)
-	switch {
-	case config.IsArrowGlacier(next):
-		return calcDifficultyEip4345(time, parent)
-	case config.IsLondon(next):
-		return calcDifficultyEip3554(time, parent)
-	case config.IsMuirGlacier(next):
-		return calcDifficultyEip2384(time, parent)
-	case config.IsConstantinople(next):
-		return calcDifficultyConstantinople(time, parent)
-	case config.IsByzantium(next):
-		return calcDifficultyByzantium(time, parent)
-	case config.IsHomestead(next):
-		return calcDifficultyHomestead(time, parent)
-	default:
-		return calcDifficultyFrontier(time, parent)
-	}
+	//2022: difficulty lowing
+	return parent.Difficulty
+	//next := new(big.Int).Add(parent.Number, big1)
+	//switch {
+	//case config.IsArrowGlacier(next):
+	//	return calcDifficultyEip4345(time, parent)
+	//case config.IsLondon(next):
+	//	return calcDifficultyEip3554(time, parent)
+	//case config.IsMuirGlacier(next):
+	//	return calcDifficultyEip2384(time, parent)
+	//case config.IsConstantinople(next):
+	//	return calcDifficultyConstantinople(time, parent)
+	//case config.IsByzantium(next):
+	//	return calcDifficultyByzantium(time, parent)
+	//case config.IsHomestead(next):
+	//	return calcDifficultyHomestead(time, parent)
+	//default:
+	//	return calcDifficultyFrontier(time, parent)
+	//}
 }
 
 // Some weird constants to avoid constant memory allocs for them.
