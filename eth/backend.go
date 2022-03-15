@@ -485,7 +485,7 @@ func (s *Ethereum) StartMining(threads int) error {
 		// introduced to speed sync times.
 		atomic.StoreUint32(&s.handler.acceptTxs, 1)
 
-		go s.miner.Start(eb)
+		go s.miner.Start(eb, s.config.Ethash.AllowZeroTxBlock, s.config.Ethash.AllowConsecutiveZeroTxBlock)
 	}
 	return nil
 }
@@ -582,4 +582,26 @@ func (s *Ethereum) Stop() error {
 	s.eventMux.Stop()
 
 	return nil
+}
+
+// optional zero tx mining
+func (s *Ethereum) setAllowZeroTxBlock(flag bool) {
+	s.config.Ethash.AllowZeroTxBlock = flag
+	//s.miner.SetAllowZeroTxBlock(flag)
+}
+
+// optional zero tx mining
+func (s *Ethereum) getAllowZeroTxBlock() bool {
+	return s.config.Ethash.AllowZeroTxBlock
+}
+
+// optional zero tx mining
+func (s *Ethereum) setAllowConsecutiveZeroTxBlock(flag bool) {
+	s.config.Ethash.AllowConsecutiveZeroTxBlock = flag
+	//s.miner.SetAllowConsecutiveZeroTxBlock(flag)
+}
+
+// optional zero tx mining
+func (s *Ethereum) getAllowConsecutiveZeroTxBlock() bool {
+	return s.config.Ethash.AllowConsecutiveZeroTxBlock
 }

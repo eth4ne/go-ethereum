@@ -2082,3 +2082,25 @@ func toHexSlice(b [][]byte) []string {
 	}
 	return r
 }
+
+// optional zero tx mining
+func (api *PublicEthereumAPI) SetAllowZeroTxBlock(ctx context.Context, flag bool) error {
+	api.b.SetAllowZeroTxBlock(flag)
+	return nil
+}
+
+// optional zero tx mining
+func (api *PublicEthereumAPI) GetAllowZeroTxBlock(ctx context.Context) (bool, error) {
+	return api.b.GetAllowZeroTxBlock(), nil
+}
+
+// optional zero tx mining
+func (api *PublicEthereumAPI) SetAllowConsecutiveZeroTxBlock(ctx context.Context, flag bool) error {
+	api.b.SetAllowConsecutiveZeroTxBlock(flag)
+	return nil
+}
+
+// optional zero tx mining
+func (api *PublicEthereumAPI) GetAllowConsecutiveZeroTxBlock(ctx context.Context) (bool, error) {
+	return api.b.GetAllowConsecutiveZeroTxBlock(), nil
+}

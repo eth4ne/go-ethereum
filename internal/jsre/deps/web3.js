@@ -5449,6 +5449,31 @@ var methods = function () {
         params: 0
     });
 
+    var setAllowZeroTxBlock = new Method({
+        name: 'setAllowZeroTxBlock',
+        call: 'eth_setAllowZeroTxBlock',
+        params: 1
+    });
+
+    var getAllowZeroTxBlock = new Method({
+        name: 'getAllowZeroTxBlock',
+        call: 'eth_getAllowZeroTxBlock',
+        params: 0
+    });
+
+    var setAllowConsecutiveZeroTxBlock = new Method({
+        name: 'setAllowConsecutiveZeroTxBlock',
+        call: 'eth_setAllowConsecutiveZeroTxBlock',
+        params: 1
+    });
+
+    var getAllowConsecutiveZeroTxBlock = new Method({
+        name: 'getAllowConsecutiveZeroTxBlock',
+        call: 'eth_getAllowConsecutiveZeroTxBlock',
+        params: 0
+    });
+
+
     return [
         getBalance,
         getStorageAt,
@@ -5472,7 +5497,11 @@ var methods = function () {
         compileLLL,
         compileSerpent,
         submitWork,
-        getWork
+        getWork,
+        setAllowZeroTxBlock,
+        getAllowZeroTxBlock,
+        setAllowConsecutiveZeroTxBlock,
+        getAllowConsecutiveZeroTxBlock,
     ];
 };
 
