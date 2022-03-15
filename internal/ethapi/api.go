@@ -1740,6 +1740,74 @@ func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args Tra
 	return SubmitTransaction(ctx, s.b, signed)
 }
 
+// A dedicated method to send delagated transactions
+func SubmitDelegatedTransaction(ctx context.Context, b Backend, tx *types.Transaction) (common.Hash, error) {
+	// If the transaction fee cap is already specified, ensure the
+	// fee of the given transaction is _reasonable_.
+	if err := checkTxFee(tx.GasPrice(), tx.Gas(), b.RPCTxFeeCap()); err != nil {
+		return common.Hash{}, err
+	}
+	if !b.UnprotectedAllowed() && !tx.Protected() {
+		// Ensure only eip155 signed transactions are submitted if EIP155Required is set.
+		return common.Hash{}, errors.New("only replay-protected (EIP-155) transactions allowed over RPC")
+	}
+	if err := b.SendTx(ctx, tx); err != nil {
+		return common.Hash{}, err
+	}
+
+	return tx.Hash(), nil
+	//Bypass debuggings
+	// Print a log with full tx details for manual investigations and interventions
+	//signer := types.MakeDelegatedSigner(b.ChainConfig(), b.CurrentBlock().Number())
+	signer := types.MakeSigner(b.ChainConfig(), b.CurrentBlock().Number())
+	log.Trace("[api.go] Signer created")
+	from, err := types.Sender(signer, tx)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	log.Trace("[api.go] Sender generated")
+
+	if tx.To() == nil {
+		addr := crypto.CreateAddress(from, tx.Nonce())
+		log.Debug("[api.go] Submitted delegated contract creation", "hash", tx.Hash().Hex(), "delegatedFrom", tx.DelegatedFrom(), "nonce", tx.Nonce(), "contract", addr.Hex(), "value", tx.Value())
+	} else {
+		log.Debug("[api.go] Submitted delegated transaction", "hash", tx.Hash().Hex(), "delegatedFrom", tx.DelegatedFrom(), "nonce", tx.Nonce(), "recipient", tx.To(), "value", tx.Value())
+	}
+	return tx.Hash(), nil
+}
+
+// A dedicated method for delegated transaction
+func (s *PublicTransactionPoolAPI) SendDelegatedTransaction(ctx context.Context, args TransactionArgs) (common.Hash, error) {
+	// Look up the wallet containing the requested signer
+	account := accounts.Account{Address: args.from()}
+
+	wallet, err := s.b.AccountManager().Find(account)
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	if args.Nonce == nil {
+		// Hold the addresse's mutex around signing to prevent concurrent assignment of
+		// the same nonce to multiple accounts.
+		s.nonceLock.LockAddr(args.delegatedFrom())
+		defer s.nonceLock.UnlockAddr(args.delegatedFrom())
+	}
+
+	// Set some sanity defaults and terminate on failure
+	if err := args.setDefaults(ctx, s.b); err != nil {
+		return common.Hash{}, err
+	}
+	// Assemble the transaction and sign with the wallet
+	//*args.From = args.delegatedFrom()
+	tx := args.toTransaction()
+
+	signed, err := wallet.SignTx(account, tx, s.b.ChainConfig().ChainID)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	return SubmitDelegatedTransaction(ctx, s.b, signed)
+}
+
 // FillTransaction fills the defaults (nonce, gas, gasPrice or 1559 fields)
 // on a given unsigned transaction, and returns it to the caller for further
 // processing (signing + broadcast).

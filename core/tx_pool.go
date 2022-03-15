@@ -238,6 +238,7 @@ type TxPool struct {
 	txFeed      event.Feed
 	scope       event.SubscriptionScope
 	signer      types.Signer
+	delegatedSigner types.Signer
 	mu          sync.RWMutex
 
 	istanbul bool // Fork indicator whether we are in the istanbul stage.
@@ -286,6 +287,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		chainconfig:     chainconfig,
 		chain:           chain,
 		signer:          types.LatestSigner(chainconfig),
+		delegatedSigner: types.LatestDelegatedSigner(chainconfig),
 		pending:         make(map[common.Address]*txList),
 		queue:           make(map[common.Address]*txList),
 		beats:           make(map[common.Address]time.Time),
@@ -585,7 +587,8 @@ func (pool *TxPool) local() map[common.Address]types.Transactions {
 // rules and adheres to some heuristic limits of the local node (price and size).
 func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	// Accept only legacy transactions until EIP-2718/2930 activates.
-	if !pool.eip2718 && tx.Type() != types.LegacyTxType {
+	// but allow delegatedtxtype
+	if !pool.eip2718 && tx.Type() != types.LegacyTxType && tx.Type() != types.DelegatedTxType {
 		return ErrTxTypeNotSupported
 	}
 	// Reject dynamic fee transactions until EIP-1559 activates.

@@ -138,7 +138,7 @@ func NewReceipt(root []byte, failed bool, cumulativeGasUsed uint64) *Receipt {
 // into an RLP stream. If no post state is present, byzantium fork is assumed.
 func (r *Receipt) EncodeRLP(w io.Writer) error {
 	data := &receiptRLP{r.statusEncoding(), r.CumulativeGasUsed, r.Bloom, r.Logs}
-	if r.Type == LegacyTxType {
+	if r.Type == LegacyTxType || r.Type == DelegatedTxType {
 		return rlp.Encode(w, data)
 	}
 	buf := encodeBufferPool.Get().(*bytes.Buffer)
@@ -158,7 +158,7 @@ func (r *Receipt) encodeTyped(data *receiptRLP, w *bytes.Buffer) error {
 
 // MarshalBinary returns the consensus encoding of the receipt.
 func (r *Receipt) MarshalBinary() ([]byte, error) {
-	if r.Type == LegacyTxType {
+	if r.Type == LegacyTxType || r.Type == DelegatedTxType {
 		return rlp.EncodeToBytes(r)
 	}
 	data := &receiptRLP{r.statusEncoding(), r.CumulativeGasUsed, r.Bloom, r.Logs}
@@ -389,7 +389,7 @@ func (rs Receipts) EncodeIndex(i int, w *bytes.Buffer) {
 	r := rs[i]
 	data := &receiptRLP{r.statusEncoding(), r.CumulativeGasUsed, r.Bloom, r.Logs}
 	switch r.Type {
-	case LegacyTxType:
+	case LegacyTxType, DelegatedTxType:
 		rlp.Encode(w, data)
 	case AccessListTxType:
 		w.WriteByte(AccessListTxType)

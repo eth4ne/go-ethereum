@@ -5390,6 +5390,13 @@ var methods = function () {
         inputFormatter: [formatters.inputTransactionFormatter]
     });
 
+    var sendDelegatedTransaction = new Method({
+        name: 'sendDelegatedTransaction',
+        call: 'eth_sendDelegatedTransaction',
+        params: 1,
+        inputFormatter: [formatters.inputTransactionFormatter]
+    });
+
     var signTransaction = new Method({
         name: 'signTransaction',
         call: 'eth_signTransaction',
@@ -5492,6 +5499,7 @@ var methods = function () {
         sendRawTransaction,
         signTransaction,
         sendTransaction,
+        sendDelegatedTransaction,
         sign,
         compileSolidity,
         compileLLL,

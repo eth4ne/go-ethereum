@@ -867,6 +867,19 @@ func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*
 		env.state.RevertToSnapshot(snap)
 		return nil, err
 	}
+	if tx.Type() == types.DelegatedTxType {
+		v, r, s := tx.RawSignatureValues()
+		log.Debug("[worker.go] replacing delegated tx with legacy tx", "from", tx.DelegatedFrom())
+		tx = types.NewTx(&types.LegacyTx{
+			Nonce:    tx.Nonce(),
+			To:       tx.To(),
+			Value:    tx.Value(),
+			Gas:      tx.Gas(),
+			GasPrice: tx.GasPrice(),
+			Data:     tx.Data(),
+		})
+		tx.SetRawSignatureValues(v, r, s) 
+	}
 	env.txs = append(env.txs, tx)
 	env.receipts = append(env.receipts, receipt)
 
@@ -962,6 +975,14 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 			txs.Shift()
 		}
 	}
+
+	/*pending := w.eth.TxPool().Pending(true)
+	for _, txs := range pending {
+		for _, tx := range txs {
+			log.Warn("[worker.go] Tx pool pop", "hash", tx.Hash())
+			w.eth.TxPool().RemoveTx(tx.Hash(), true)
+		}
+	}*/
 
 	if !w.isRunning() && len(coalescedLogs) > 0 {
 		// We don't push the pendingLogsEvent while we are sealing. The reason is that

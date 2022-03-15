@@ -216,7 +216,7 @@ func (api *ExternalSigner) SignTx(account accounts.Account, tx *types.Transactio
 		From:  common.NewMixedcaseAddress(account.Address),
 	}
 	switch tx.Type() {
-	case types.LegacyTxType, types.AccessListTxType:
+	case types.LegacyTxType, types.AccessListTxType, types.DelegatedTxType:
 		args.GasPrice = (*hexutil.Big)(tx.GasPrice())
 	case types.DynamicFeeTxType:
 		args.MaxFeePerGas = (*hexutil.Big)(tx.GasFeeCap())
@@ -229,7 +229,7 @@ func (api *ExternalSigner) SignTx(account accounts.Account, tx *types.Transactio
 	if chainID != nil && chainID.Sign() != 0 {
 		args.ChainID = (*hexutil.Big)(chainID)
 	}
-	if tx.Type() != types.LegacyTxType {
+	if tx.Type() != types.LegacyTxType && tx.Type() != types.DelegatedTxType {
 		// However, if the user asked for a particular chain id, then we should
 		// use that instead.
 		if tx.ChainId().Sign() != 0 {
