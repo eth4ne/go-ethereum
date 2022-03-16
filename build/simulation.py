@@ -30,14 +30,14 @@ import threading
 
 db_host = 'localhost'
 db_user = 'ethereum'
-db_pass = '' #fill in the MariaDB/MySQL password.
+db_pass = '1234' #fill in the MariaDB/MySQL password.
 db_name = 'ethereum'
 
 geth_ipc = '/ethereum/geth-test/geth.ipc'
 
-start_block = 13000000
-end_block = 14000000
-password = '' #fill in the geth coinbase password.
+start_block = 7000000
+end_block = 8000000
+password = '1234' #fill in the geth coinbase password.
 
 conn_geth = lambda path: Web3(Web3.IPCProvider(path))
 conn_mariadb = lambda host, user, password, database: pymysql.connect(host=host, user=user, password=password, database=database, cursorclass=pymysql.cursors.DictCursor)
@@ -128,8 +128,6 @@ def run(_from, _to):
   totalblock = 0
   totaltx = 0
   start = time.time()
-
-  timeout = 2
 
   web3 = conn_geth(geth_ipc)
   conn = conn_mariadb(db_host, db_user, db_pass, db_name)
