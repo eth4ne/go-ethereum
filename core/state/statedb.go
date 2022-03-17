@@ -1952,10 +1952,15 @@ func (s *StateDB) InactivateLeafNodes(inactiveBoundaryKey, lastKeyToCheck int64)
 				}
 			}
 
-			// DELETE ACCOUNT FROM TRIE
-			if err := s.trie.TryUpdate_SetKey(key[:], nil); err != nil {
-				s.setError(fmt.Errorf("updateStateObject (%x) error: %v", key[:], err))
-			}
+			// // DELETE ACCOUNT FROM TRIE
+			// if err := s.trie.TryUpdate_SetKey(key[:], nil); err != nil {
+			// 	s.setError(fmt.Errorf("updateStateObject (%x) error: %v", key[:], err))
+			// }
+		}
+
+		// DELETE ACCOUNT FROM TRIE
+		if err := s.trie.TryUpdate_SetKey(key[:], nil); err != nil {
+			s.setError(fmt.Errorf("updateStateObject (%x) error: %v", key[:], err))
 		}
 	}
 
