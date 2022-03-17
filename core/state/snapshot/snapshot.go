@@ -410,7 +410,7 @@ func (t *Tree) StorageList_ethane(blockRoot, accountHash common.Hash) []common.H
 	var storageList []common.Hash
 
 	if t.Snapshots(blockRoot, 128, true) == nil {
-		fmt.Println("Snapshots are nil")
+		// fmt.Println("Snapshots are nil")
 	}
 
 	for _, snap := range t.Snapshots(blockRoot, 128, true) { // whether to find in diskLayer
@@ -432,7 +432,7 @@ func (t *Tree) AccountList_ethane(blockRoot common.Hash) []common.Hash {
 
 	var accountList []common.Hash
 	if t.Snapshots(blockRoot, 128, true) == nil {
-		fmt.Println("Snapshots are nil")
+		// fmt.Println("Snapshots are nil")
 	}
 	for _, snap := range t.Snapshots(blockRoot, 128, true) { // whether to find in diskLayer
 		// fmt.Println("\n\nsnap >>> ", snap)

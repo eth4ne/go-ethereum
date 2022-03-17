@@ -900,16 +900,16 @@ func (db *Database) SaveCachePeriodically(dir string, interval time.Duration, st
 // delete storage trie leaf nodes when inactivate or restore (joonha)
 func (db *Database) DeleteStorageTrieNode(accountHash common.Hash) {
 
-	fmt.Println("\nDeleteStorageTrieNode > accountHash: ", accountHash)
+	// fmt.Println("\nDeleteStorageTrieNode > accountHash: ", accountHash)
 
 	batch := db.diskdb.NewBatch()
 
 	// Move all of the accumulated preimages into a write batch
 	if db.preimages != nil {
-		fmt.Println("db.preimages are not nil")
+		// fmt.Println("db.preimages are not nil")
 		rawdb.WritePreimages(batch, db.preimages)
 		if batch.ValueSize() > ethdb.IdealBatchSize {
-			fmt.Println("batch.ValueSize is bigger than the IdealBatchSize")
+			// fmt.Println("batch.ValueSize is bigger than the IdealBatchSize")
 			if err := batch.Write(); err != nil {
 				// return err
 				return 
@@ -923,7 +923,7 @@ func (db *Database) DeleteStorageTrieNode(accountHash common.Hash) {
 			return 
 		}
 		batch.Reset()
-		fmt.Println("Resetting batch occured")
+		// fmt.Println("Resetting batch occured")
 	}
 
 	// Delete node according the accountHash from disk

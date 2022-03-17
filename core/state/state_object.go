@@ -758,9 +758,9 @@ func (s *stateObject) Value() *big.Int {
 
 // Print_storageTrie prints storage trie (joonha)
 func (s *stateObject) Print_storageTrie() {
-	fmt.Println("state_object > Print Storage > 1")
+	// fmt.Println("state_object > Print Storage > 1")
 	if s.trie == nil {
-		fmt.Println("the storage trie is nil")
+		// fmt.Println("the storage trie is nil")
 		return 
 	} else {
 		s.trie.Print_storageTrie()

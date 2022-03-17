@@ -222,7 +222,7 @@ func (t *Trie) tryGetAll(currNode node, parentKey, lastKey []byte, pos int) {
 
 			// found non-nil account
 			Accounts = append(Accounts, n)
-			fmt.Println("detected account: ", common.BytesToAddress(n))
+			// fmt.Println("detected account: ", common.BytesToAddress(n))
 			Keys = append(Keys, hk)
 
 			// // delete the account
@@ -773,20 +773,20 @@ func (t *Trie) Print_storageTrie() {
 	if t.root != nil {
 		fmt.Println(t.root.toString_storageTrie("", t.db))
 	} else {
-		fmt.Println("trie's root is nil")
+		// fmt.Println("trie's root is nil")
 	}
 }
 
 // Delete_storageTrie deletes storage trie's all nodes from disk (joonha)
 func (t *Trie) Delete_storageTrie() {
 	if t == nil {
-		fmt.Println("t is nil")
+		// fmt.Println("t is nil")
 		return 
 	}
 	if t.root != nil {
 		fmt.Println(t.root.delete_storageTrie("", t.db))
 	} else {
-		fmt.Println("trie's root is nil")
+		// fmt.Println("trie's root is nil")
 	}
 }
 

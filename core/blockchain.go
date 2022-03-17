@@ -1351,27 +1351,21 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	/***********************************************/
 	//print and delete database, set Deletenode
 	/***********************************************/
-	fmt.Println("\n\n11111111111111111111111")
-	fmt.Println("11111111111111111111111")
-	fmt.Println("11111111111111111111111")
-	fmt.Println("11111111111111111111111")
-	fmt.Println("11111111111111111111111\n\n")
+	// // print to check disk size before delete leaf nodes (joonha)
+	// if block.Header().Number.Int64() % 1 == 0 {
+	// 	// inspect database
+	// 	rawdb.InspectDatabase(rawdb.GlobalDB, nil, nil)
 
-	// print to check disk size before delete leaf nodes (joonha)
-	if block.Header().Number.Int64() % 1 == 0 {
-		// inspect database
-		rawdb.InspectDatabase(rawdb.GlobalDB, nil, nil)
-
-		// print state trie 
-		fmt.Println("(BEFORE DELETION) $$$ print state trie at block", bc.CurrentBlock().Header().Number)
-	}
+	// 	// // print state trie 
+	// 	// fmt.Println("(BEFORE DELETION) $$$ print state trie at block", bc.CurrentBlock().Header().Number)
+	// }
 
 	// delete leaf nodes from disk (joonha)
-	fmt.Println("\nBLOCK NUMBER: ", block.Header().Number.Int64())
+	// fmt.Println("\nBLOCK NUMBER: ", block.Header().Number.Int64())
 	if (block.Header().Number.Int64()) % common.DeleteLeafNodeEpoch == 0 { // at every delete epoch
-		fmt.Println("THIS IS THE DELETING EPOCH\n")
+		// fmt.Println("THIS IS THE DELETING EPOCH\n")
 		for _, addr := range common.AccountsToDeleteFromDisk {
-			fmt.Println("\nDeleting addr: ", addr)
+			// fmt.Println("\nDeleting addr: ", addr)
 
 			// 1. get obj's storage trie
 			storageTrie := state.GetTrie(addr)
@@ -1383,27 +1377,27 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		// empty the list
 		common.AccountsToDeleteFromDisk = make([]common.Address, 0)
 	} else {
-		fmt.Println("NOT A DELETING EPOCH")
+		// fmt.Println("NOT A DELETING EPOCH")
 	}
 
 	// print database inspect result (jmlee)
-	fmt.Println("\nblock inserted -> blocknumber:", block.Header().Number.Int64())
-	fmt.Println("InactiveBoundaryKey:", common.InactiveBoundaryKey)
-	fmt.Println("common.CheckpointKeys:", common.CheckpointKeys)
+	// fmt.Println("\nblock inserted -> blocknumber:", block.Header().Number.Int64())
+	// fmt.Println("InactiveBoundaryKey:", common.InactiveBoundaryKey)
+	// fmt.Println("common.CheckpointKeys:", common.CheckpointKeys)
 	if block.Header().Number.Int64() % 1 == 0 {
 		// inspect database
 		rawdb.InspectDatabase(rawdb.GlobalDB, nil, nil)
 
-		// print state trie (jmlee)
-		fmt.Println("(AFTER DELETION) $$$ print state trie at block", bc.CurrentBlock().Header().Number)
-		ldb := trie.NewDatabase(bc.db)
-		stateTrie, _ := trie.NewSecure(bc.CurrentBlock().Root(), ldb)
-		// stateTrie.Print()
-		if stateTrie == nil {
-			fmt.Println("stateTrie is nil")
-		} else {
-			stateTrie.Print()
-		}
+		// // print state trie (jmlee)
+		// // fmt.Println("(AFTER DELETION) $$$ print state trie at block", bc.CurrentBlock().Header().Number)
+		// ldb := trie.NewDatabase(bc.db)
+		// stateTrie, _ := trie.NewSecure(bc.CurrentBlock().Root(), ldb)
+		// // stateTrie.Print()
+		// if stateTrie == nil {
+		// 	fmt.Println("stateTrie is nil")
+		// } else {
+		// 	stateTrie.Print()
+		// }
 
 		// /******************************************/
 		// // PRINTINNG STATETRIE FROM SOMETHING

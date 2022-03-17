@@ -17,7 +17,7 @@
 package rawdb
 
 import (
-	"fmt"
+	// "fmt"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -108,5 +108,5 @@ func DeleteTrieNode(db ethdb.KeyValueWriter, hash common.Hash) {
 	if err := db.Delete(hash.Bytes()); err != nil {
 		log.Crit("Failed to delete trie node", "err", err)
 	}
-	fmt.Println("Deleted ", hash, " completed.") // (joonha)
+	// fmt.Println("Deleted ", hash, " completed.") // (joonha)
 }

@@ -49,7 +49,7 @@ def main():
 
     # main loop for send txs
     print("start sending transactions")
-    offset = 1
+    offset = 3
     txNums = [int(TX_PER_BLOCK/THREAD_COUNT)]*THREAD_COUNT
     txNums[0] += TX_PER_BLOCK%THREAD_COUNT
     for i in range(int(ACCOUNT_NUM / TX_PER_BLOCK)):

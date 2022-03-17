@@ -207,8 +207,8 @@ func GetKeyFromMerkleProof(rootHash common.Hash, proofDb common.ProofList) ([]by
 // internal function of GetKeyFromMerkleProof (joonha)
 func getKeyFromMerkleProof(nodeHash common.Hash, origNode node, tKey []byte, proofDb common.ProofList) ([]byte, *big.Int) {
 
-	fmt.Println("\n=============================================================================")
-	fmt.Println("=============================================================================\n")
+	// fmt.Println("\n=============================================================================")
+	// fmt.Println("=============================================================================\n")
 
 	/*************************************************************/
 	// README
@@ -245,11 +245,11 @@ func getKeyFromMerkleProof(nodeHash common.Hash, origNode node, tKey []byte, pro
 	/*************************************************************/
 	// get a node from proofDb representing the nodeHash
 
-	fmt.Println("proofDb: ", proofDb)
+	// fmt.Println("proofDb: ", proofDb)
 
 	// Reaching the END
 	if len(proofDb) == 0 { // Reaching the valueNode, return.
-		fmt.Println("proofDb is nil") 
+		// fmt.Println("proofDb is nil") 
 
 		hexToInt := new(big.Int)
 		hexToInt.SetString(common.BytesToHash(hexToKeybytes(tKey)).Hex()[2:], 16)
@@ -261,22 +261,22 @@ func getKeyFromMerkleProof(nodeHash common.Hash, origNode node, tKey []byte, pro
 			switch cld := cld.(type) {
 			case nil:
 				// The trie doesn't contain the key.
-				fmt.Println("nil")
+				// fmt.Println("nil")
 				return nil, hexToInt
 			case hashNode:
 				copy(nodeHash[:], cld)
-				fmt.Println("hashNode")
+				// fmt.Println("hashNode")
 			case valueNode:
-				fmt.Println("valueNode")
+				// fmt.Println("valueNode")
 				return cld, hexToInt
 			default:
-				fmt.Println("default")
+				// fmt.Println("default")
 			}
 		}
 		return nil, hexToInt
 
 	} else {
-		fmt.Println("proofDb is not nil")
+		// fmt.Println("proofDb is not nil")
 	}
 
 	// Not reaching the end. Go more.
@@ -294,14 +294,14 @@ func getKeyFromMerkleProof(nodeHash common.Hash, origNode node, tKey []byte, pro
 	// extract key digit and append it to tKey
 	switch n := (origNode).(type) {
 	case *fullNode:
-		fmt.Println("Prev: full")
+		// fmt.Println("Prev: full")
 
 		switch cur := (currNode).(type){
 		case *fullNode:
 			hasher := newHasher(false)
 			defer returnHasherToPool(hasher)
 			nn := hasher.fullnodeToHash(cur, false)
-			fmt.Println("selected branch: ", nn)
+			// fmt.Println("selected branch: ", nn)
 
 			i := 0
 			for i < 16 {
@@ -319,11 +319,11 @@ func getKeyFromMerkleProof(nodeHash common.Hash, origNode node, tKey []byte, pro
 
 			collapsed, _ := hasher.hashShortNodeChildren(cur) // should hash the child valueNode first
 			nn := hasher.shortnodeToHash(collapsed, false) // nn: hashnode
-			fmt.Println("selected branch: ", nn)
+			// fmt.Println("selected branch: ", nn)
 
 			i := 15 // from the latest
 			for i >= 0 {
-				fmt.Println("common.BytesToHash(nn.(hashNode)): ", common.BytesToHash(nn.(hashNode)))
+				// fmt.Println("common.BytesToHash(nn.(hashNode)): ", common.BytesToHash(nn.(hashNode)))
 				// to avoid panic
 				if n.Children[i] == nil {
 					i--
@@ -333,7 +333,7 @@ func getKeyFromMerkleProof(nodeHash common.Hash, origNode node, tKey []byte, pro
 				// if it is already used, continue to search another inactive account
 
 
-				fmt.Println("common.BytesToHash((n.Children[i]).(hashNode)): ", common.BytesToHash((n.Children[i]).(hashNode)))
+				// fmt.Println("common.BytesToHash((n.Children[i]).(hashNode)): ", common.BytesToHash((n.Children[i]).(hashNode)))
 				if common.BytesToHash(nn.(hashNode)) == common.BytesToHash((n.Children[i]).(hashNode)) {
 
 					selectedByte := common.HexToHash("0x" + indices[i])
@@ -348,7 +348,7 @@ func getKeyFromMerkleProof(nodeHash common.Hash, origNode node, tKey []byte, pro
 					retrievedKey_tmp := common.HexToHash(strconv.FormatInt(tKey_i, 16)) // int64 -> hex -> hash
 					_, doExist := common.AlreadyRestored[retrievedKey_tmp]
 					if doExist { // already restored
-						fmt.Println("ALREADY RESTORED, so continue to search")
+						// fmt.Println("ALREADY RESTORED, so continue to search")
 						i--
 						continue
 					}
@@ -363,7 +363,7 @@ func getKeyFromMerkleProof(nodeHash common.Hash, origNode node, tKey []byte, pro
 		}
 
 	default:
-		fmt.Println("Prev: not full")
+		// fmt.Println("Prev: not full")
 	}
 
 
@@ -372,11 +372,11 @@ func getKeyFromMerkleProof(nodeHash common.Hash, origNode node, tKey []byte, pro
 	/*************************************************************/
 	switch n := (currNode).(type) { // no valueNode and hashNode case (only shortNode and fullNode)
 	case nil:
-		fmt.Println("curr nil")
+		// fmt.Println("curr nil")
 		return nil, big.NewInt(0)
 
 	case *shortNode: // should update the key.
-		fmt.Println("curr short")
+		// fmt.Println("curr short")
 		// fmt.Println("n.Key is ", n.Key)
 		// fmt.Println("before tKey: ", tKey)
 		tKey = append(tKey, n.Key...)
@@ -385,12 +385,12 @@ func getKeyFromMerkleProof(nodeHash common.Hash, origNode node, tKey []byte, pro
 		return getKeyFromMerkleProof(nodeHash, n, tKey, proofDb)
 
 	case *fullNode: // No key update. It is the next node's duty.
-		fmt.Println("curr full")
-		fmt.Println("full node's children: ", n.Children)
+		// fmt.Println("curr full")
+		// fmt.Println("full node's children: ", n.Children)
 		return getKeyFromMerkleProof(nodeHash, n, tKey, proofDb)
 
 	case hashNode: // there would be no hashNode in proofDb
-		fmt.Println("curr hash")		
+		// fmt.Println("curr hash")		
 		return getKeyFromMerkleProof(nodeHash, n, tKey, proofDb)
 
 	default:

@@ -170,11 +170,6 @@ func generateSnapshot(diskdb ethdb.KeyValueStore, triedb *trie.Database, cache i
 	return base
 }
 
-// to export generateSnapshot (joonha) TODO: 안 쓰이나?
-func GenerateSnapshot(diskdb ethdb.KeyValueStore, triedb *trie.Database, cache int, root common.Hash) *diskLayer {
-	return generateSnapshot(diskdb, triedb, cache, root)
-}
-
 // journalProgress persists the generator stats into the database to resume later.
 func journalProgress(db ethdb.KeyValueWriter, marker []byte, stats *generatorStats) {
 	// Write out the generator marker. Note it's a standalone disk layer generator

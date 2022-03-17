@@ -285,7 +285,7 @@ func (n valueNode) toString(ind string, db *Database) string {
 // STORAGE TRIE PRINTING (joonha)
 /***************************************************/
 func (n *fullNode) toString_storageTrie(ind string, db *Database) string {
-	fmt.Println("FULLNODE")
+	// fmt.Println("FULLNODE")
 	// print branch node
 	hashnode, _ := n.cache()
 	hash := common.BytesToHash(hashnode)
@@ -300,7 +300,7 @@ func (n *fullNode) toString_storageTrie(ind string, db *Database) string {
 	return resp + fmt.Sprintf("\n%s] ", ind)
 }
 func (n *shortNode) toString_storageTrie(ind string, db *Database) string {
-	fmt.Println("SHORTNODE")
+	// fmt.Println("SHORTNODE")
 	// print extension or leaf node
 	// if n.Val is branch node, then this node is extension node & n.Key is common prefix
 	// if n.Val is account, then this node is leaf node & n.Key is left address of the account (along the path)
@@ -310,10 +310,10 @@ func (n *shortNode) toString_storageTrie(ind string, db *Database) string {
 	return fmt.Sprintf("\n\t\tshortNode hash: %s, \n\t\tkey: %x \n\t\t%v", hash.Hex(), common.BytesToHash(n.Key), n.Val.toString_storageTrie(ind+"  ", db))
 }
 func (n hashNode) toString_storageTrie(ind string, db *Database) string {
-	fmt.Println("HASHNODE")
+	// fmt.Println("HASHNODE")
 	// resolve hashNode (get node from db)
 	hash := common.BytesToHash([]byte(n))
-	fmt.Println("hash: ", hash)
+	// fmt.Println("hash: ", hash)
 	if node := db.node(hash); node != nil {
 		return node.toString_storageTrie(ind, db)
 	} else {
@@ -323,7 +323,7 @@ func (n hashNode) toString_storageTrie(ind string, db *Database) string {
 }
 
 func (n valueNode) toString_storageTrie(ind string, db *Database) string {
-	fmt.Println("VALUENODE")
+	// fmt.Println("VALUENODE")
 	return fmt.Sprintf("\t\tn: ", []byte(n))
 }
 
