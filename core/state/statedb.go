@@ -377,7 +377,19 @@ func (s *StateDB) HasSuicided(addr common.Address) bool {
 // AddBalance adds amount to the account associated with addr.
 func (s *StateDB) AddBalance(addr common.Address, amount *big.Int) {
 	stateObject := s.GetOrNewStateObject(addr)
+	// if stateObject != nil && amount.Cmp(common.Big0) != 0 { // during StaticCall in evm.go, there is a zero addbalance for touch
 	if stateObject != nil {
+		stateObject.AddBalance(amount)
+	}
+
+}
+
+// AddBalance2 adds amount to the account associated with addr. (jhkim)
+// AddBalance2 is used for mining reward
+func (s *StateDB) AddBalance2(addr common.Address, amount *big.Int) {
+	stateObject := s.GetOrNewStateObject(addr)
+	if stateObject != nil {
+		stateObject.txHash = common.HexToHash("0x0")
 		stateObject.AddBalance(amount)
 	}
 }
@@ -460,7 +472,7 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 	}
 	// Encode the account and update the account trie
 	addr := obj.Address()
-	if err := s.trie.TryUpdateAccount(addr[:], &obj.data); err != nil {
+	if err := s.trie.TryUpdateAccount(addr[:], &obj.data, obj.txHash); err != nil {
 		s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
 	}
 
@@ -506,14 +518,16 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 		return obj
 	}
 	// If no live objects are available, attempt to use snapshots
-	var data *types.StateAccount
+	var (
+		data *types.StateAccount
+		err  error
+	)
 	if s.snap != nil {
-		start := time.Now()
-		acc, err := s.snap.Account(crypto.HashData(s.hasher, addr.Bytes()))
 		if metrics.EnabledExpensive {
-			s.SnapshotAccountReads += time.Since(start)
+			defer func(start time.Time) { s.SnapshotAccountReads += time.Since(start) }(time.Now())
 		}
-		if err == nil {
+		var acc *snapshot.Account
+		if acc, err = s.snap.Account(crypto.HashData(s.hasher, addr.Bytes())); err == nil {
 			if acc == nil {
 				return nil
 			}
@@ -532,12 +546,11 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 		}
 	}
 	// If snapshot unavailable or reading from it failed, load from the database
-	if data == nil {
-		start := time.Now()
-		enc, err := s.trie.TryGet(addr.Bytes())
+	if s.snap == nil || err != nil {
 		if metrics.EnabledExpensive {
-			s.AccountReads += time.Since(start)
+			defer func(start time.Time) { s.AccountReads += time.Since(start) }(time.Now())
 		}
+		enc, err := s.trie.TryGet(addr.Bytes())
 		if err != nil {
 			s.setError(fmt.Errorf("getDeleteStateObject (%x) error: %v", addr.Bytes(), err))
 			return nil
@@ -566,6 +579,11 @@ func (s *StateDB) GetOrNewStateObject(addr common.Address) *stateObject {
 	stateObject := s.getStateObject(addr)
 	if stateObject == nil {
 		stateObject, _ = s.createObject(addr)
+	} else if stateObject.txHash != common.GlobalTxHash {
+		obj := stateObject.deepCopy(s)
+		obj.txHash = common.GlobalTxHash
+		s.stateObjects[addr] = obj // temp setting
+		return obj
 	}
 	return stateObject
 }
@@ -583,6 +601,7 @@ func (s *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) 
 		}
 	}
 	newobj = newObject(s, addr, types.StateAccount{})
+	newobj.txHash = common.GlobalTxHash // jhkim
 	if prev == nil {
 		s.journal.append(createObjectChange{account: &addr})
 	} else {
@@ -1043,4 +1062,9 @@ func (s *StateDB) AddressInAccessList(addr common.Address) bool {
 // SlotInAccessList returns true if the given (address, slot)-tuple is in the access list.
 func (s *StateDB) SlotInAccessList(addr common.Address, slot common.Hash) (addressPresent bool, slotPresent bool) {
 	return s.accessList.Contains(addr, slot)
+}
+
+// jhkim
+func (s *StateDB) GetStateObjects() map[common.Address]*stateObject {
+	return s.stateObjects
 }

@@ -26,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethdb/memorydb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 )
@@ -265,6 +266,10 @@ func (t *Trie) TryUpdateAccount(key []byte, acc *types.StateAccount) error {
 //
 // If a node was not found in the database, a MissingNodeError is returned.
 func (t *Trie) TryUpdate(key, value []byte) error {
+	// if common.BytesToHash(key) == common.HexToHash("0xcaff51dae2080974a0ae559787747fb731282015be43ef1aed15de3776aec806") {
+	// 	// fmt.Println("MyTryUpdate / 0xcaff51..? / txHash:", txHash, "/ slotHash:", slotHash, "/ CAaddress:", CAaddress)
+	// 	fmt.Println("MyTryUpdate / 0xcaff51..? /key:", key)
+	// }
 	t.unhashed++
 	k := keybytesToHex(key)
 	if len(value) != 0 {
@@ -586,4 +591,48 @@ func (t *Trie) hashRoot() (node, node, error) {
 func (t *Trie) Reset() {
 	t.root = nil
 	t.unhashed = 0
+}
+
+// print trie nodes details in human readable form (jmlee)
+// func (t *Trie) Print() {
+// 	fmt.Println(t.root.toString("", t.db))
+// }
+func (t *Trie) Print() string {
+	return t.root.toString("", t.db)
+}
+
+// get trie's db size (jmlee)
+func (t *Trie) Size() common.StorageSize {
+	size, _ := t.db.Size()
+	return size
+}
+
+// make empty trie (jmlee)
+func NewEmpty() *Trie {
+	trie, _ := New(common.Hash{}, NewDatabase(memorydb.New()))
+	return trie
+}
+
+// get shortnode's size (for debugging)
+func getShortnodeSize(n shortNode) int {
+	h := newHasher(false)
+	defer returnHasherToPool(h)
+	collapsed, _ := h.hashShortNodeChildren(&n)
+	h.tmp.Reset()
+	if err := rlp.Encode(&h.tmp, collapsed); err != nil {
+		panic("encode error: " + err.Error())
+	}
+	return len(h.tmp)
+}
+
+// get fullnode's size (for debugging)
+func getFullnodeSize(n fullNode) int {
+	h := newHasher(false)
+	defer returnHasherToPool(h)
+	collapsed, _ := h.hashFullNodeChildren(&n)
+	h.tmp.Reset()
+	if err := rlp.Encode(&h.tmp, collapsed); err != nil {
+		panic("encode error: " + err.Error())
+	}
+	return len(h.tmp)
 }

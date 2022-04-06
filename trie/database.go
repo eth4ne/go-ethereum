@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"reflect"
 	"runtime"
 	"sync"
@@ -98,7 +99,9 @@ type rawNode []byte
 
 func (n rawNode) cache() (hashNode, bool)   { panic("this should never end up in a live trie") }
 func (n rawNode) fstring(ind string) string { panic("this should never end up in a live trie") }
-
+func (n rawNode) toString(ind string, db *Database) string {
+	panic("this should never end up in a live trie")
+}
 func (n rawNode) EncodeRLP(w io.Writer) error {
 	_, err := w.Write(n)
 	return err
@@ -111,7 +114,9 @@ type rawFullNode [17]node
 
 func (n rawFullNode) cache() (hashNode, bool)   { panic("this should never end up in a live trie") }
 func (n rawFullNode) fstring(ind string) string { panic("this should never end up in a live trie") }
-
+func (n rawFullNode) toString(ind string, db *Database) string {
+	panic("this should never end up in a live trie")
+}
 func (n rawFullNode) EncodeRLP(w io.Writer) error {
 	var nodes [17]node
 
@@ -135,6 +140,9 @@ type rawShortNode struct {
 
 func (n rawShortNode) cache() (hashNode, bool)   { panic("this should never end up in a live trie") }
 func (n rawShortNode) fstring(ind string) string { panic("this should never end up in a live trie") }
+func (n rawShortNode) toString(ind string, db *Database) string {
+	panic("this should never end up in a live trie")
+}
 
 // cachedNode is all the information we know about a single cached trie node
 // in the memory database write layer.
@@ -697,6 +705,9 @@ func (db *Database) Commit(node common.Hash, report bool, callback func(common.H
 	// outside code doesn't see an inconsistent state (referenced data removed from
 	// memory cache during commit but not yet in persistent storage). This is ensured
 	// by only uncaching existing data when the database write finalizes.
+	// if node == common.HexToHash("0xa5f3f2f7542148c973977c8a1e154c4300fec92f755f7846f1b734d3ab1d90e7") {
+	// 	fmt.Println("Large Commit 0xa5f3f2f...? / hash:", node, "/block:", common.GlobalBlockNumber)
+	// }
 	start := time.Now()
 	batch := db.diskdb.NewBatch()
 
@@ -755,10 +766,21 @@ func (db *Database) Commit(node common.Hash, report bool, callback func(common.H
 // commit is the private locked version of Commit.
 func (db *Database) commit(hash common.Hash, batch ethdb.Batch, uncacher *cleaner, callback func(common.Hash)) error {
 	// If the node does not exist, it's a previously committed node
+
 	node, ok := db.dirties[hash]
 	if !ok {
 		return nil
 	}
+
+	// jhkim: count duplicated flushed node. It should be done before check db.dirties
+	if hash != common.HexToHash("0x0") {
+		if list, ok := common.FlushedNodeDuplicate_block[hash]; ok {
+			common.FlushedNodeDuplicate_block[hash] = append(list, common.GlobalBlockNumber)
+		} else {
+			common.FlushedNodeDuplicate_block[hash] = []int{common.GlobalBlockNumber}
+		}
+	}
+
 	var err error
 	node.forChilds(func(child common.Hash) {
 		if err == nil {
@@ -768,6 +790,20 @@ func (db *Database) commit(hash common.Hash, batch ethdb.Batch, uncacher *cleane
 	if err != nil {
 		return err
 	}
+
+	// print newly commited nodes. (jhkim)
+	switch n := node.node.(type) {
+	case rawFullNode:
+		common.FlushedNodeList[hash] = 1
+
+	case *rawShortNode:
+		common.FlushedNodeList[hash] = 2
+
+	default:
+		fmt.Printf("Neither Full nor Short node. It's type is %T\n", n)
+		os.Exit(0)
+	}
+
 	// If we've reached an optimal batch size, commit and start over
 	rawdb.WriteTrieNode(batch, hash, node.rlp())
 	if callback != nil {

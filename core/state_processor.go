@@ -72,7 +72,26 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	}
 	blockContext := NewEVMBlockContext(header, p.bc, nil)
 	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, p.config, cfg)
+
+	common.GlobalBlockNumber = int(block.Number().Int64()) //jhkim
+	common.GlobalBlockMiner = block.Coinbase()
+	uncles := block.Uncles()
+	for _, uncle := range uncles {
+		common.GlobalBlockUncles = append(common.GlobalBlockUncles, uncle.Coinbase)
+	}
+
+	// if common.GlobalBlockNumber == 80631 {
+	// 	fmt.Println("block 80631", common.GlobalBlockMiner, common.GlobalBlockUncles)
+	// 	이거 의미없다. transaction이 수행되면서 miner랑 uncle이 결정될텐데 지금 count해봐야 의미가 없다
+	// 	근데 왜 잘찍히는지 모르겠다
+	// }
+	// fmt.Println("set GlobalBlockNumber", common.GlobalBlockNumber)
+
 	// Iterate over and process the individual transactions
+	// if common.GlobalBlockNumber == 198695 {
+	// 	fmt.Println("stateProcessor.go Process")
+	// }
+
 	for i, tx := range block.Transactions() {
 		msg, err := tx.AsMessage(types.MakeSigner(p.config, header.Number), header.BaseFee)
 		if err != nil {
@@ -83,8 +102,16 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		if err != nil {
 			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
+		// if common.GlobalBlockNumber == 46402 {
+		// 	fmt.Println("46402 Did transactions")
+		// }
 		receipts = append(receipts, receipt)
 		allLogs = append(allLogs, receipt.Logs...)
+
+		//jhkim: reset global variable after process each transaction
+		common.GlobalTxHash = common.HexToHash("0x0")
+		common.GlobalTxTo = common.Address{}
+		common.GlobalTxFrom = common.Address{}
 	}
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles())
@@ -96,13 +123,13 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	// Create a new context to be used in the EVM environment.
 	txContext := NewEVMTxContext(msg)
 	evm.Reset(txContext, statedb)
-
+	// fmt.Println("applytransaction", common.GlobalBlockNumber, tx.Hash())
 	// Apply the transaction to the current state (included in the env).
 	result, err := ApplyMessage(evm, msg, gp)
 	if err != nil {
 		return nil, err
 	}
-
+	common.GlobalTxHash = tx.Hash() // jhkim: set global variable
 	// Update the state with pending changes.
 	var root []byte
 	if config.IsByzantium(blockNumber) {
@@ -116,17 +143,30 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	// by the tx.
 	receipt := &types.Receipt{Type: tx.Type(), PostState: root, CumulativeGasUsed: *usedGas}
 	if result.Failed() {
+		// fmt.Println("Failed Transaction", common.GlobalBlockNumber, tx.Hash())
 		receipt.Status = types.ReceiptStatusFailed
 	} else {
 		receipt.Status = types.ReceiptStatusSuccessful
+		common.GlobalMutex.Lock()
+
+		if _, ok := common.TxDetail[tx.Hash()]; !ok {
+			// fmt.Println("WriteTxDetail", common.GlobalBlockNumber, tx.Hash())
+			WriteTxDetail(tx, msg, blockNumber, statedb) //jhkim
+		}
+		common.GlobalMutex.Unlock()
 	}
-	receipt.TxHash = tx.Hash()
-	receipt.GasUsed = result.UsedGas
 
 	// If the transaction created a contract, store the creation address in the receipt.
 	if msg.To() == nil {
 		receipt.ContractAddress = crypto.CreateAddress(evm.TxContext.Origin, tx.Nonce())
+		if receipt.Status == types.ReceiptStatusSuccessful {
+			common.GlobalMutex.Lock()
+			common.TxDetail[tx.Hash()].DeployedContractAddress = receipt.ContractAddress
+			common.GlobalMutex.Unlock()
+		}
 	}
+	receipt.TxHash = tx.Hash()
+	receipt.GasUsed = result.UsedGas
 
 	// Set the receipt logs and create the bloom filter.
 	receipt.Logs = statedb.GetLogs(tx.Hash(), blockHash)
@@ -150,4 +190,42 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 	blockContext := NewEVMBlockContext(header, bc, author)
 	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, config, cfg)
 	return applyTransaction(msg, config, bc, author, gp, statedb, header.Number, header.Hash(), tx, usedGas, vmenv)
+}
+
+// jhkim: all transactions processed during syncing and mining are recorded
+func WriteTxDetail(tx *types.Transaction, msg types.Message, number *big.Int, statedb *state.StateDB) {
+	// common.GlobalMutex.Lock()
+	// defer common.GlobalMutex.Unlock()
+	// fmt.Println("WriteTxDetail", common.GlobalBlockNumber, tx.Hash())
+	txInform := common.TxInformation{}
+	txInform.ContractAddress_SlotHash = map[common.Address]*[]common.Hash{}
+	txInform.BlockNumber = (*number).Int64()
+	txInform.Else = []common.Address{}
+	txInform.DeployedContractAddress = common.Address{}
+
+	if tx.To() == nil {
+		txInform.Types = 2 // contract creation
+
+	} else {
+		code := statedb.GetCode(*msg.To())
+
+		if code == nil {
+			txInform.Types = 1 // Transfer
+		} else {
+			txInform.Types = 3 // contract call
+		}
+	}
+
+	// preimage of address hash
+	txInform.From = msg.From()
+	common.GlobalTxFrom = msg.From()
+	if tx.To() != nil {
+		txInform.To = *tx.To()
+		common.GlobalTxTo = *tx.To()
+	} else { // if contract creation tx
+		txInform.To = common.HexToAddress("")
+		common.GlobalTxTo = common.HexToAddress("")
+	}
+	common.TxDetail[tx.Hash()] = &txInform
+
 }

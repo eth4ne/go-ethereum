@@ -30,6 +30,7 @@ var indices = []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b
 type node interface {
 	fstring(string) string
 	cache() (hashNode, bool)
+	toString(string, *Database) string // print node details in human readable form (jmlee)
 }
 
 type (
@@ -222,4 +223,74 @@ func wrapError(err error, ctx string) error {
 
 func (err *decodeError) Error() string {
 	return fmt.Sprintf("%v (decode path: %s)", err.what, strings.Join(err.stack, "<-"))
+}
+
+// print node details in human readable form (jmlee)
+func (n *fullNode) toString(ind string, db *Database) string {
+	// print branch node
+	hashnode, _ := n.cache()
+	hash := common.BytesToHash(hashnode)
+	resp := fmt.Sprintf("[ ")
+	resp += fmt.Sprintf("%s fullNode - hash: %s\n", ind, hash.Hex())
+	for i, node := range &n.Children {
+		if node != nil {
+			resp += fmt.Sprintf("%s branch '%s':", ind, indices[i])
+			resp += fmt.Sprintf("%s	%v\n", ind, node.toString(ind+"  ", db))
+		}
+	}
+	return resp + fmt.Sprintf("%s] ", ind)
+}
+func (n *shortNode) toString(ind string, db *Database) string {
+	// print extension or leaf node
+	// if n.Val is branch node, then this node is extension node & n.Key is common prefix
+	// if n.Val is account, then this node is leaf node & n.Key is left address of the account (along the path)
+	hashnode, _ := n.cache()
+	hash := common.BytesToHash(hashnode)
+	// return fmt.Sprintf("{shortNode hash: %s, key: %x - value: %v} ", hash.Hex(), n.Key, n.Val.toString(ind+"  ", db))
+	return fmt.Sprintf("{shortNode hash: %s, key: %x - value: %v} ", hash.Hex(), n.Key, n.Val.toString(ind+"  ", db))
+}
+func (n hashNode) toString(ind string, db *Database) string {
+	// resolve hashNode (get node from db)
+	hash := common.BytesToHash([]byte(n))
+	if node := db.node(hash); node != nil {
+		return node.toString(ind, db)
+	} else {
+		// error: should not reach here!
+		return fmt.Sprintf("<%x> ", []byte(n))
+	}
+}
+
+func (n valueNode) toString(ind string, db *Database) string {
+	// decode data into account & print account
+	var acc Account
+	rlp.DecodeBytes([]byte(n), &acc)
+
+	// if account is CA?
+
+	// if common.Bytes2Hex(acc.CodeHash) != "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470" {
+	// 	if acc.Root.Hex() != "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421" { // empty root hash
+
+	// 		if acc.Root.Hex() != "0x0000000000000000000000000000000000000000000000000000000000000000" {
+	// 			fmt.Println("\nContract Account's Root:", acc.Root)
+	// 			if storageTrie, err := NewSecure(acc.Root, db); err == nil {
+	// 				fmt.Println("  StorageTrie Print")
+	// 				fmt.Println(storageTrie.trie.Print())
+	// 				return fmt.Sprintf("[ Root: %x/ CodeHash: %x ]", acc.Root, common.BytesToHash(acc.CodeHash))
+	// 			}
+	// 		}
+	// 	}
+	// }
+
+	// if common.BytesToHash(acc.CodeHash) != common.HexToHash("c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470") {
+	// 	if acc.Root != common.HexToHash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421") { // empty root hash
+	// 		if storageTrie, err := NewSecure(acc.Root, db); err == nil {
+	// 			fmt.Println("StorageTrie Print/ acc.root:", acc.Root)
+	// 			fmt.Println(storageTrie.trie.Print())
+	// 			return fmt.Sprintf("[ Root: %x/ CodeHash: %x ]", acc.Root, common.BytesToHash(acc.CodeHash))
+	// 		}
+
+	// 	}
+	// }
+	// return fmt.Sprintf("[ Nonce: %d / Balance: %s ]", acc.Nonce, acc.Balance.String())
+	return fmt.Sprintf("")
 }
