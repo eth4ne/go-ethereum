@@ -156,9 +156,10 @@ func (args *TransactionArgs) setDefaults(ctx context.Context, b Backend) error {
 	if args.Data != nil && args.Input != nil && !bytes.Equal(*args.Data, *args.Input) {
 		return errors.New(`both "data" and "input" are set and not equal. Please use "input" to pass transaction call data`)
 	}
-	if args.To == nil && len(args.data()) == 0 {
-		return errors.New(`contract creation without any data provided`)
-	}
+	//Allow empty contract
+	//if args.To == nil && len(args.data()) == 0 {
+	//	return errors.New(`contract creation without any data provided`)
+	//}
 	// Estimate the gas usage if necessary.
 	if args.Gas == nil {
 		// These fields are immutable during the estimation, safe to
