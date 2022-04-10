@@ -1147,8 +1147,8 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 
 			// lastKeyToCheck := common.CheckpointKeys[env.header.Number.Int64()-common.InactivateCriterion+1] // [1] orig
 			// lastKeyToCheck := common.CheckpointKeys[env.header.Number.Int64()-common.InactivateCriterion] // [2] v1.10.16 (joonha)
-			fmt.Println("\nbn: ", bn)
-			fmt.Println("bn-(common.InactivateCriterion-2): ", bn-(common.InactivateCriterion-2))
+			// fmt.Println("\nbn: ", bn)
+			// fmt.Println("bn-(common.InactivateCriterion-2): ", bn-(common.InactivateCriterion-2))
 			lastKeyToCheck := common.CheckpointKeys[bn-(common.InactivateCriterion-2)]-1 // [3] 2204010 (joonha)
 
 			// fmt.Println("FROM: ", common.InactiveBoundaryKey)

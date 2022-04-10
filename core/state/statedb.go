@@ -1847,7 +1847,7 @@ func (s *StateDB) DeletePreviousLeafNodes(keysToDelete []common.Hash) {
 // InactivateLeafNodes inactivates inactive accounts (i.e., move old leaf nodes to left) (jmlee)
 func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int64 {
 
-	fmt.Println("\ninspect trie to inactivate:", firstKeyToCheck, "~",lastKeyToCheck)
+	// fmt.Println("\ninspect trie to inactivate:", firstKeyToCheck, "~",lastKeyToCheck)
 	// fmt.Println("trie root before inactivate leaf nodes:", s.trie.Hash().Hex())
 
 	// normTrie := s.trie.GetTrie() // TODO: using this function, we can delete SecureTrie.***_SetKey functions
@@ -1857,11 +1857,11 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 	lastKey := common.Int64ToHash(lastKeyToCheck)
 	AccountsToInactivate, KeysToInactivate, _ := s.trie.TryGetAll_SetKey(firstKey[:], lastKey[:])
 
-	fmt.Println("")
-	fmt.Println("Accounts length: ", len(AccountsToInactivate))
-	fmt.Println("Keys length: ", len(KeysToInactivate))
-	fmt.Println("AccountsToInactivate: ", AccountsToInactivate)
-	fmt.Println("KeysToInactivate: ", KeysToInactivate)
+	// fmt.Println("")
+	// fmt.Println("Accounts length: ", len(AccountsToInactivate))
+	// fmt.Println("Keys length: ", len(KeysToInactivate))
+	// fmt.Println("AccountsToInactivate: ", AccountsToInactivate)
+	// fmt.Println("KeysToInactivate: ", KeysToInactivate)
 
 	// move inactive leaf nodes to left
 	for index, key := range KeysToInactivate { 
@@ -1965,7 +1965,7 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 	}
 
 	// print result
-	fmt.Println("inactivate", len(KeysToInactivate), "accounts")
+	// fmt.Println("inactivate", len(KeysToInactivate), "accounts")
 	// fmt.Println("trie root after inactivate leaf nodes:", s.trie.Hash().Hex())
 
 	// return # of inactivated accounts
