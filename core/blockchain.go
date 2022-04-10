@@ -1374,7 +1374,10 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 			// fmt.Println("storageTrie: ", storageTrie)
 
 			// 2. delete every nodes found during trie traversing from disk
-			storageTrie.Delete_storageTrie() // --> secure_trie.go >> trie.go >> node.go
+			// storageTrie.Delete_storageTrie() // --> secure_trie.go >> trie.go >> node.go
+			if storageTrie != nil {
+				storageTrie.Delete_storageTrie() // --> secure_trie.go >> trie.go >> node.go
+			}
 		}
 		// empty the list
 		common.AccountsToDeleteFromDisk = make([]common.Address, 0)
