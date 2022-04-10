@@ -93,7 +93,7 @@ var (
 
 	InactivateLeafNodeEpoch = int64(40320) // block epoch to inactivate inactive leaf nodes (from temp area to inactive trie) (joonha)
 	InactiveBoundaryKey = int64(0) // inactive accounts have keys smaller than this key
-	InactivateCriterion = int64(1) // inactive accounts were touched more before than this block timestamp (min: 1) (const)
+	InactivateCriterion = int64(40320) // inactive accounts were touched more before than this block timestamp (min: 1) (const)
 	CheckpointKeys = make(map[int64]int64) // initial NextKeys of blocks (CheckpointKeys[blockNumber] = initialNextKeyOfTheBlock)
 
 	NoExistKey = HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff") // very large key which will not be reached forever (const)

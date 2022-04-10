@@ -1148,7 +1148,13 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 		common.IsFirst = true
 		return 
 	} else if common.IsFirst == true { // 1st
-		if bn % common.DeleteLeafNodeEpoch == 0 { // delEpoch
+		if bn % common.DeleteLeafNodeEpoch == common.InactivateLeafNodeEpoch - 2 { // delEpoch
+
+			// skip at the first epoch (joonha)
+			if bn == common.InactivateLeafNodeEpoch-2 {
+				return 
+			}
+
 			// fmt.Println("this is the first time and also the deleting epoch")
 			// delete previous leaf nodes (jmlee)
 			// fmt.Println("\n\nenv.header.Number.Int64(): ", env.header.Number.Int64())
@@ -1176,7 +1182,13 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 		return 
 	} else if common.IsFirst == true { // 1st
 		common.IsFirst = false
-		if bn % common.InactivateLeafNodeEpoch == 0 { // inactEpoch
+		if bn % common.InactivateLeafNodeEpoch == common.InactivateLeafNodeEpoch-2 { // inactEpoch
+
+			// skip at the first epoch (joonha)
+			if bn == common.InactivateLeafNodeEpoch-2 {
+				return 
+			}
+
 			// fmt.Println("this is the first time and also the deleting epoch")
 			
 			// inactivate inactive accounts (jmlee)
@@ -1185,11 +1197,20 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 			// fmt.Println("// inactivate inactive accounts")
 			// fmt.Println("/******************************************/\n")
 
-			// lastKeyToCheck := common.CheckpointKeys[env.header.Number.Int64()-common.InactivateCriterion+1] // orig
-			lastKeyToCheck := common.CheckpointKeys[env.header.Number.Int64()-common.InactivateCriterion] // v1.10.16 (joonha)
+			// [1] env.header.Number.Int64()는 현재 만들고 있는 블록 번호인가 이전 블록 번호인가?
+
+			// lastKeyToCheck := common.CheckpointKeys[env.header.Number.Int64()-common.InactivateCriterion+1] // [1] orig
+			// lastKeyToCheck := common.CheckpointKeys[env.header.Number.Int64()-common.InactivateCriterion] // [2] v1.10.16 (joonha)
+			// fmt.Println("\nbn: ", bn)
+			// fmt.Println("bn-(common.InactivateCriterion-2): ", bn-(common.InactivateCriterion-2))
+			lastKeyToCheck := common.CheckpointKeys[bn-(common.InactivateCriterion-2)]-1 // [3] 2204010 (joonha)
+
 			// fmt.Println("FROM: ", common.InactiveBoundaryKey)
 			// fmt.Println("TO: ", lastKeyToCheck)
-			inactivatedAccountsNum := env.state.InactivateLeafNodes(common.InactiveBoundaryKey, lastKeyToCheck)
+			// inactivatedAccountsNum := env.state.InactivateLeafNodes(common.InactiveBoundaryKey, lastKeyToCheck) // [1] orig
+			firstKeyToCheck := common.CheckpointKeys[bn-(2*common.InactivateCriterion-2)]
+			inactivatedAccountsNum := env.state.InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck) // [2] 220410 (joonha)
+			
 			common.InactiveBoundaryKey += inactivatedAccountsNum
 
 		} else { // not a delEpoch
@@ -1235,7 +1256,7 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 
 	// save this block's initial NextKey (joonha)
 	if work.header != nil && w.current != nil {
-		common.CheckpointKeys[work.header.Number.Int64()] = w.current.state.NextKey
+		common.CheckpointKeys[work.header.Number.Int64()+1] = w.current.state.NextKey
 	}
 
 	// Create an empty block based on temporary copied state for
