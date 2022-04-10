@@ -19,6 +19,7 @@ package core
 import (
 	"fmt"
 	"math/big"
+	"os"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -93,6 +94,10 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	// }
 
 	for i, tx := range block.Transactions() {
+		// if common.GlobalBlockNumber == 55284 {
+		// 	fmt.Println("before applyTransaction", tx.Hash())
+		// }
+		common.GlobalTxHash = tx.Hash() // jhkim: set global variable
 		msg, err := tx.AsMessage(types.MakeSigner(p.config, header.Number), header.BaseFee)
 		if err != nil {
 			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
@@ -109,7 +114,8 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		allLogs = append(allLogs, receipt.Logs...)
 
 		//jhkim: reset global variable after process each transaction
-		common.GlobalTxHash = common.HexToHash("0x0")
+		// common.GlobalTxHash = common.HexToHash("0x0")
+
 		common.GlobalTxTo = common.Address{}
 		common.GlobalTxFrom = common.Address{}
 	}
@@ -129,7 +135,23 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	if err != nil {
 		return nil, err
 	}
-	common.GlobalTxHash = tx.Hash() // jhkim: set global variable
+
+	common.GlobalMutex.Lock()
+
+	if _, ok := common.TxDetail[tx.Hash()]; !ok {
+		// if common.GlobalBlockNumber == 55284 {
+		// 	fmt.Println("WriteTxDetail", tx.Hash())
+		// }
+		WriteTxDetail(tx, msg, blockNumber, statedb) //jhkim
+	} else {
+		fmt.Println("Error: Tx already exist!", tx.Hash(), common.GlobalBlockNumber)
+		os.Exit(0)
+	}
+	common.GlobalMutex.Unlock()
+	if tx.To() == nil {
+		common.GlobalContractAddress = crypto.CreateAddress(evm.TxContext.Origin, tx.Nonce()) // jhkim: for cacheing
+	}
+
 	// Update the state with pending changes.
 	var root []byte
 	if config.IsByzantium(blockNumber) {
@@ -143,22 +165,24 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	// by the tx.
 	receipt := &types.Receipt{Type: tx.Type(), PostState: root, CumulativeGasUsed: *usedGas}
 	if result.Failed() {
-		// fmt.Println("Failed Transaction", common.GlobalBlockNumber, tx.Hash())
+
 		receipt.Status = types.ReceiptStatusFailed
+		// fmt.Println("Failed Transaction", common.GlobalBlockNumber, tx.Hash())
+		// delete(common.TxDetail, tx.Hash())
+		common.GlobalMutex.Lock()
+		common.TxDetail[tx.Hash()].Types = 4 // marking failed transaction
+		common.GlobalMutex.Unlock()
 	} else {
 		receipt.Status = types.ReceiptStatusSuccessful
-		common.GlobalMutex.Lock()
 
-		if _, ok := common.TxDetail[tx.Hash()]; !ok {
-			// fmt.Println("WriteTxDetail", common.GlobalBlockNumber, tx.Hash())
-			WriteTxDetail(tx, msg, blockNumber, statedb) //jhkim
-		}
-		common.GlobalMutex.Unlock()
 	}
 
 	// If the transaction created a contract, store the creation address in the receipt.
 	if msg.To() == nil {
 		receipt.ContractAddress = crypto.CreateAddress(evm.TxContext.Origin, tx.Nonce())
+		// if common.GlobalBlockNumber == 54347 && receipt.ContractAddress != common.GlobalContractAddress {
+		// 	fmt.Println("Caching deployed contract address is wrong")
+		// }
 		if receipt.Status == types.ReceiptStatusSuccessful {
 			common.GlobalMutex.Lock()
 			common.TxDetail[tx.Hash()].DeployedContractAddress = receipt.ContractAddress

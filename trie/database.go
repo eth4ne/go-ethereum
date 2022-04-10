@@ -773,13 +773,13 @@ func (db *Database) commit(hash common.Hash, batch ethdb.Batch, uncacher *cleane
 	}
 
 	// jhkim: count duplicated flushed node. It should be done before check db.dirties
-	if hash != common.HexToHash("0x0") {
-		if list, ok := common.FlushedNodeDuplicate_block[hash]; ok {
-			common.FlushedNodeDuplicate_block[hash] = append(list, common.GlobalBlockNumber)
-		} else {
-			common.FlushedNodeDuplicate_block[hash] = []int{common.GlobalBlockNumber}
-		}
-	}
+	// if hash != common.HexToHash("0x0") {
+	// 	if list, ok := common.FlushedNodeDuplicate_block[hash]; ok {
+	// 		common.FlushedNodeDuplicate_block[hash] = append(list, common.GlobalBlockNumber)
+	// 	} else {
+	// 		common.FlushedNodeDuplicate_block[hash] = []int{common.GlobalBlockNumber}
+	// 	}
+	// }
 
 	var err error
 	node.forChilds(func(child common.Hash) {

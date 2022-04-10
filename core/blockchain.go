@@ -1325,7 +1325,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 
 		trie.PrintTxDetail(int(block.NumberU64()), distance)
 		trie.PrintTxElse(int(block.NumberU64()), distance)
-		trie.PrintDuplicatedFlushedNode(int(block.NumberU64()), distance)
+		// trie.PrintDuplicatedFlushedNode(int(block.NumberU64()), distance)
 		// trie.PrintFlushedNode(int(block.NumberU64()), distance)
 		trie.PrintAddrhash2Addr(int(block.NumberU64()), distance)
 
@@ -1336,29 +1336,8 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	// 	os.Exit(0)
 	// }
 
-	// if int(block.NumberU64()) == 49924 || int(block.NumberU64()) == 49931 || int(block.NumberU64()) == 49936 {
-	// if int(block.NumberU64()) == 79843 {
-
-	// 	fmt.Println("Trie Print", block.NumberU64())
-
-	// 	// startTime := time.Now()
-	// 	triedb := GlobalBC.StateCache().TrieDB()             // get leveldb (codes from eth/api.go L:501)
-	// 	stateTrie, _ := trie.NewSecure(block.Root(), triedb) // get the state trie (triedb is same as stateTrie.db)
-
-	// 	filepath := "/home/jhkim/go/src/github.com/ethereum/go-ethereum/build/bin/trie.txt"
-	// 	f1, err := os.Create(filepath)
-	// 	if err != nil {
-	// 		fmt.Println("Cannot create result file.", err)
-	// 		os.Exit(1)
-	// 	}
-	// 	defer f1.Close()
-	// 	fmt.Fprintln(f1, stateTrie.Trie().Print()) // write text file
-
-	// 	fmt.Println("")
-	// }
-
 	common.FlushedNodeList = map[common.Hash]int{}
-	common.TrieUpdateElseTemp = []common.Address{}
+	common.TrieUpdateElseTemp = make([]common.Address, 0)
 	common.GlobalTxHash = common.HexToHash("0x0")
 	common.GlobalBlockMiner = common.Address{}
 	common.GlobalBlockUncles = []common.Address{}

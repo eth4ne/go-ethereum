@@ -7,15 +7,15 @@ import (
 )
 
 var (
-	GlobalTxHash            Hash    = HexToHash("0x0")
-	GlobalTxTo              Address = HexToAddress("0x0")
-	GlobalTxFrom            Address = HexToAddress("0x0")
-	GlobalBlockNumber       int     = 0
-	GlobalMutex             sync.Mutex
-	GlobalBlockMiner        Address = HexToAddress("0x0")
-	GlobalBlockUncles               = []Address{}
-	GlobalBlockUnclesHeader         = []Address{}
-	// GlobalContractAddress Address = HexToAddress("0x0")
+	GlobalTxHash      Hash    = HexToHash("0x0")
+	GlobalTxTo        Address = HexToAddress("0x0")
+	GlobalTxFrom      Address = HexToAddress("0x0")
+	GlobalBlockNumber int     = 0
+	GlobalMutex       sync.Mutex
+	GlobalBlockMiner  Address = HexToAddress("0x0")
+	GlobalBlockUncles         = []Address{}
+	// GlobalBlockUnclesHeader         = []Address{}
+	GlobalContractAddress Address = HexToAddress("0x0")
 
 	Flushednode_block = map[int]*(map[Hash]int){} // key : block number, value: list of node hash
 	FlushedNodeList   = map[Hash]int{}            // key : block number, value: list of node hash
@@ -43,7 +43,7 @@ type TxInformation struct {
 	To                      Address
 	FromAdrHash             Hash
 	ToAdrHash               Hash
-	Types                   int       // 1: send, 2: contract creation, 3: contract call, 0: etc.
+	Types                   int       // 1: send, 2: contract creation, 3: contract call, 4: failed, 0: default.
 	Else                    []Address // account list modified by internal tx
 	DeployedContractAddress Address
 

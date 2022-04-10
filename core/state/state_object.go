@@ -337,7 +337,7 @@ func (s *stateObject) updateTrie(db Database) Trie {
 		} else {
 			// Encoding []byte cannot fail, ok to ignore the error.
 			v, _ = rlp.EncodeToBytes(common.TrimLeftZeroes(value[:]))
-			s.setError(tr.TryUpdate(key[:], v))
+			s.setError(tr.MyTryUpdate(key[:], v, s.txHash, s.address)) //jhkim
 			s.db.StorageUpdated += 1
 		}
 		// If state snapshotting is active, cache the data til commit

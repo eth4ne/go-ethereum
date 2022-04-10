@@ -171,46 +171,50 @@ func PrintTxDetail(blocknumber, distance int) {
 			}
 		}
 
-		// if v.Types != 1 { //except transfer transaction
+		if v.Types != 1 { //except transfer transaction
 
-		s += fmt.Sprintln("TxID: ", k)
-		s += fmt.Sprintln("  Block: ", v.BlockNumber)
-		if v.Types == 1 {
-			s += fmt.Sprintln("  Tx: Transfer")
-			// s += fmt.Sprintln("  common.TxInformation: Transfer or Contract call")
-		} else if v.Types == 2 {
-			s += fmt.Sprintln("  Tx: Contract creation tx")
-		} else if v.Types == 3 {
-			s += fmt.Sprintln("  Tx: Contract call")
-		} else {
-			s += fmt.Sprintln("  Wrong Tx Information")
-		}
-
-		s += fmt.Sprintln("    From: \t\t", v.From)
-		if v.Types == 1 {
-			s += fmt.Sprintln("    To(EOA): \t\t", v.To)
-			// s += fmt.Sprintln("    To: \t\t", v.To)
-		} else if v.Types == 3 {
-			s += fmt.Sprintln("    To(CA): \t\t", v.To)
-		} else {
-			s += fmt.Sprintln("    DeployedCA: ", v.DeployedContractAddress)
-		}
-
-		if v.Types != 1 {
-			s += fmt.Sprintln("    Contract related Address")
-			for _, v := range v.Else {
-				s += fmt.Sprintln("      EOA: ", v) // EOAs called by contract
+			s += fmt.Sprintln("TxID:", k)
+			s += fmt.Sprintln("  Block:", v.BlockNumber)
+			if v.Types == 1 {
+				s += fmt.Sprintln("  Tx: Transfer")
+				// s += fmt.Sprintln("  common.TxInformation: Transfer or Contract call")
+			} else if v.Types == 2 {
+				s += fmt.Sprintln("  Tx: Contract creation tx")
+			} else if v.Types == 3 {
+				s += fmt.Sprintln("  Tx: Contract call")
+			} else if v.Types == 4 {
+				s += fmt.Sprintln("  Tx: Failed Transaction")
+			} else {
+				s += fmt.Sprintln("  Wrong Tx Information")
 			}
 
-			for kk, vv := range v.ContractAddress_SlotHash {
-
-				s += fmt.Sprintln("      CA: ", kk)
-				s += fmt.Sprintln("        SlotHash: ", vv)
+			s += fmt.Sprintln("    From:\t", v.From)
+			if v.Types == 1 {
+				s += fmt.Sprintln("    To(EOA):\t", v.To)
+				// s += fmt.Sprintln("    To: \t\t", v.To)
+			} else if v.Types == 3 {
+				s += fmt.Sprintln("    To(CA):\t", v.To)
+			} else if v.Types == 4 {
+				// Do nothing
+			} else {
+				s += fmt.Sprintln("    DeployedCA:", v.DeployedContractAddress)
 			}
+
+			if v.Types != 1 && v.Types != 4 {
+				s += fmt.Sprintln("    Contract related Address")
+				for _, v := range v.Else {
+					s += fmt.Sprintln("      EOA:", v) // EOAs called by contract
+				}
+
+				for kk, vv := range v.ContractAddress_SlotHash {
+
+					s += fmt.Sprintln("      CA:", kk)
+					s += fmt.Sprintln("        SlotHash:", vv)
+				}
+			}
+			// s += fmt.Sprintln()
+			fmt.Fprintln(f, s)
 		}
-		// s += fmt.Sprintln()
-		fmt.Fprintln(f, s)
-		// }
 
 	}
 

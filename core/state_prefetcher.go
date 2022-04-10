@@ -48,7 +48,7 @@ func newStatePrefetcher(config *params.ChainConfig, bc *BlockChain, engine conse
 // the transaction messages using the statedb, but any changes are discarded. The
 // only goal is to pre-cache transaction signatures and state trie nodes.
 func (p *statePrefetcher) Prefetch(block *types.Block, statedb *state.StateDB, cfg vm.Config, interrupt *uint32) {
-	// return // jhkim: stop prefetch
+	return // jhkim: stop prefetch
 
 	var (
 		header       = block.Header()

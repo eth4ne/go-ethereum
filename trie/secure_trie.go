@@ -18,6 +18,7 @@ package trie
 
 import (
 	"fmt"
+	"os"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -93,60 +94,59 @@ func (t *SecureTrie) TryGetNode(path []byte) ([]byte, int, error) {
 func (t *SecureTrie) TryUpdateAccount(key []byte, acc *types.StateAccount, txHash common.Hash) error {
 	hk := t.hashKey(key)
 	data, err := rlp.EncodeToBytes(acc)
-	// if common.GlobalBlockNumber == 116525 {
-	// 	fmt.Println("116525 TryUpdateAccount/ key:", common.BytesToAddress(key), "value:", common.Bytes2Hex(data))
-	// }
 	if err != nil {
 		return err
 	}
-	addr := common.BytesToAddress(key)
-	if addr != common.HexToAddress("0x0") {
 
-		writeAddrHashToAddr(hk, key)
-		if addr == common.GlobalTxTo || addr == common.GlobalTxFrom {
-			writeTxHash(txHash, hk, key) // to, from address update
-		} else if txHash != common.HexToHash("0x0") {
-
-			if addr != common.GlobalBlockMiner { // if account receiving state transition reward is block miner, exclude it
-				// fmt.Println("1")
-				common.GlobalMutex.Lock()
-				// fmt.Println("2")
-				TI, ok := common.TxDetail[txHash]
-				// fmt.Println("3")
-				common.GlobalMutex.Unlock()
-				// fmt.Println("4")
-				if ok {
-					// if common.GlobalBlockNumber > 68300 {
-					// 	fmt.Println("TryUpdateAccount TI:", TI, "txhash", txHash, "address", addr, "key", key, "hashkey", hk)
-					// }
-					_, ok := TI.ContractAddress_SlotHash[addr] // sometimes error. invalid memory address or nil pointer dereference
-
-					if !ok {
-						if acc.Balance.Cmp(common.Big0) != 0 { // remove 0 balance update
-							if TI.DeployedContractAddress != addr {
-								writeTxElse(txHash, key) // except to and from. This includes state trie updates made by internal tx and state transition reward
-							}
-						}
-					}
-				}
-
-			}
-
-		} else { // miner, uncles, and unknowns
-			if addr != common.GlobalBlockMiner {
-				// fmt.Println("Block:", common.GlobalBlockNumber, "Miner:", common.GlobalBlockMiner, "Uncles:", common.GlobalBlockUncles, "Key:", common.BytesToAddress(key))
-				if !containAddress(addr, common.GlobalBlockUncles) {
-					common.TrieUpdateElseTemp = append(common.TrieUpdateElseTemp, addr) // unknown account update
-				}
-
-			}
-		}
-
-	}
-
+	before := t.trie.Hash()
 	if err := t.trie.TryUpdate(hk, data); err != nil {
 		return err
 	}
+	if t.trie.Hash() != before {
+		addr := common.BytesToAddress(key)
+
+		if txHash != common.HexToHash("0x0") { // 0x0 txHash should be only in genesis block or.. miner block?
+			writeAddrHashToAddr(hk, key)
+
+			// 3 kinds of account update: tx To & From, miner & uncle, inner transaction
+			if addr == common.GlobalTxTo || addr == common.GlobalTxFrom { // tx To & From
+				writeTxHash(txHash, hk, key) // to, from address update
+			} else if addr == common.GlobalBlockMiner || containAddress(addr, common.GlobalBlockUncles) { // miner & uncles
+				// Do nothing
+
+			} else { //inner transaction
+				common.GlobalMutex.Lock()
+				TI, ok := common.TxDetail[txHash]
+				common.GlobalMutex.Unlock()
+
+				if ok { // check txDetail exists
+					_, ok := TI.ContractAddress_SlotHash[addr] // why? address가 contract address에 존재한다? -> contract address의 update가 말이되나?
+					if !ok {
+						if common.GlobalContractAddress != addr {
+							// if common.GlobalBlockNumber == 54347 {
+							// 	fmt.Println("TryUpdateAccount ", "txhash", txHash, "TI.DeployedContractAddress", TI.DeployedContractAddress, "address", addr)
+							// }
+							writeTxElse(txHash, key) // except to and from. This includes state trie updates made by internal tx
+						}
+					} else { // update contract account's leaf node
+						// fmt.Println("ContractAddress_Slothash contains addr", addr, "txHash", txHash)
+					}
+				} else {
+					fmt.Println("Error: Want to write SlotHashes of ContractAddress, but there is no txDetail")
+					fmt.Println(txHash, addr, "TI: ", TI)
+					os.Exit(0)
+				}
+			}
+
+		} else { // 0x0 txHash. miner & uncle
+			if addr != common.GlobalBlockMiner && !containAddress(addr, common.GlobalBlockUncles) {
+				// fmt.Println("Unknown account update", common.GlobalBlockNumber, addr, common.GlobalBlockMiner)
+				common.TrieUpdateElseTemp = append(common.TrieUpdateElseTemp, addr) // unknown account update
+			}
+
+		}
+	}
+
 	t.getSecKeyCache()[string(hk)] = common.CopyBytes(key)
 	return nil
 }
@@ -216,6 +216,11 @@ func writeTxElse(txHash common.Hash, key []byte) {
 	common.GlobalMutex.Lock()
 	defer common.GlobalMutex.Unlock()
 
+	// txHash = common.GlobalTxHash // for double check
+
+	// if common.GlobalBlockNumber == 55284 {
+	// 	fmt.Println("    writeTxElse", common.GlobalBlockNumber, txHash, common.BytesToAddress(key))
+	// }
 	if TI, ok := common.TxDetail[txHash]; ok {
 
 		if !containAddress(common.BytesToAddress(key), TI.Else) {
@@ -240,17 +245,24 @@ func writeAddrHashToAddr(hk, key []byte) {
 }
 
 // write updated contractAccount's SlotHash
-func writeContractAccountSlotHash(txHash, slotHash common.Hash, addr common.Address) {
+func writeContractAccountSlotHash(txHash, slotHash common.Hash, addr common.Address, slot common.Address) {
 	// if value, ok := common.TxDetailSyncMap.Load(txHash); ok { // concurrent map read and map write
 	common.GlobalMutex.Lock()
 	defer common.GlobalMutex.Unlock()
+	// fmt.Println("write ContractAccountSlotHash", txHash, addr, slotHash)
 	if TI, ok := common.TxDetail[txHash]; ok {
+		// if common.GlobalBlockNumber == 72202 {
+		// 	fmt.Println("TI.ContractAddress_SlotHash", common.GlobalBlockNumber, txHash, slot, slotHash)
+		// }
+		if tmp, ok := TI.ContractAddress_SlotHash[addr]; ok {
+			if !containHash(slotHash, *tmp) {
+				*tmp = append(*tmp, slotHash)
+				TI.ContractAddress_SlotHash[addr] = tmp
+				common.TxDetail[txHash] = TI
+			}
+		} else {
 
-		tmp := TI.ContractAddress_SlotHash[addr]
-		if !containHash(slotHash, *tmp) {
-			*tmp = append(*tmp, slotHash)
-			TI.ContractAddress_SlotHash[addr] = tmp
-			common.TxDetail[txHash] = TI
+			TI.ContractAddress_SlotHash[addr] = &[]common.Hash{slotHash}
 		}
 	} else {
 
@@ -268,9 +280,11 @@ func (t *SecureTrie) MyTryUpdate(key, value []byte, txHash common.Hash, addr com
 	slotHash := common.BytesToHash(hk)
 
 	if txHash != common.HexToHash("0x0") {
-		writeContractAccountSlotHash(txHash, slotHash, CAaddress)
+		// fmt.Println("MyTryUpdate", txHash, CAaddress, slotHash)
+		writeContractAccountSlotHash(txHash, slotHash, CAaddress, common.BytesToAddress(key))
 	} else {
-		writeContractAccountSlotHash(common.GlobalTxHash, slotHash, CAaddress)
+		// fmt.Println("MyTryUpdate", common.GlobalTxHash, CAaddress, slotHash)
+		writeContractAccountSlotHash(common.GlobalTxHash, slotHash, CAaddress, common.BytesToAddress(key))
 	}
 
 	err := t.trie.TryUpdate(hk, value)
