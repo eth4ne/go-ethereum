@@ -1845,23 +1845,23 @@ func (s *StateDB) DeletePreviousLeafNodes(keysToDelete []common.Hash) {
 }
 
 // InactivateLeafNodes inactivates inactive accounts (i.e., move old leaf nodes to left) (jmlee)
-func (s *StateDB) InactivateLeafNodes(inactiveBoundaryKey, lastKeyToCheck int64) int64 {
+func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int64 {
 
-	// fmt.Println("\ninspect trie to inactivate:", inactiveBoundaryKey, "~",lastKeyToCheck)
+	fmt.Println("\ninspect trie to inactivate:", firstKeyToCheck, "~",lastKeyToCheck)
 	// fmt.Println("trie root before inactivate leaf nodes:", s.trie.Hash().Hex())
 
 	// normTrie := s.trie.GetTrie() // TODO: using this function, we can delete SecureTrie.***_SetKey functions
 
 	// DFS the non-nil account from the trie (joonha)
-	firstKey := common.Int64ToHash(inactiveBoundaryKey)
+	firstKey := common.Int64ToHash(firstKeyToCheck)
 	lastKey := common.Int64ToHash(lastKeyToCheck)
 	AccountsToInactivate, KeysToInactivate, _ := s.trie.TryGetAll_SetKey(firstKey[:], lastKey[:])
 
-	// fmt.Println("")
-	// fmt.Println("Accounts length: ", len(AccountsToInactivate))
-	// fmt.Println("Keys length: ", len(KeysToInactivate))
-	// fmt.Println("AccountsToInactivate: ", AccountsToInactivate)
-	// fmt.Println("KeysToInactivate: ", KeysToInactivate)
+	fmt.Println("")
+	fmt.Println("Accounts length: ", len(AccountsToInactivate))
+	fmt.Println("Keys length: ", len(KeysToInactivate))
+	fmt.Println("AccountsToInactivate: ", AccountsToInactivate)
+	fmt.Println("KeysToInactivate: ", KeysToInactivate)
 
 	// move inactive leaf nodes to left
 	for index, key := range KeysToInactivate { 
@@ -1871,7 +1871,7 @@ func (s *StateDB) InactivateLeafNodes(inactiveBoundaryKey, lastKeyToCheck int64)
 		common.AccountsToDeleteFromDisk = append(common.AccountsToDeleteFromDisk, addr)
 
 		// insert inactive leaf node to left
-		keyToInsert := common.Int64ToHash(inactiveBoundaryKey + int64(index))
+		keyToInsert := common.Int64ToHash(common.InactiveBoundaryKey + int64(index))
 		// fmt.Println("(Inactivate)insert -> key:", keyToInsert.Hex())
 		if err := s.trie.TryUpdate_SetKey(keyToInsert[:], AccountsToInactivate[index]); err != nil {
 			s.setError(fmt.Errorf("updateStateObject (%x) error: %v", keyToInsert[:], err))
@@ -1965,7 +1965,7 @@ func (s *StateDB) InactivateLeafNodes(inactiveBoundaryKey, lastKeyToCheck int64)
 	}
 
 	// print result
-	// fmt.Println("inactivate", len(KeysToInactivate), "accounts")
+	fmt.Println("inactivate", len(KeysToInactivate), "accounts")
 	// fmt.Println("trie root after inactivate leaf nodes:", s.trie.Hash().Hex())
 
 	// return # of inactivated accounts

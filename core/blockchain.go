@@ -1362,7 +1362,9 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 
 	// delete leaf nodes from disk (joonha)
 	// fmt.Println("\nBLOCK NUMBER: ", block.Header().Number.Int64())
-	if (block.Header().Number.Int64()) % common.DeleteLeafNodeEpoch == 0 { // at every delete epoch
+	if (block.Header().Number.Int64()) == common.DeleteLeafNodeEpoch-2 {
+		// skip
+	} else if (block.Header().Number.Int64()) % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-2 {
 		// fmt.Println("THIS IS THE DELETING EPOCH\n")
 		for _, addr := range common.AccountsToDeleteFromDisk {
 			// fmt.Println("\nDeleting addr: ", addr)
@@ -1381,23 +1383,23 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	}
 
 	// print database inspect result (jmlee)
-	// fmt.Println("\nblock inserted -> blocknumber:", block.Header().Number.Int64())
-	// fmt.Println("InactiveBoundaryKey:", common.InactiveBoundaryKey)
-	// fmt.Println("common.CheckpointKeys:", common.CheckpointKeys)
+	fmt.Println("\nblock inserted -> blocknumber:", block.Header().Number.Int64())
+	fmt.Println("InactiveBoundaryKey:", common.InactiveBoundaryKey)
+	fmt.Println("common.CheckpointKeys:", common.CheckpointKeys)
 	if block.Header().Number.Int64() % 1 == 0 {
 		// inspect database
 		rawdb.InspectDatabase(rawdb.GlobalDB, nil, nil)
 
-		// // print state trie (jmlee)
-		// // fmt.Println("(AFTER DELETION) $$$ print state trie at block", bc.CurrentBlock().Header().Number)
-		// ldb := trie.NewDatabase(bc.db)
-		// stateTrie, _ := trie.NewSecure(bc.CurrentBlock().Root(), ldb)
-		// // stateTrie.Print()
-		// if stateTrie == nil {
-		// 	fmt.Println("stateTrie is nil")
-		// } else {
-		// 	stateTrie.Print()
-		// }
+		// print state trie (jmlee)
+		fmt.Println("(AFTER DELETION) $$$ print state trie at block", bc.CurrentBlock().Header().Number)
+		ldb := trie.NewDatabase(bc.db)
+		stateTrie, _ := trie.NewSecure(bc.CurrentBlock().Root(), ldb)
+		// stateTrie.Print()
+		if stateTrie == nil {
+			fmt.Println("stateTrie is nil")
+		} else {
+			stateTrie.Print()
+		}
 
 		// /******************************************/
 		// // PRINTINNG STATETRIE FROM SOMETHING
@@ -1414,8 +1416,18 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		// }
 	}
 
-	// set common.DoDeleteLeafNode (jmlee)
-	if (block.Header().Number.Int64()+1) % common.DeleteLeafNodeEpoch == 0 {
+	// // set common.DoDeleteLeafNode (jmlee)
+	// if (block.Header().Number.Int64()+1) % common.DeleteLeafNodeEpoch == 0 {
+	// 	common.DoDeleteLeafNode = true
+	// } else {
+	// 	common.DoDeleteLeafNode = false
+	// }
+
+	// set common.DoDeleteLeafNode (joonha)
+	bn := (block.Header().Number.Int64()+1)
+	if bn == common.DeleteLeafNodeEpoch-2 {
+		// skip
+	} else if bn % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-2 {
 		common.DoDeleteLeafNode = true
 	} else {
 		common.DoDeleteLeafNode = false
