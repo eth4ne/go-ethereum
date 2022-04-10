@@ -2033,7 +2033,7 @@ func (s *StateDB) RebuildStorageTrieFromSnapshot(snapRoot common.Hash, addr comm
 func (s *StateDB) GetTrie(addr common.Address) Trie {
 	obj := s.getStateObject_FromInactiveTrie(addr) 
 	if obj == nil {
-		return
+		return nil
 	}
 	return obj.getTrie(s.db)
 } 
