@@ -2032,6 +2032,9 @@ func (s *StateDB) RebuildStorageTrieFromSnapshot(snapRoot common.Hash, addr comm
 // (joonha)
 func (s *StateDB) GetTrie(addr common.Address) Trie {
 	obj := s.getStateObject_FromInactiveTrie(addr) 
+	if obj == nil {
+		return
+	}
 	return obj.getTrie(s.db)
 } 
 

@@ -1094,10 +1094,10 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 		common.IsFirst = true
 		return 
 	} else if common.IsFirst == true { // 1st
-		if bn % common.DeleteLeafNodeEpoch == common.InactivateLeafNodeEpoch - 2 { // delEpoch
+		if bn % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch - 2 { // delEpoch
 
 			// skip at the first epoch (joonha)
-			if bn == common.InactivateLeafNodeEpoch-2 {
+			if bn == common.DeleteLeafNodeEpoch-2 {
 				return 
 			}
 
