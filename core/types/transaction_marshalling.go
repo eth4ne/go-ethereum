@@ -42,6 +42,9 @@ type txJSON struct {
 	S                    *hexutil.Big    `json:"s"`
 	To                   *common.Address `json:"to"`
 
+	// delegated transaction field
+	DelegatedFrom        *common.Address `json:"delegatedFrom"`
+
 	// Access list transaction fields:
 	ChainID    *hexutil.Big `json:"chainId,omitempty"`
 	AccessList *AccessList  `json:"accessList,omitempty"`
@@ -66,6 +69,17 @@ func (t *Transaction) MarshalJSON() ([]byte, error) {
 		enc.Value = (*hexutil.Big)(tx.Value)
 		enc.Data = (*hexutil.Bytes)(&tx.Data)
 		enc.To = t.To()
+		enc.V = (*hexutil.Big)(tx.V)
+		enc.R = (*hexutil.Big)(tx.R)
+		enc.S = (*hexutil.Big)(tx.S)
+	case *DelegatedTx:
+		enc.Nonce = (*hexutil.Uint64)(&tx.Nonce)
+		enc.Gas = (*hexutil.Uint64)(&tx.Gas)
+		enc.GasPrice = (*hexutil.Big)(tx.GasPrice)
+		enc.Value = (*hexutil.Big)(tx.Value)
+		enc.Data = (*hexutil.Bytes)(&tx.Data)
+		enc.To = t.To()
+		enc.DelegatedFrom = t.DelegatedFrom()
 		enc.V = (*hexutil.Big)(tx.V)
 		enc.R = (*hexutil.Big)(tx.R)
 		enc.S = (*hexutil.Big)(tx.S)
@@ -113,6 +127,54 @@ func (t *Transaction) UnmarshalJSON(input []byte) error {
 		inner = &itx
 		if dec.To != nil {
 			itx.To = dec.To
+		}
+		if dec.Nonce == nil {
+			return errors.New("missing required field 'nonce' in transaction")
+		}
+		itx.Nonce = uint64(*dec.Nonce)
+		if dec.GasPrice == nil {
+			return errors.New("missing required field 'gasPrice' in transaction")
+		}
+		itx.GasPrice = (*big.Int)(dec.GasPrice)
+		if dec.Gas == nil {
+			return errors.New("missing required field 'gas' in transaction")
+		}
+		itx.Gas = uint64(*dec.Gas)
+		if dec.Value == nil {
+			return errors.New("missing required field 'value' in transaction")
+		}
+		itx.Value = (*big.Int)(dec.Value)
+		if dec.Data == nil {
+			return errors.New("missing required field 'input' in transaction")
+		}
+		itx.Data = *dec.Data
+		if dec.V == nil {
+			return errors.New("missing required field 'v' in transaction")
+		}
+		itx.V = (*big.Int)(dec.V)
+		if dec.R == nil {
+			return errors.New("missing required field 'r' in transaction")
+		}
+		itx.R = (*big.Int)(dec.R)
+		if dec.S == nil {
+			return errors.New("missing required field 's' in transaction")
+		}
+		itx.S = (*big.Int)(dec.S)
+		withSignature := itx.V.Sign() != 0 || itx.R.Sign() != 0 || itx.S.Sign() != 0
+		if withSignature {
+			if err := sanityCheckSignature(itx.V, itx.R, itx.S, true); err != nil {
+				return err
+			}
+		}
+
+	case DelegatedTxType:
+		var itx DelegatedTx
+		inner = &itx
+		if dec.To != nil {
+			itx.To = dec.To
+		}
+		if dec.DelegatedFrom == nil {
+			return errors.New("missing required field 'delegatedFrom' in transaction")
 		}
 		if dec.Nonce == nil {
 			return errors.New("missing required field 'nonce' in transaction")

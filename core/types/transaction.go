@@ -29,6 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 var (
@@ -45,6 +46,7 @@ const (
 	LegacyTxType = iota
 	AccessListTxType
 	DynamicFeeTxType
+	DelegatedTxType
 )
 
 // Transaction is an Ethereum transaction.
@@ -82,6 +84,9 @@ type TxData interface {
 	value() *big.Int
 	nonce() uint64
 	to() *common.Address
+	
+	delegatedFrom() *common.Address
+	signedFrom() *common.Address
 
 	rawSignatureValues() (v, r, s *big.Int)
 	setSignatureValues(chainID, v, r, s *big.Int)
@@ -89,7 +94,8 @@ type TxData interface {
 
 // EncodeRLP implements rlp.Encoder
 func (tx *Transaction) EncodeRLP(w io.Writer) error {
-	if tx.Type() == LegacyTxType {
+	if tx.Type() == LegacyTxType || tx.Type() == DelegatedTxType {
+		tx.inner.txType()
 		return rlp.Encode(w, tx.inner)
 	}
 	// It's an EIP-2718 typed TX envelope.
@@ -112,7 +118,7 @@ func (tx *Transaction) encodeTyped(w *bytes.Buffer) error {
 // For legacy transactions, it returns the RLP encoding. For EIP-2718 typed
 // transactions, it returns the type and payload.
 func (tx *Transaction) MarshalBinary() ([]byte, error) {
-	if tx.Type() == LegacyTxType {
+	if tx.Type() == LegacyTxType || tx.Type() == DelegatedTxType {
 		return rlp.EncodeToBytes(tx.inner)
 	}
 	var buf bytes.Buffer
@@ -287,6 +293,16 @@ func (tx *Transaction) To() *common.Address {
 	return copyAddressPtr(tx.inner.to())
 }
 
+// delegatedFrom
+func (tx *Transaction) DelegatedFrom() *common.Address {
+	return copyAddressPtr(tx.inner.delegatedFrom())
+}
+
+// signedFrom
+func (tx *Transaction) SignedFrom() *common.Address {
+	return copyAddressPtr(tx.inner.signedFrom())
+}
+
 // Cost returns gas * gasPrice + value.
 func (tx *Transaction) Cost() *big.Int {
 	total := new(big.Int).Mul(tx.GasPrice(), new(big.Int).SetUint64(tx.Gas()))
@@ -298,6 +314,10 @@ func (tx *Transaction) Cost() *big.Int {
 // The return values should not be modified by the caller.
 func (tx *Transaction) RawSignatureValues() (v, r, s *big.Int) {
 	return tx.inner.rawSignatureValues()
+}
+
+func (tx *Transaction) SetRawSignatureValues(v, r, s *big.Int) {
+	tx.inner.setSignatureValues(tx.inner.chainID(), v, r, s)
 }
 
 // GasFeeCapCmp compares the fee cap of two transactions.
@@ -365,7 +385,7 @@ func (tx *Transaction) Hash() common.Hash {
 	}
 
 	var h common.Hash
-	if tx.Type() == LegacyTxType {
+	if tx.Type() == LegacyTxType || tx.Type() == DelegatedTxType {
 		h = rlpHash(tx.inner)
 	} else {
 		h = prefixedRlpHash(tx.Type(), tx.inner)
@@ -542,6 +562,11 @@ func (t *TransactionsByPriceAndNonce) Peek() *Transaction {
 // Shift replaces the current best head with the next one from the same account.
 func (t *TransactionsByPriceAndNonce) Shift() {
 	acc, _ := Sender(t.signer, t.heads[0].tx)
+	if t.heads[0].tx.Type() == DelegatedTxType {
+		log.Trace("[transaction.go] Shift-delegated", "from", acc)
+	} else {
+		log.Trace("[transaction.go] Shift", "from", acc)
+	}
 	if txs, ok := t.txs[acc]; ok && len(txs) > 0 {
 		if wrapped, err := NewTxWithMinerFee(txs[0], t.baseFee); err == nil {
 			t.heads[0], t.txs[acc] = wrapped, txs[1:]
@@ -612,6 +637,9 @@ func (tx *Transaction) AsMessage(s Signer, baseFee *big.Int) (Message, error) {
 	}
 	var err error
 	msg.from, err = Sender(s, tx)
+	if tx.Type() == DelegatedTxType {
+		msg.from = *tx.DelegatedFrom()
+	}
 	return msg, err
 }
 

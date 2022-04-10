@@ -56,6 +56,13 @@ type Config struct {
 	Noverify   bool           // Disable remote mining solution verification(only useful in ethash).
 }
 
+// added 0 tx flag
+type MinerConfig struct {
+	coinbase common.Address
+	allowZeroTxBlock bool //Now
+	allowConsecutiveZeroTxBlock bool
+}
+
 // Miner creates blocks and searches for proof-of-work values.
 type Miner struct {
 	mux      *event.TypeMux
@@ -64,8 +71,10 @@ type Miner struct {
 	eth      Backend
 	engine   consensus.Engine
 	exitCh   chan struct{}
-	startCh  chan common.Address
+	startCh  chan MinerConfig
 	stopCh   chan struct{}
+	allowZeroTxBlock bool
+	allowConsecutiveZeroTxBlock bool
 
 	wg sync.WaitGroup
 }
@@ -76,7 +85,7 @@ func New(eth Backend, config *Config, chainConfig *params.ChainConfig, mux *even
 		mux:     mux,
 		engine:  engine,
 		exitCh:  make(chan struct{}),
-		startCh: make(chan common.Address),
+		startCh: make(chan MinerConfig),
 		stopCh:  make(chan struct{}),
 		worker:  newWorker(config, chainConfig, engine, eth, mux, isLocalBlock, true),
 	}
@@ -124,19 +133,25 @@ func (miner *Miner) update() {
 				canStart = true
 				if shouldStart {
 					miner.SetEtherbase(miner.coinbase)
+					miner.worker.setAllowZeroTxBlock(miner.allowZeroTxBlock)
+					miner.worker.setAllowConsecutiveZeroTxBlock(miner.allowConsecutiveZeroTxBlock)
 					miner.worker.start()
 				}
 			case downloader.DoneEvent:
 				canStart = true
 				if shouldStart {
 					miner.SetEtherbase(miner.coinbase)
+					miner.worker.setAllowZeroTxBlock(miner.allowZeroTxBlock)
+					miner.worker.setAllowConsecutiveZeroTxBlock(miner.allowConsecutiveZeroTxBlock)
 					miner.worker.start()
 				}
 				// Stop reacting to downloader events
 				events.Unsubscribe()
 			}
-		case addr := <-miner.startCh:
-			miner.SetEtherbase(addr)
+		case minerconfig := <-miner.startCh:
+			miner.SetEtherbase(minerconfig.coinbase)
+			miner.SetAllowZeroTxBlock(minerconfig.allowZeroTxBlock)
+			miner.SetAllowConsecutiveZeroTxBlock(minerconfig.allowConsecutiveZeroTxBlock)
 			if canStart {
 				miner.worker.start()
 			}
@@ -151,8 +166,13 @@ func (miner *Miner) update() {
 	}
 }
 
-func (miner *Miner) Start(coinbase common.Address) {
-	miner.startCh <- coinbase
+func (miner *Miner) Start(coinbase common.Address, allowZeroTxBlock bool, allowConsecutiveZeroTxBlock bool) {
+	minerconfig := &MinerConfig{
+		coinbase: coinbase,
+		allowZeroTxBlock: allowZeroTxBlock,
+		allowConsecutiveZeroTxBlock: allowConsecutiveZeroTxBlock,
+	}
+	miner.startCh <- *minerconfig
 }
 
 func (miner *Miner) Stop() {
@@ -211,6 +231,17 @@ func (miner *Miner) SetEtherbase(addr common.Address) {
 	miner.coinbase = addr
 	miner.worker.setEtherbase(addr)
 }
+
+func (miner *Miner) SetAllowZeroTxBlock(flag bool) {
+	miner.allowZeroTxBlock = flag
+	miner.worker.setAllowZeroTxBlock(flag)
+}
+
+func (miner *Miner) SetAllowConsecutiveZeroTxBlock(flag bool) {
+	miner.allowConsecutiveZeroTxBlock = flag
+	miner.worker.setAllowConsecutiveZeroTxBlock(flag)
+}
+
 
 // SetGasCeil sets the gaslimit to strive for when mining blocks post 1559.
 // For pre-1559 blocks, it sets the ceiling.

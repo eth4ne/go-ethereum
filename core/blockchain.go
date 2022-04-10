@@ -1384,9 +1384,9 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	// fmt.Println("\nblock inserted -> blocknumber:", block.Header().Number.Int64())
 	// fmt.Println("InactiveBoundaryKey:", common.InactiveBoundaryKey)
 	// fmt.Println("common.CheckpointKeys:", common.CheckpointKeys)
-	if block.Header().Number.Int64() % 1 == 0 {
+	if block.Header().Number.Int64() % 40320 == 0 {
 		// inspect database
-		rawdb.InspectDatabase(rawdb.GlobalDB, nil, nil)
+		rawdb.InspectDatabase_save(rawdb.GlobalDB, nil, nil, block.Header().Number.Int64())
 
 		// // print state trie (jmlee)
 		// // fmt.Println("(AFTER DELETION) $$$ print state trie at block", bc.CurrentBlock().Header().Number)

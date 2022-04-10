@@ -40,6 +40,8 @@ import (
 	"errors"
 	"math/big"
 	"unsafe"
+
+	"github.com/decred/dcrd/dcrec/secp256k1/v4/ecdsa"
 )
 
 var context *C.secp256k1_context
@@ -120,6 +122,25 @@ func RecoverPubkey(msg []byte, sig []byte) ([]byte, error) {
 	}
 	return pubkey, nil
 }
+
+//go secp256k1 implementation
+func RecoverPubkey_go(msg []byte, sig []byte) ([]byte, error) {
+	pubkey, iscompressed, err := ecdsa.RecoverCompact(sig, msg)
+	if err != nil {
+		return nil, ErrRecoverFailed
+	}
+
+	var pubkey_byte []byte
+	if iscompressed {
+		pubkey_byte = pubkey.SerializeCompressed()
+	} else {
+		//Always uncompressed result
+		pubkey_byte = pubkey.SerializeUncompressed()
+	}
+	return pubkey_byte, nil
+}
+
+
 
 // VerifySignature checks that the given pubkey created signature over message.
 // The signature should be in [R || S] format.

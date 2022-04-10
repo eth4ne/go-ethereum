@@ -42,6 +42,7 @@ type TransactionArgs struct {
 	MaxPriorityFeePerGas *hexutil.Big    `json:"maxPriorityFeePerGas"`
 	Value                *hexutil.Big    `json:"value"`
 	Nonce                *hexutil.Uint64 `json:"nonce"`
+	DelegatedFrom        *common.Address `json:"delegatedFrom"`
 
 	// We accept "data" and "input" for backwards-compatibility reasons.
 	// "input" is the newer name and should be preferred by clients.
@@ -60,6 +61,14 @@ func (args *TransactionArgs) from() common.Address {
 		return common.Address{}
 	}
 	return *args.From
+}
+
+// delegatedFrom retrieves the delegated transaction sender address.
+func (args *TransactionArgs) delegatedFrom() common.Address {
+	if args.DelegatedFrom == nil {
+		return common.Address{}
+	}
+	return *args.DelegatedFrom
 }
 
 // data retrieves the transaction calldata. Input field is preferred.
@@ -130,7 +139,15 @@ func (args *TransactionArgs) setDefaults(ctx context.Context, b Backend) error {
 		args.Value = new(hexutil.Big)
 	}
 	if args.Nonce == nil {
-		nonce, err := b.GetPoolNonce(ctx, args.from())
+		//delegatedFrom
+		var nonce uint64
+		var err error
+		if args.DelegatedFrom != nil {
+			log.Trace("[transaction_args.go] Assigning nonce to delegated from", "from", args.DelegatedFrom)
+			nonce, err = b.GetPoolNonce(ctx, args.delegatedFrom())
+		} else {
+			nonce, err = b.GetPoolNonce(ctx, args.from())
+		}
 		if err != nil {
 			return err
 		}
@@ -139,9 +156,9 @@ func (args *TransactionArgs) setDefaults(ctx context.Context, b Backend) error {
 	if args.Data != nil && args.Input != nil && !bytes.Equal(*args.Data, *args.Input) {
 		return errors.New(`both "data" and "input" are set and not equal. Please use "input" to pass transaction call data`)
 	}
-	if args.To == nil && len(args.data()) == 0 {
-		return errors.New(`contract creation without any data provided`)
-	}
+	//if args.To == nil && len(args.data()) == 0 {
+	//	return errors.New(`contract creation without any data provided`)
+	//}
 	// Estimate the gas usage if necessary.
 	if args.Gas == nil {
 		// These fields are immutable during the estimation, safe to
@@ -156,6 +173,7 @@ func (args *TransactionArgs) setDefaults(ctx context.Context, b Backend) error {
 			Value:                args.Value,
 			Data:                 (*hexutil.Bytes)(&data),
 			AccessList:           args.AccessList,
+			DelegatedFrom:        args.DelegatedFrom,
 		}
 		pendingBlockNr := rpc.BlockNumberOrHashWithNumber(rpc.PendingBlockNumber)
 		estimated, err := DoEstimateGas(ctx, b, callArgs, pendingBlockNr, b.RPCGasCap())
@@ -192,7 +210,7 @@ func (args *TransactionArgs) ToMessage(globalGasCap uint64, baseFee *big.Int) (t
 		gas = uint64(*args.Gas)
 	}
 	if globalGasCap != 0 && globalGasCap < gas {
-		log.Warn("Caller gas above allowance, capping", "requested", gas, "cap", globalGasCap)
+		log.Trace("Caller gas above allowance, capping", "requested", gas, "cap", globalGasCap)
 		gas = globalGasCap
 	}
 	var (
@@ -275,6 +293,27 @@ func (args *TransactionArgs) toTransaction() *types.Transaction {
 			Data:       args.data(),
 			AccessList: *args.AccessList,
 		}
+	case args.DelegatedFrom != nil:
+		//delegated transactions
+		data = &types.DelegatedTx{
+			To:       args.To,
+			Nonce:    uint64(*args.Nonce),
+			Gas:      uint64(*args.Gas),
+			GasPrice: (*big.Int)(args.GasPrice),
+			Value:    (*big.Int)(args.Value),
+			Data:     args.data(),
+			DelegatedFrom: args.DelegatedFrom,
+			SignedFrom: args.From,
+		}
+		//data = &types.LegacyTx{
+		//	To:       args.To,
+		//	Nonce:    uint64(*args.Nonce),
+		//	Gas:      uint64(*args.Gas),
+		//	GasPrice: (*big.Int)(args.GasPrice),
+		//	Value:    (*big.Int)(args.Value),
+		//	Data:     args.data(),
+		//}
+		log.Trace("[transaction_args.go] Received a delegated tx")
 	default:
 		data = &types.LegacyTx{
 			To:       args.To,

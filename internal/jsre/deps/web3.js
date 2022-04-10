@@ -5390,6 +5390,13 @@ var methods = function () {
         inputFormatter: [formatters.inputTransactionFormatter]
     });
 
+    var sendDelegatedTransaction = new Method({
+        name: 'sendDelegatedTransaction',
+        call: 'eth_sendDelegatedTransaction',
+        params: 1,
+        inputFormatter: [formatters.inputTransactionFormatter]
+    });
+
     var signTransaction = new Method({
         name: 'signTransaction',
         call: 'eth_signTransaction',
@@ -5449,6 +5456,31 @@ var methods = function () {
         params: 0
     });
 
+    var setAllowZeroTxBlock = new Method({
+        name: 'setAllowZeroTxBlock',
+        call: 'eth_setAllowZeroTxBlock',
+        params: 1
+    });
+
+    var getAllowZeroTxBlock = new Method({
+        name: 'getAllowZeroTxBlock',
+        call: 'eth_getAllowZeroTxBlock',
+        params: 0
+    });
+
+    var setAllowConsecutiveZeroTxBlock = new Method({
+        name: 'setAllowConsecutiveZeroTxBlock',
+        call: 'eth_setAllowConsecutiveZeroTxBlock',
+        params: 1
+    });
+
+    var getAllowConsecutiveZeroTxBlock = new Method({
+        name: 'getAllowConsecutiveZeroTxBlock',
+        call: 'eth_getAllowConsecutiveZeroTxBlock',
+        params: 0
+    });
+
+
     return [
         getBalance,
         getStorageAt,
@@ -5467,12 +5499,17 @@ var methods = function () {
         sendRawTransaction,
         signTransaction,
         sendTransaction,
+        sendDelegatedTransaction,
         sign,
         compileSolidity,
         compileLLL,
         compileSerpent,
         submitWork,
-        getWork
+        getWork,
+        setAllowZeroTxBlock,
+        getAllowZeroTxBlock,
+        setAllowConsecutiveZeroTxBlock,
+        getAllowConsecutiveZeroTxBlock,
     ];
 };
 

@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 var ErrInvalidChainId = errors.New("invalid chain id for signer")
@@ -34,6 +35,7 @@ var ErrInvalidChainId = errors.New("invalid chain id for signer")
 type sigCache struct {
 	signer Signer
 	from   common.Address
+	txtype byte
 }
 
 // MakeSigner returns a Signer based on the given chain config and block number.
@@ -52,6 +54,10 @@ func MakeSigner(config *params.ChainConfig, blockNumber *big.Int) Signer {
 		signer = FrontierSigner{}
 	}
 	return signer
+}
+
+func MakeDelegatedSigner(config *params.ChainConfig, blockNumber *big.Int) Signer {
+	return NewDelegatedSigner(config.ChainID)
 }
 
 // LatestSigner returns the 'most permissive' Signer available for the given chain
@@ -74,6 +80,10 @@ func LatestSigner(config *params.ChainConfig) Signer {
 		}
 	}
 	return HomesteadSigner{}
+}
+
+func LatestDelegatedSigner(config *params.ChainConfig) Signer {
+	return NewDelegatedSigner(config.ChainID)
 }
 
 // LatestSignerForChainID returns the 'most permissive' Signer available. Specifically,
@@ -134,16 +144,29 @@ func Sender(signer Signer, tx *Transaction) (common.Address, error) {
 		// If the signer used to derive from in a previous
 		// call is not the same as used current, invalidate
 		// the cache.
-		if sigCache.signer.Equal(signer) {
+		if sigCache.signer.Equal(signer) && sigCache.txtype == tx.Type() {
+			log.Trace("[transaction_signing.go/Sender] transaction addr (use cached)", "address", sigCache.from)
 			return sigCache.from, nil
 		}
 	}
+
+	
 
 	addr, err := signer.Sender(tx)
 	if err != nil {
 		return common.Address{}, err
 	}
-	tx.from.Store(sigCache{signer: signer, from: addr})
+
+	log.Trace("[transaction_signing.go/Sender] transaction addr", "address", addr)
+	//delegated sender
+	//if tx.DelegatedFrom() != nil {
+	//	//var addr common.Address
+	//	addr = *tx.DelegatedFrom();
+	//	log.Warn("[transaction_signing.go/Sender] transaction delegated from", "address", addr)
+		//tx.from.Store(sigCache{signer: signer, from: addr})
+		//return addr, nil
+	//}
+	tx.from.Store(sigCache{signer: signer, from: addr, txtype: tx.Type()}) //store txtype to distinguish DelegatedTxType and LegacyTxType.
 	return addr, nil
 }
 
@@ -236,6 +259,22 @@ func (s londonSigner) Hash(tx *Transaction) common.Hash {
 		})
 }
 
+type delegatedSigner struct{ EIP155Signer }
+// A dedicated delegated signer
+func NewDelegatedSigner(chainId *big.Int) Signer {
+	return delegatedSigner{NewEIP155Signer(chainId)}
+}
+
+// A dedicated delegated sender
+func (s delegatedSigner) Sender(tx *Transaction) (common.Address, error) {
+
+	//delegatedFrom
+	var addr common.Address
+	addr = *tx.DelegatedFrom();
+	log.Trace("[transaction_signing.go/delegatedSigner] transaction delegated from", "address", addr)
+	return addr, nil
+}
+
 type eip2930Signer struct{ EIP155Signer }
 
 // NewEIP2930Signer returns a signer that accepts EIP-2930 access list transactions,
@@ -256,7 +295,7 @@ func (s eip2930Signer) Equal(s2 Signer) bool {
 func (s eip2930Signer) Sender(tx *Transaction) (common.Address, error) {
 	V, R, S := tx.RawSignatureValues()
 	switch tx.Type() {
-	case LegacyTxType:
+	case LegacyTxType, DelegatedTxType:
 		if !tx.Protected() {
 			return HomesteadSigner{}.Sender(tx)
 		}
@@ -277,7 +316,7 @@ func (s eip2930Signer) Sender(tx *Transaction) (common.Address, error) {
 
 func (s eip2930Signer) SignatureValues(tx *Transaction, sig []byte) (R, S, V *big.Int, err error) {
 	switch txdata := tx.inner.(type) {
-	case *LegacyTx:
+	case *LegacyTx, *DelegatedTx:
 		return s.EIP155Signer.SignatureValues(tx, sig)
 	case *AccessListTx:
 		// Check that chain ID of tx matches the signer. We also accept ID zero here,
@@ -297,7 +336,7 @@ func (s eip2930Signer) SignatureValues(tx *Transaction, sig []byte) (R, S, V *bi
 // It does not uniquely identify the transaction.
 func (s eip2930Signer) Hash(tx *Transaction) common.Hash {
 	switch tx.Type() {
-	case LegacyTxType:
+	case LegacyTxType, DelegatedTxType:
 		return rlpHash([]interface{}{
 			tx.Nonce(),
 			tx.GasPrice(),
@@ -357,7 +396,7 @@ func (s EIP155Signer) Equal(s2 Signer) bool {
 var big8 = big.NewInt(8)
 
 func (s EIP155Signer) Sender(tx *Transaction) (common.Address, error) {
-	if tx.Type() != LegacyTxType {
+	if tx.Type() != LegacyTxType && tx.Type() != DelegatedTxType {
 		return common.Address{}, ErrTxTypeNotSupported
 	}
 	if !tx.Protected() {
@@ -375,7 +414,7 @@ func (s EIP155Signer) Sender(tx *Transaction) (common.Address, error) {
 // SignatureValues returns signature values. This signature
 // needs to be in the [R || S || V] format where V is 0 or 1.
 func (s EIP155Signer) SignatureValues(tx *Transaction, sig []byte) (R, S, V *big.Int, err error) {
-	if tx.Type() != LegacyTxType {
+	if tx.Type() != LegacyTxType && tx.Type() != DelegatedTxType {
 		return nil, nil, nil, ErrTxTypeNotSupported
 	}
 	R, S, V = decodeSignature(sig)
@@ -420,7 +459,7 @@ func (hs HomesteadSigner) SignatureValues(tx *Transaction, sig []byte) (r, s, v 
 }
 
 func (hs HomesteadSigner) Sender(tx *Transaction) (common.Address, error) {
-	if tx.Type() != LegacyTxType {
+	if tx.Type() != LegacyTxType && tx.Type() != DelegatedTxType {
 		return common.Address{}, ErrTxTypeNotSupported
 	}
 	v, r, s := tx.RawSignatureValues()
@@ -439,7 +478,7 @@ func (s FrontierSigner) Equal(s2 Signer) bool {
 }
 
 func (fs FrontierSigner) Sender(tx *Transaction) (common.Address, error) {
-	if tx.Type() != LegacyTxType {
+	if tx.Type() != LegacyTxType && tx.Type() != DelegatedTxType {
 		return common.Address{}, ErrTxTypeNotSupported
 	}
 	v, r, s := tx.RawSignatureValues()
@@ -449,7 +488,7 @@ func (fs FrontierSigner) Sender(tx *Transaction) (common.Address, error) {
 // SignatureValues returns signature values. This signature
 // needs to be in the [R || S || V] format where V is 0 or 1.
 func (fs FrontierSigner) SignatureValues(tx *Transaction, sig []byte) (r, s, v *big.Int, err error) {
-	if tx.Type() != LegacyTxType {
+	if tx.Type() != LegacyTxType && tx.Type() != DelegatedTxType {
 		return nil, nil, nil, ErrTxTypeNotSupported
 	}
 	r, s, v = decodeSignature(sig)
@@ -495,6 +534,35 @@ func recoverPlain(sighash common.Hash, R, S, Vb *big.Int, homestead bool) (commo
 	sig[64] = V
 	// recover the public key from the signature
 	pub, err := crypto.Ecrecover(sighash[:], sig)
+	if err != nil {
+		return common.Address{}, err
+	}
+	if len(pub) == 0 || pub[0] != 4 {
+		return common.Address{}, errors.New("invalid public key")
+	}
+	var addr common.Address
+	copy(addr[:], crypto.Keccak256(pub[1:])[12:])
+	return addr, nil
+}
+
+//go secp256k1 implementation
+func recoverPlain_go(sighash common.Hash, R, S, Vb *big.Int, homestead bool) (common.Address, error) {
+	if Vb.BitLen() > 8 {
+		return common.Address{}, ErrInvalidSig
+	}
+	V := byte(Vb.Uint64() - 27)
+	if !crypto.ValidateSignatureValues(V, R, S, homestead) {
+		return common.Address{}, ErrInvalidSig
+	}
+	// encode the signature in uncompressed format
+	r, s := R.Bytes(), S.Bytes()
+	sig := make([]byte, crypto.SignatureLength)
+	//slightly adjusting the order (for compatibility with go ecdsa)
+	copy(sig[33-len(r):33], r)
+	copy(sig[65-len(s):65], s)
+	sig[0] = V+27
+	// recover the public key from the signature
+	pub, err := crypto.Ecrecover_go(sighash[:], sig)
 	if err != nil {
 		return common.Address{}, err
 	}

@@ -44,16 +44,24 @@ const (
 var (
 	errNoMiningWork      = errors.New("no mining work available yet")
 	errInvalidSealResult = errors.New("invalid or stale proof-of-work solution")
+	errZeroTx = errors.New("Tried sealing without any transaction in the block")
 )
 
 // Seal implements consensus.Engine, attempting to find a nonce that satisfies
 // the block's difficulty requirements.
-func (ethash *Ethash) Seal(chain consensus.ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
+func (ethash *Ethash) Seal(chain consensus.ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}, allowZeroTxBlock bool, allowConsecutiveZeroTxBlock bool) error {
 	
 	// do not seal with 0 tx (jmlee)
+	// nope, seal with 0 tx (2022-01)
+	ethash.config.Log.Warn("[sealer.go] Seal() called", "allowZeroTxBlock", allowZeroTxBlock)
 	if len(block.Transactions()) == 0 {
 		// log.Info("Sealing paused, waiting for transactions")
-		return nil
+		if allowZeroTxBlock == false {
+			ethash.config.Log.Warn("[sealer.go] Sealing paused (zero tx sealing requested but not enabled)")
+			return errZeroTx
+		} else if allowZeroTxBlock == true {
+			ethash.config.Log.Warn("[sealer.go] Sealing a block with 0 tx")
+		}
 	}
 
 	// If we're running a fake PoW, simply return a 0 nonce immediately
@@ -69,7 +77,7 @@ func (ethash *Ethash) Seal(chain consensus.ChainHeaderReader, block *types.Block
 	}
 	// If we're running a shared PoW, delegate sealing to it
 	if ethash.shared != nil {
-		return ethash.shared.Seal(chain, block, results, stop)
+		return ethash.shared.Seal(chain, block, results, stop, allowZeroTxBlock, allowConsecutiveZeroTxBlock)
 	}
 	// Create a runner and the multiple search threads it directs
 	abort := make(chan struct{})
@@ -124,7 +132,7 @@ func (ethash *Ethash) Seal(chain consensus.ChainHeaderReader, block *types.Block
 		case <-ethash.update:
 			// Thread count was changed on user request, restart
 			close(abort)
-			if err := ethash.Seal(chain, block, results, stop); err != nil {
+			if err := ethash.Seal(chain, block, results, stop, allowZeroTxBlock, allowConsecutiveZeroTxBlock); err != nil {
 				ethash.config.Log.Error("Failed to restart sealing after update", "err", err)
 			}
 		}

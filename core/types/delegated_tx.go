@@ -22,8 +22,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-// LegacyTx is the transaction data of regular Ethereum transactions.
-type LegacyTx struct {
+// DelegatedTx is the transaction data of regular Ethereum transactions.
+type DelegatedTx struct {
 	Nonce    uint64          // nonce of sender account
 	GasPrice *big.Int        // wei per gas
 	Gas      uint64          // gas limit
@@ -31,36 +31,13 @@ type LegacyTx struct {
 	Value    *big.Int        // wei amount
 	Data     []byte          // contract invocation input data
 	V, R, S  *big.Int        // signature values
-}
-
-// NewTransaction creates an unsigned legacy transaction.
-// Deprecated: use NewTx instead.
-func NewTransaction(nonce uint64, to common.Address, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte) *Transaction {
-	return NewTx(&LegacyTx{
-		Nonce:    nonce,
-		To:       &to,
-		Value:    amount,
-		Gas:      gasLimit,
-		GasPrice: gasPrice,
-		Data:     data,
-	})
-}
-
-// NewContractCreation creates an unsigned legacy transaction.
-// Deprecated: use NewTx instead.
-func NewContractCreation(nonce uint64, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte) *Transaction {
-	return NewTx(&LegacyTx{
-		Nonce:    nonce,
-		Value:    amount,
-		Gas:      gasLimit,
-		GasPrice: gasPrice,
-		Data:     data,
-	})
+	DelegatedFrom *common.Address
+	SignedFrom *common.Address
 }
 
 // copy creates a deep copy of the transaction data and initializes all fields.
-func (tx *LegacyTx) copy() TxData {
-	cpy := &LegacyTx{
+func (tx *DelegatedTx) copy() TxData {
+	cpy := &DelegatedTx{
 		Nonce: tx.Nonce,
 		To:    copyAddressPtr(tx.To),
 		Data:  common.CopyBytes(tx.Data),
@@ -71,6 +48,8 @@ func (tx *LegacyTx) copy() TxData {
 		V:        new(big.Int),
 		R:        new(big.Int),
 		S:        new(big.Int),
+		DelegatedFrom: copyAddressPtr(tx.DelegatedFrom),
+		SignedFrom: copyAddressPtr(tx.SignedFrom),
 	}
 	if tx.Value != nil {
 		cpy.Value.Set(tx.Value)
@@ -91,25 +70,25 @@ func (tx *LegacyTx) copy() TxData {
 }
 
 // accessors for innerTx.
-func (tx *LegacyTx) txType() byte           { return LegacyTxType }
-func (tx *LegacyTx) chainID() *big.Int      { return deriveChainId(tx.V) }
-func (tx *LegacyTx) accessList() AccessList { return nil }
-func (tx *LegacyTx) data() []byte           { return tx.Data }
-func (tx *LegacyTx) gas() uint64            { return tx.Gas }
-func (tx *LegacyTx) gasPrice() *big.Int     { return tx.GasPrice }
-func (tx *LegacyTx) gasTipCap() *big.Int    { return tx.GasPrice }
-func (tx *LegacyTx) gasFeeCap() *big.Int    { return tx.GasPrice }
-func (tx *LegacyTx) value() *big.Int        { return tx.Value }
-func (tx *LegacyTx) nonce() uint64          { return tx.Nonce }
-func (tx *LegacyTx) to() *common.Address    { return tx.To }
+func (tx *DelegatedTx) txType() byte           { return DelegatedTxType }
+func (tx *DelegatedTx) chainID() *big.Int      { return deriveChainId(tx.V) }
+func (tx *DelegatedTx) accessList() AccessList { return nil }
+func (tx *DelegatedTx) data() []byte           { return tx.Data }
+func (tx *DelegatedTx) gas() uint64            { return tx.Gas }
+func (tx *DelegatedTx) gasPrice() *big.Int     { return tx.GasPrice }
+func (tx *DelegatedTx) gasTipCap() *big.Int    { return tx.GasPrice }
+func (tx *DelegatedTx) gasFeeCap() *big.Int    { return tx.GasPrice }
+func (tx *DelegatedTx) value() *big.Int        { return tx.Value }
+func (tx *DelegatedTx) nonce() uint64          { return tx.Nonce }
+func (tx *DelegatedTx) to() *common.Address    { return tx.To }
 
-func (tx *LegacyTx) delegatedFrom() *common.Address { return nil }
-func (tx *LegacyTx) signedFrom() *common.Address    { return nil }
+func (tx *DelegatedTx) delegatedFrom() *common.Address    { return tx.DelegatedFrom }
+func (tx *DelegatedTx) signedFrom() *common.Address    { return tx.SignedFrom }
 
-func (tx *LegacyTx) rawSignatureValues() (v, r, s *big.Int) {
+func (tx *DelegatedTx) rawSignatureValues() (v, r, s *big.Int) {
 	return tx.V, tx.R, tx.S
 }
 
-func (tx *LegacyTx) setSignatureValues(chainID, v, r, s *big.Int) {
+func (tx *DelegatedTx) setSignatureValues(chainID, v, r, s *big.Int) {
 	tx.V, tx.R, tx.S = v, r, s
 }

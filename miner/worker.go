@@ -63,7 +63,7 @@ const (
 
 	// maxRecommitInterval is the maximum time interval to recreate the sealing block with
 	// any newly arrived transactions.
-	maxRecommitInterval = 15 * time.Second
+	maxRecommitInterval = 1 * time.Second
 
 	// intervalAdjustRatio is the impact a single interval adjustment has on sealing work
 	// resubmitting interval.
@@ -217,6 +217,9 @@ type worker struct {
 	coinbase common.Address
 	extra    []byte
 
+	allowZeroTxBlock bool
+	allowConsecutiveZeroTxBlock bool
+
 	pendingMu    sync.RWMutex
 	pendingTasks map[common.Hash]*task
 
@@ -302,6 +305,20 @@ func (w *worker) setEtherbase(addr common.Address) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.coinbase = addr
+}
+
+func (w *worker) setAllowZeroTxBlock(flag bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	log.Warn("SetAllowZeroTxBlock called on worker.go", "flag", flag)
+	
+	w.allowZeroTxBlock = flag
+}
+
+func (w *worker) setAllowConsecutiveZeroTxBlock(flag bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.allowConsecutiveZeroTxBlock = flag
 }
 
 func (w *worker) setGasCeil(ceil uint64) {
@@ -589,6 +606,7 @@ func (w *worker) mainLoop() {
 				for _, tx := range ev.Txs {
 					acc, _ := types.Sender(w.current.signer, tx)
 					txs[acc] = append(txs[acc], tx)
+					log.Trace("[worker.go] apply transaction", "from", acc)
 				}
 				txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs, w.current.header.BaseFee)
 				tcount := w.current.tcount
@@ -648,25 +666,40 @@ func (w *worker) taskLoop() {
 			// Reject duplicate sealing work due to resubmitting.
 			sealHash := w.engine.SealHash(task.block.Header())
 			if sealHash == prev {
+				log.Warn("Resubmission rejected")
 				continue
 			}
 			// Interrupt previous sealing operation
 			interrupt()
-			stopCh, prev = make(chan struct{}), sealHash
 
 			if w.skipSealHook != nil && w.skipSealHook(task) {
+				log.Warn("Skip seal hook")
 				continue
 			}
 			w.pendingMu.Lock()
 			w.pendingTasks[sealHash] = task
 			w.pendingMu.Unlock()
 
-			if err := w.engine.Seal(w.chain, task.block, w.resultCh, stopCh); err != nil {
-				log.Warn("Block sealing failed", "err", err)
+			log.Trace("[worker.go] Try to seal")
+			if err := w.engine.Seal(w.chain, task.block, w.resultCh, stopCh, w.allowZeroTxBlock, w.allowConsecutiveZeroTxBlock); err != nil {
+				log.Warn("[worker.go] Block sealing failed", "err", err)
 				w.pendingMu.Lock()
 				delete(w.pendingTasks, sealHash)
 				w.pendingMu.Unlock()
+			} else {
+				stopCh, prev = make(chan struct{}), sealHash
+				//if sealing was successfully done
+				if w.allowZeroTxBlock == true && len(task.block.Transactions()) == 0 {
+					log.Debug("[worker.go] Sealed a block with 0 tx")
+					if w.allowConsecutiveZeroTxBlock == false {
+						log.Trace("[worker.go] No more 0 tx block.")
+						w.allowZeroTxBlock = false
+					} else {
+						log.Trace("[worker.go] May seal more 0 tx block.")
+					}
+				}
 			}
+		
 		case <-w.exitCh:
 			interrupt()
 			return
@@ -836,6 +869,19 @@ func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*
 		env.state.RevertToSnapshot(snap)
 		return nil, err
 	}
+	if tx.Type() == types.DelegatedTxType {
+		v, r, s := tx.RawSignatureValues()
+		log.Debug("[worker.go] replacing delegated tx with legacy tx", "from", tx.DelegatedFrom())
+		tx = types.NewTx(&types.LegacyTx{
+			Nonce:    tx.Nonce(),
+			To:       tx.To(),
+			Value:    tx.Value(),
+			Gas:      tx.Gas(),
+			GasPrice: tx.GasPrice(),
+			Data:     tx.Data(),
+		})
+		tx.SetRawSignatureValues(v, r, s) 
+	}
 	env.txs = append(env.txs, tx)
 	env.receipts = append(env.receipts, receipt)
 
@@ -931,6 +977,14 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 			txs.Shift()
 		}
 	}
+
+	/*pending := w.eth.TxPool().Pending(true)
+	for _, txs := range pending {
+		for _, tx := range txs {
+			log.Warn("[worker.go] Tx pool pop", "hash", tx.Hash())
+			w.eth.TxPool().RemoveTx(tx.Hash(), true)
+		}
+	}*/
 
 	if !w.isRunning() && len(coalescedLogs) > 0 {
 		// We don't push the pendingLogsEvent while we are sealing. The reason is that
