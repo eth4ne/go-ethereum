@@ -636,9 +636,10 @@ func (tx *Transaction) AsMessage(s Signer, baseFee *big.Int) (Message, error) {
 		msg.gasPrice = math.BigMin(msg.gasPrice.Add(msg.gasTipCap, baseFee), msg.gasFeeCap)
 	}
 	var err error
-	msg.from, err = Sender(s, tx)
 	if tx.Type() == DelegatedTxType {
 		msg.from = *tx.DelegatedFrom()
+	} else {
+		msg.from, err = Sender(s, tx)
 	}
 	return msg, err
 }
