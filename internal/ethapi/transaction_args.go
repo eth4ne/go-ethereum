@@ -143,8 +143,8 @@ func (args *TransactionArgs) setDefaults(ctx context.Context, b Backend) error {
 		var nonce uint64
 		var err error
 		if args.DelegatedFrom != nil {
-			log.Trace("[transaction_args.go] Assigning nonce to delegated from", "from", args.DelegatedFrom)
 			nonce, err = b.GetPoolNonce(ctx, args.delegatedFrom())
+			log.Trace("[transaction_args.go] Assigning nonce to delegated from", "from", args.DelegatedFrom, "nonce", nonce)
 		} else {
 			nonce, err = b.GetPoolNonce(ctx, args.from())
 		}
