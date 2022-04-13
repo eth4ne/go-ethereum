@@ -53,14 +53,14 @@ func (ethash *Ethash) Seal(chain consensus.ChainHeaderReader, block *types.Block
 	
 	// do not seal with 0 tx (jmlee)
 	// nope, seal with 0 tx (2022-01)
-	ethash.config.Log.Warn("[sealer.go] Seal() called", "allowZeroTxBlock", allowZeroTxBlock)
+	ethash.config.Log.Trace("[sealer.go] Seal() called", "allowZeroTxBlock", allowZeroTxBlock)
 	if len(block.Transactions()) == 0 {
 		// log.Info("Sealing paused, waiting for transactions")
 		if allowZeroTxBlock == false {
-			ethash.config.Log.Warn("[sealer.go] Sealing paused (zero tx sealing requested but not enabled)")
+			ethash.config.Log.Debug("[sealer.go] Sealing paused (zero tx sealing requested but not enabled)")
 			return errZeroTx
 		} else if allowZeroTxBlock == true {
-			ethash.config.Log.Warn("[sealer.go] Sealing a block with 0 tx")
+			ethash.config.Log.Debug("[sealer.go] Sealing a block with 0 tx")
 		}
 	}
 
