@@ -1352,13 +1352,13 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	//print and delete database, set Deletenode
 	/***********************************************/
 	// // print to check disk size before delete leaf nodes (joonha)
-	// if block.Header().Number.Int64() % 1 == 0 {
-	// 	// inspect database
-	// 	rawdb.InspectDatabase(rawdb.GlobalDB, nil, nil)
+	if block.Header().Number.Int64() % common.InspectEpoch == 0 {
+		// inspect database
+		rawdb.InspectDatabase(rawdb.GlobalDB, nil, nil)
 
 	// 	// // print state trie 
 	// 	// fmt.Println("(BEFORE DELETION) $$$ print state trie at block", bc.CurrentBlock().Header().Number)
-	// }
+	}
 
 	// delete leaf nodes from disk (joonha)
 	// fmt.Println("\nBLOCK NUMBER: ", block.Header().Number.Int64())
@@ -1389,7 +1389,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	// fmt.Println("\nblock inserted -> blocknumber:", block.Header().Number.Int64())
 	// fmt.Println("InactiveBoundaryKey:", common.InactiveBoundaryKey)
 	// fmt.Println("common.CheckpointKeys:", common.CheckpointKeys)
-	if block.Header().Number.Int64() % 40320 == 0 {
+	if block.Header().Number.Int64() % common.InspectEpoch == 0 {
 		// inspect database
 		rawdb.InspectDatabase_save(rawdb.GlobalDB, nil, nil, block.Header().Number.Int64())
 
