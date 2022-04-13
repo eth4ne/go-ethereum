@@ -310,7 +310,7 @@ func (w *worker) setEtherbase(addr common.Address) {
 func (w *worker) setAllowZeroTxBlock(flag bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	log.Warn("SetAllowZeroTxBlock called on worker.go", "flag", flag)
+	log.Trace("SetAllowZeroTxBlock called on worker.go", "flag", flag)
 	
 	w.allowZeroTxBlock = flag
 }
@@ -682,7 +682,7 @@ func (w *worker) taskLoop() {
 
 			log.Trace("[worker.go] Try to seal")
 			if err := w.engine.Seal(w.chain, task.block, w.resultCh, stopCh, w.allowZeroTxBlock, w.allowConsecutiveZeroTxBlock); err != nil {
-				log.Warn("[worker.go] Block sealing failed", "err", err)
+				log.Debug("[worker.go] Block sealing failed", "err", err)
 				w.pendingMu.Lock()
 				delete(w.pendingTasks, sealHash)
 				w.pendingMu.Unlock()
@@ -871,7 +871,6 @@ func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*
 	}
 	if tx.Type() == types.DelegatedTxType {
 		v, r, s := tx.RawSignatureValues()
-		log.Debug("[worker.go] replacing delegated tx with legacy tx", "from", tx.DelegatedFrom())
 		tx = types.NewTx(&types.LegacyTx{
 			Nonce:    tx.Nonce(),
 			To:       tx.To(),
@@ -880,6 +879,7 @@ func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*
 			GasPrice: tx.GasPrice(),
 			Data:     tx.Data(),
 		})
+		log.Trace("[worker.go/commitTransaction] replaced delegated tx with legacy tx", "nonce", tx.Nonce())
 		tx.SetRawSignatureValues(v, r, s) 
 	}
 	env.txs = append(env.txs, tx)
@@ -940,7 +940,22 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 			continue
 		}
 		// Start executing the transaction
-		env.state.Prepare(tx.Hash(), env.tcount)
+		if tx.Type() == types.DelegatedTxType {
+			v, r, s := tx.RawSignatureValues()
+			log.Debug("[worker.go/commitTransactions] replacing delegated tx with legacy tx", "from", tx.DelegatedFrom())
+			newTx := types.NewTx(&types.LegacyTx{
+				Nonce:    tx.Nonce(),
+				To:       tx.To(),
+				Value:    tx.Value(),
+				Gas:      tx.Gas(),
+				GasPrice: tx.GasPrice(),
+				Data:     tx.Data(),
+			})
+			newTx.SetRawSignatureValues(v, r, s) 
+			env.state.Prepare(newTx.Hash(), env.tcount)
+		} else {
+			env.state.Prepare(tx.Hash(), env.tcount)
+		}
 
 		logs, err := w.commitTransaction(env, tx)
 		switch {
