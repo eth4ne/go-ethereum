@@ -199,7 +199,7 @@ func (args *TransactionArgs) ToMessage(globalGasCap uint64, baseFee *big.Int) (t
 		return types.Message{}, errors.New("both gasPrice and (maxFeePerGas or maxPriorityFeePerGas) specified")
 	}
 	// Set sender address or use zero address if none specified.
-	addr := args.from()
+	addr := args.delegatedFrom()
 
 	// Set default gas & gas price if none were set
 	gas := globalGasCap
