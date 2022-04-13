@@ -939,7 +939,22 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 			continue
 		}
 		// Start executing the transaction
-		env.state.Prepare(tx.Hash(), env.tcount)
+		if tx.Type() == types.DelegatedTxType {
+			v, r, s := tx.RawSignatureValues()
+			log.Debug("[worker.go] replacing delegated tx with legacy tx", "from", tx.DelegatedFrom())
+			newTx := types.NewTx(&types.LegacyTx{
+				Nonce:    tx.Nonce(),
+				To:       tx.To(),
+				Value:    tx.Value(),
+				Gas:      tx.Gas(),
+				GasPrice: tx.GasPrice(),
+				Data:     tx.Data(),
+			})
+			newTx.SetRawSignatureValues(v, r, s) 
+			env.state.Prepare(newTx.Hash(), env.tcount)
+		} else {
+			env.state.Prepare(tx.Hash(), env.tcount)
+		}
 
 		logs, err := w.commitTransaction(env, tx)
 		switch {
