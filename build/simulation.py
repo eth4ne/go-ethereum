@@ -157,6 +157,7 @@ def run(_from, _to):
 
   offset = _from # - 1
   realblock = 0
+  txcount = 0
 
   with open(restorefile, 'r') as f:
     restoredata = f.read()
@@ -172,6 +173,7 @@ def run(_from, _to):
     workers = []
     for j in result:
       to = j['to']
+      txcount += 1
       if to != None:
         to = Web3.toChecksumAddress(to.hex())
       tx = {
@@ -180,7 +182,8 @@ def run(_from, _to):
         'value': '0x0',
         'delegatedFrom': Web3.toChecksumAddress(j['from'].hex()),
         'gas': '0x0',
-        'gasPrice': '0x3b9aca00', #1000000000
+        #'gasPrice': '0x3b9aca00', #1000000000
+        'gasPrice': hex(txcount),
       }
       if execution_mode == MODE_ETHANE:
         tx['data'] = '0x'+j['input'].hex()
@@ -205,7 +208,6 @@ def run(_from, _to):
 
     print('Block #{}: processed all txs'.format(i))
 
-    if str(i+restore_offset) in restoredata:
     if str(i-restore_offset) in restoredata:
       for j in restoredata[str(i+restore_offset)]:
         sendRestoreTx(web3, i - offset, j)
