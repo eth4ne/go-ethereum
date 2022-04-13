@@ -38,17 +38,17 @@ db_name = 'ethereum'
 
 geth_ipc = '' #fill in the IPC path.
 
-start_block = 7000001
+start_block = 7000000
 end_block = 7300000
-epoch = 40320
-restore_offset = 0
 password = '' #fill in the geth coinbase password.
+epoch = 315
+restore_offset = -1
 
 MODE_ETHANOS = 0
 MODE_ETHANE = 1
 execution_mode = MODE_ETHANOS
 
-restorefile = 'test_7000001_7300000.json'
+restorefile = 'restore_315_7000000_7299999.json'
 
 conn_geth = lambda path: Web3(Web3.IPCProvider(path))
 conn_mariadb = lambda host, user, password, database: pymysql.connect(host=host, user=user, password=password, database=database, cursorclass=pymysql.cursors.DictCursor)
@@ -206,6 +206,7 @@ def run(_from, _to):
     print('Block #{}: processed all txs'.format(i))
 
     if str(i+restore_offset) in restoredata:
+    if str(i-restore_offset) in restoredata:
       for j in restoredata[str(i+restore_offset)]:
         sendRestoreTx(web3, i - offset, j)
     
