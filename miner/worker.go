@@ -870,7 +870,6 @@ func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*
 	}
 	if tx.Type() == types.DelegatedTxType {
 		v, r, s := tx.RawSignatureValues()
-		log.Debug("[worker.go] replacing delegated tx with legacy tx", "from", tx.DelegatedFrom())
 		tx = types.NewTx(&types.LegacyTx{
 			Nonce:    tx.Nonce(),
 			To:       tx.To(),
@@ -879,6 +878,7 @@ func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*
 			GasPrice: tx.GasPrice(),
 			Data:     tx.Data(),
 		})
+		log.Trace("[worker.go] replaced delegated tx with legacy tx", "from", tx.DelegatedFrom(), "nonce", tx.Nonce())
 		tx.SetRawSignatureValues(v, r, s) 
 	}
 	env.txs = append(env.txs, tx)
