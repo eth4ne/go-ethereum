@@ -201,6 +201,9 @@ func (args *TransactionArgs) ToMessage(globalGasCap uint64, baseFee *big.Int) (t
 	}
 	// Set sender address or use zero address if none specified.
 	addr := args.from()
+	if args.DelegatedFrom != nil {
+		addr = *args.DelegatedFrom
+	}
 
 	// Set default gas & gas price if none were set
 	gas := globalGasCap
