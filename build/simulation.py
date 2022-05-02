@@ -209,7 +209,7 @@ def run(_from, _to):
     print('Block #{}: processed all txs'.format(i))
 
     if str(i-restore_offset) in restoredata:
-      for j in restoredata[str(i+restore_offset)]:
+      for j in restoredata[str(i-restore_offset)]:
         sendRestoreTx(web3, i - offset, j)
     
       print('Block #{}: Restored {} accounts'.format(i, len(restoredata[str(i+1)])))
