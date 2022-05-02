@@ -63,7 +63,7 @@ const (
 
 	// maxRecommitInterval is the maximum time interval to recreate the sealing block with
 	// any newly arrived transactions.
-	maxRecommitInterval = 1 * time.Second
+	maxRecommitInterval = 15 * time.Second
 
 	// intervalAdjustRatio is the impact a single interval adjustment has on sealing work
 	// resubmitting interval.
@@ -543,6 +543,7 @@ func (w *worker) mainLoop() {
 	for {
 		select {
 		case req := <-w.newWorkCh:
+			//fmt.Println("\n\n>>>>>>>>>>>>>>>>>>>>>>> mainLoop > req is w.newWorkch") // (joonha)
 			w.commitWork(req.interrupt, req.noempty, req.timestamp)
 
 		case req := <-w.getWorkCh:
@@ -1092,6 +1093,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	// Note genParams.coinbase can be different with header.Coinbase
 	// since clique algorithm can modify the coinbase field in header.
 	env, err := w.makeEnv(parent, header, genParams.coinbase) // load parent block's state before apply pending transactions (jmlee)
+	// err (joonha)
 	if err != nil {
 		log.Error("Failed to create sealing context", "err", err)
 		return nil, err
@@ -1121,6 +1123,9 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 // into the given sealing block. The transaction selection and ordering strategy can
 // be customized with the plugin in the future.
 func (w *worker) fillTransactions(interrupt *int32, env *environment) {
+	//fmt.Println("\n\n/************************************************************************************/")
+	//fmt.Println("// fillTransactions (block number: ", env.header.Number.Int64(), ")")
+	//fmt.Println("/************************************************************************************/\n")
 	// Split the pending transactions into locals and remotes
 	// fmt.Println("split the pending transactions into locals and remotes") // (jmlee)
 	// Fill the block with all available pending transactions.
@@ -1147,23 +1152,33 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 		}
 	}
 
+	// return // (joonha)
+
 	// fmt.Println("----------------------------------------------------------------------------------------------------------------")
 	// fmt.Println("\n\n\nenv.header.Number.Int64(): ", env.header.Number.Int64())
 	bn := env.header.Number.Int64()
-	// fmt.Println("bn: ", bn)
+	// fmt.Println("\n\n>>> bn: ", bn)
+	// // fmt.Println(">>> IsFirst: ", common.IsFirst)
+	// fmt.Println(">>> IsSecond: ", common.IsSecond)
+	// fmt.Println("\n")
 
-	if bn <= 0 {
-		// fmt.Println("block number is below 1")
+	if bn <= 1 {
+		// fmt.Println("block number is below 2")
 		return 
 	}
 
-	// exe below only for the first appearance (joonha)
-	if common.IsFirst == false { // 2nd
-		// fmt.Println("this is the second time so return")
-		common.IsFirst = true
+	// 1st에서 건너뛰고 2nd에서 실행해야 함.
+
+	/******************************************/
+	// DELETE PREVIOUS LEAF NODES
+	/******************************************/
+	// exe below only for the second appearance (joonha)
+	if common.IsSecond == false { // 1st
+		// fmt.Println("this is the first time so skip")
+		common.IsSecond = true
 		return 
-	} else if common.IsFirst == true { // 1st
-		if bn % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch - 2 { // delEpoch
+	} else if common.IsSecond == true { // 2nd
+		if bn % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-2 { // delEpoch
 
 			// skip at the first epoch (joonha)
 			if bn == common.DeleteLeafNodeEpoch-2 {
@@ -1173,9 +1188,9 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 			// fmt.Println("this is the first time and also the deleting epoch")
 			// delete previous leaf nodes (jmlee)
 			// fmt.Println("\n\nenv.header.Number.Int64(): ", env.header.Number.Int64())
-			// fmt.Println("\n\n/******************************************/")
-			// fmt.Println("// delete previous leaf nodes")
-			// fmt.Println("/******************************************/\n")
+			//fmt.Println("\n\n/************************************************************************************/")
+			//fmt.Println("// delete previous leaf nodes (block number: ", bn, ")")
+			//fmt.Println("/************************************************************************************/\n")
 
 			keysToDelete := append(common.KeysToDelete, env.state.KeysToDeleteDirty...)
 			env.state.DeletePreviousLeafNodes(keysToDelete)
@@ -1190,13 +1205,44 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 		}
 	}
 
+	// if bn % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-2 { // delEpoch
+
+	// 	// skip at the first epoch (joonha)
+	// 	if bn == common.DeleteLeafNodeEpoch-2 {
+	// 		return 
+	// 	}
+
+	// 	// fmt.Println("this is the first time and also the deleting epoch")
+	// 	// delete previous leaf nodes (jmlee)
+	// 	// fmt.Println("\n\nenv.header.Number.Int64(): ", env.header.Number.Int64())
+	// 	fmt.Println("\n\n/************************************************************************************/")
+	// 	fmt.Println("// delete previous leaf nodes (block number: ", bn, ")")
+	// 	fmt.Println("/************************************************************************************/\n")
+
+	// 	keysToDelete := append(common.KeysToDelete, env.state.KeysToDeleteDirty...)
+	// 	env.state.DeletePreviousLeafNodes(keysToDelete)
+
+	// 	// reset common.KeysToDelete
+	// 	common.KeysToDelete = make([]common.Hash, 0)
+	// 	// reset common.AlreadyRestored (joonha)
+	// 	common.AlreadyRestored = make(map[common.Hash]common.Empty) 
+	// } else { // not a delEpoch
+	// 	// fmt.Println("return cuz it's not a deleting epoch")
+	// 	// return 
+	// }
+
+
+
+	/******************************************/
+	// INACTIVATE INACTIVE ACCOUNTS
+	/******************************************/
 	// exe below only for the first appearance (joonha)
-	if common.IsFirst == false { // 2nd
-		// fmt.Println("this is the second time so return")
-		common.IsFirst = true
+	if common.IsSecond == false { // 1st
+		// fmt.Println("this is the second time so skip")
+		common.IsSecond = true
 		return 
-	} else if common.IsFirst == true { // 1st
-		common.IsFirst = false
+	} else if common.IsSecond == true { // 2nd
+		common.IsSecond = false
 		if bn % common.InactivateLeafNodeEpoch == common.InactivateLeafNodeEpoch-2 { // inactEpoch
 
 			// skip at the first epoch (joonha)
@@ -1208,9 +1254,9 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 			
 			// inactivate inactive accounts (jmlee)
 			// fmt.Println("\n\nenv.header.Number.Int64(): ", env.header.Number.Int64())
-			// fmt.Println("\n\n/******************************************/")
-			// fmt.Println("// inactivate inactive accounts")
-			// fmt.Println("/******************************************/\n")
+			//fmt.Println("\n\n/************************************************************************************/")
+			//fmt.Println("// inactivate inactive accounts (block number: ", bn, ")")
+			//fmt.Println("/************************************************************************************/\n")
 
 			// [1] env.header.Number.Int64()는 현재 만들고 있는 블록 번호인가 이전 블록 번호인가?
 
@@ -1218,7 +1264,8 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 			// lastKeyToCheck := common.CheckpointKeys[env.header.Number.Int64()-common.InactivateCriterion] // [2] v1.10.16 (joonha)
 			// fmt.Println("\nbn: ", bn)
 			// fmt.Println("bn-(common.InactivateCriterion-2): ", bn-(common.InactivateCriterion-2))
-			lastKeyToCheck := common.CheckpointKeys[bn-(common.InactivateCriterion-2)]-1 // [3] 2204010 (joonha)
+			// lastKeyToCheck := common.CheckpointKeys[bn-(common.InactivateCriterion-2)]-1 // [3] 2204010 (joonha)
+			lastKeyToCheck := common.CheckpointKeys[bn-(common.InactivateCriterion-2)] // [4] 2204014 (joonha)
 
 			// fmt.Println("FROM: ", common.InactiveBoundaryKey)
 			// fmt.Println("TO: ", lastKeyToCheck)
@@ -1233,6 +1280,43 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 			return 
 		}
 	}
+
+	// if bn % common.InactivateLeafNodeEpoch == common.InactivateLeafNodeEpoch-2 { // inactEpoch
+
+	// 	// skip at the first epoch (joonha)
+	// 	if bn == common.InactivateLeafNodeEpoch-2 {
+	// 		return 
+	// 	}
+
+	// 	// fmt.Println("this is the first time and also the deleting epoch")
+		
+	// 	// inactivate inactive accounts (jmlee)
+	// 	// fmt.Println("\n\nenv.header.Number.Int64(): ", env.header.Number.Int64())
+	// 	fmt.Println("\n\n/************************************************************************************/")
+	// 	fmt.Println("// inactivate inactive accounts (block number: ", bn, ")")
+	// 	fmt.Println("/************************************************************************************/\n")
+
+	// 	// [1] env.header.Number.Int64()는 현재 만들고 있는 블록 번호인가 이전 블록 번호인가?
+
+	// 	// lastKeyToCheck := common.CheckpointKeys[env.header.Number.Int64()-common.InactivateCriterion+1] // [1] orig
+	// 	// lastKeyToCheck := common.CheckpointKeys[env.header.Number.Int64()-common.InactivateCriterion] // [2] v1.10.16 (joonha)
+	// 	// fmt.Println("\nbn: ", bn)
+	// 	// fmt.Println("bn-(common.InactivateCriterion-2): ", bn-(common.InactivateCriterion-2))
+	// 	// lastKeyToCheck := common.CheckpointKeys[bn-(common.InactivateCriterion-2)]-1 // [3] 2204010 (joonha)
+	// 	lastKeyToCheck := common.CheckpointKeys[bn-(common.InactivateCriterion-2)] // [4] 2204014 (joonha)
+
+	// 	// fmt.Println("FROM: ", common.InactiveBoundaryKey)
+	// 	// fmt.Println("TO: ", lastKeyToCheck)
+	// 	// inactivatedAccountsNum := env.state.InactivateLeafNodes(common.InactiveBoundaryKey, lastKeyToCheck) // [1] orig
+	// 	firstKeyToCheck := common.CheckpointKeys[bn-(2*common.InactivateCriterion-2)]
+	// 	inactivatedAccountsNum := env.state.InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck) // [2] 220410 (joonha)
+		
+	// 	common.InactiveBoundaryKey += inactivatedAccountsNum
+
+	// } else { // not a delEpoch
+	// 	// fmt.Println("return cuz it's not a deleting epoch")
+	// 	return 
+	// }
 }
 
 // generateWork generates a sealing block based on the given parameters.
@@ -1271,7 +1355,8 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 
 	// save this block's initial NextKey (joonha)
 	if work.header != nil && w.current != nil {
-		common.CheckpointKeys[work.header.Number.Int64()+1] = w.current.state.NextKey
+		// common.CheckpointKeys[work.header.Number.Int64()+1] = w.current.state.NextKey
+		common.CheckpointKeys[work.header.Number.Int64()+1] = w.current.state.NextKey // 220415
 	}
 
 	// Create an empty block based on temporary copied state for

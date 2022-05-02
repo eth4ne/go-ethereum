@@ -64,7 +64,8 @@ type Empty struct{}
 
 var (
 	// to delete and inactivate the nodes just for the secode appearance (worker.go) (joonha)
-	IsFirst bool
+	// IsFirst bool
+	IsSecond bool
 
 	// inactive storage snapshot ON/OFF option (joonha)
 	UsingActiveSnapshot bool // true: ON, false: OFF
@@ -96,7 +97,7 @@ var (
 	InactivateCriterion = int64(315) // inactive accounts were touched more before than this block timestamp (min: 1) (const)
 	CheckpointKeys = make(map[int64]int64) // initial NextKeys of blocks (CheckpointKeys[blockNumber] = initialNextKeyOfTheBlock)
 
-	InspectEpoch = int64(315)
+	InspectEpoch = int64(1)
 
 	NoExistKey = HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff") // very large key which will not be reached forever (const)
 	ToBeDeletedKey = HexToHash("0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe") // very large key which will not be reached forever (const)

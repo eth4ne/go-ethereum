@@ -22,8 +22,8 @@ import (
 	"fmt"
 	"math/big"
 	"sort"
-	"time"
 	"strconv"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -1656,15 +1656,15 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 		start = time.Now()
 	}
 
-	// decide whether to delete leaf nodes or not (jmlee)
-	// this might be needed for full sync
-	if common.DoDeleteLeafNode {
-		// delete previous leaf nodes from state trie
-		s.DeletePreviousLeafNodes(common.KeysToDelete)
+	// // decide whether to delete leaf nodes or not (jmlee) --> commented-out by (joonha) cuz it occurs an err and it's already done in fillTransactions
+	// // this might be needed for full sync
+	// if common.DoDeleteLeafNode {
+	// 	// delete previous leaf nodes from state trie
+	// 	s.DeletePreviousLeafNodes(common.KeysToDelete)
 
-		// reset common.KeysToDelete
-		common.KeysToDelete = make([]common.Hash, 0) // only works at the epoch
-	}
+	// 	// reset common.KeysToDelete --> commented-out by (joonha) cuz it occurs an err and it's already done in fillTransactions
+	// 	common.KeysToDelete = make([]common.Hash, 0) // only works at the epoch
+	// }
 
 	// 여기서도 state trie에 delete와 inactivate가 적용되지 않은 상태인지 확인하기 위해 프린팅을 해보는 것임 (joonha)
 	// fmt.Println("\n\n(3) s.db.TrieDB(): ", s.db.TrieDB(), "\n\n")
