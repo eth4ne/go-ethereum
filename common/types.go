@@ -23,14 +23,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"math/rand"
+	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
-	"io"
-	"os"
-	"strconv"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"golang.org/x/crypto/sha3"
@@ -97,7 +97,7 @@ var (
 	InactivateCriterion = int64(315) // inactive accounts were touched more before than this block timestamp (min: 1) (const)
 	CheckpointKeys = make(map[int64]int64) // initial NextKeys of blocks (CheckpointKeys[blockNumber] = initialNextKeyOfTheBlock)
 
-	InspectEpoch = int64(1)
+	InspectEpoch = int64(315)
 
 	NoExistKey = HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff") // very large key which will not be reached forever (const)
 	ToBeDeletedKey = HexToHash("0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe") // very large key which will not be reached forever (const)
