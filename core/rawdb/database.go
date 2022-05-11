@@ -362,6 +362,35 @@ func InspectDatabase(db ethdb.Database, keyPrefix, keyStart []byte) error {
 		case bytes.HasPrefix(key, headerNumberPrefix) && len(key) == (len(headerNumberPrefix)+common.HashLength):
 			hashNumPairings.Add(size)
 		case len(key) == common.HashLength:
+			// jhkim: print dbinspect
+			// if common.Bytes2Hex(key) == "14877df2d554fb72cb35a387400af0fb3fee5e11976d0a6ab4c848fb6e4021af" || //storageTrie node
+			// 	common.Bytes2Hex(key) == "2f60cfb65595474f839d3108ce367ff24cc323f28076426e87110b42c8f93043" ||
+			// 	common.Bytes2Hex(key) == "900e89da20be36e2bb6b09b4df1c8d48a70bbfdcfdfbfc4c40078da48fabb7d4" ||
+			// 	common.Bytes2Hex(key) == "5dce1b049e5a53760dd9b592e8837c6e6e74ef29af8ffd3ec7020220b75da5d8" ||
+			// 	common.Bytes2Hex(key) == "0225f9179440f82b3c2356b372cda0bf55b9e344d197e9a58b5fa698f7a38894" ||
+			// 	common.Bytes2Hex(key) == "205e55fab790df8abbaa0e6417cbec8355f4d2f99afd268c06073dc352523098" ||
+
+			// 	common.Bytes2Hex(key) == "ffe91d908b67e96d2ec329458cbcaeb6ac700cf3dbd709bda53d99d5af08c5e5" || //stateTrie node
+			// 	common.Bytes2Hex(key) == "b06a56c46d261b3a3b5bc5c8a34e8ee0974502b7de3f608c589696a2d3b29b45" ||
+			// 	common.Bytes2Hex(key) == "de651eba49b8e791d726b70cee8ac4fe108750b1ac7c50809538d344ceb56699" ||
+			// 	common.Bytes2Hex(key) == "9c141177ca3364fc5097cfe161c5364faab7c857d6a9cf148b96587a06911768" ||
+			// 	common.Bytes2Hex(key) == "47308033208c2f75a4b1321c9926b737839f44c7985efc50025d439ca7d01b57" ||
+			// 	common.Bytes2Hex(key) == "5f63c98016d650edec6a8679c0f3281b54f46c50ea49786eeea8334d30fa264b" ||
+			// 	common.Bytes2Hex(key) == "ea048fbc0c50dfce5a94562db9c32fb6a7d152c2fea542bdf085bdb29783832c" ||
+			// 	common.Bytes2Hex(key) == "563be81458c32519ca512629926ae28de48559a363d62debdaf71620a63975ac" ||
+			// 	common.Bytes2Hex(key) == "1fbcff31b81ca6b8e9fb4cd55859d0fd83ac87cfa2cd287ecb7534aadb9518d3" ||
+			// 	common.Bytes2Hex(key) == "cb3e3b1b900bd10870ad6bfdea86db664cd08074e2d048cf329906209c84e170" ||
+			// 	common.Bytes2Hex(key) == "746b004b12f042cfa45a33a2d056ee5152af9096fbe241a2e6b7795e3eda07cc" ||
+			// 	common.Bytes2Hex(key) == "415ef63a4f3e44da71c127d4566636dde0f992c25fa6a5daa70bb832aff9d85d" ||
+			// 	common.Bytes2Hex(key) == "e083b2bd27e57f2fa91cb4ce1fc3ffa29d9cf2cd4a8639307cee6d04aaf256b1" ||
+			// 	common.Bytes2Hex(key) == "de9f1d840347d0ebc64310a965d17fd2cc2f783c346403337c18f1ba667400be" ||
+			// 	common.Bytes2Hex(key) == "f48e528cac3a692afc8df468a45d4cdad5e1d321b462e0b8e314c48ec5b98423" ||
+			// 	common.Bytes2Hex(key) == "55725087c19c5310e80760bceea8b92d74c38cdbd3ee0567e99abe83fad6c7dd" ||
+			// 	common.Bytes2Hex(key) == "e7bd7c3978f11f6943ec29a31aa2194a3b4454b41ace16a1144259b96820e491" ||
+			// 	common.Bytes2Hex(key) == "3502e5afe3353284bb22ea6f10da731092923eeaa62f3c414f9bdefbe669b008" {
+
+			// 	fmt.Println("DB INSPECT", "TRIE", "key:", common.Bytes2Hex(key), "value:", common.Bytes2Hex(it.Value()))
+			// }
 			tries.Add(size)
 		case bytes.HasPrefix(key, CodePrefix) && len(key) == len(CodePrefix)+common.HashLength:
 			codes.Add(size)

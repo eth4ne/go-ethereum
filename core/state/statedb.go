@@ -52,6 +52,12 @@ func (n *proofList) Put(key []byte, value []byte) error {
 	return nil
 }
 
+//jhkim: empty function
+func (n *proofList) Put2(key []byte, value []byte, blocknumber int) error {
+	*n = append(*n, value)
+	return nil
+}
+
 func (n *proofList) Delete(key []byte) error {
 	panic("not supported")
 }
@@ -959,6 +965,7 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 	// The onleaf func is called _serially_, so we can reuse the same account
 	// for unmarshalling every time.
 	var account types.StateAccount
+	// jhkim: commit only state trie
 	root, accountCommitted, err := s.trie.Commit(func(_ [][]byte, _ []byte, leaf []byte, parent common.Hash) error {
 		if err := rlp.DecodeBytes(leaf, &account); err != nil {
 			return nil

@@ -199,6 +199,12 @@ func (db *Database) Put(key []byte, value []byte) error {
 	return db.db.Put(key, value, nil)
 }
 
+// Put inserts the given value into the key-value store.
+// jhkim: empty function
+func (db *Database) Put2(key []byte, value []byte, blocknumber int) error {
+	return db.db.Put(key, value, nil)
+}
+
 // Delete removes the key from the key-value store.
 func (db *Database) Delete(key []byte) error {
 	return db.db.Delete(key, nil)
@@ -455,6 +461,13 @@ type batch struct {
 // Put inserts the given value into the batch for later committing.
 func (b *batch) Put(key, value []byte) error {
 	b.b.Put(key, value)
+	b.size += len(key) + len(value)
+	return nil
+}
+
+//jhkim: Put2 uses blocknumber to print specific block's batch.write
+func (b *batch) Put2(key, value []byte, blocknumber int) error {
+	b.b.Put2(key, value, blocknumber)
 	b.size += len(key) + len(value)
 	return nil
 }

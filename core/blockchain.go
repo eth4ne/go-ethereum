@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"os"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -1311,42 +1312,53 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
 	}
 
-	// jhkim: write transaction details and flushed node list files every 10000 block
-	// distance is heuristic number for not to shutdown
+	common.Flushednode_block[common.GlobalBlockNumber] = common.FlushedNodeList // append flushed nodehash list
+	// fmt.Println("blocknumber", common.GlobalBlockNumber, "length of flushednode_block", len(common.Flushednode_block))
+	common.TrieUpdateElse[common.GlobalBlockNumber] = common.TrieUpdateElseTemp
+	var distance int
 
-	common.Flushednode_block[int(block.NumberU64())] = &common.FlushedNodeList // append flushed nodehash list
-	// common.TrieUpdateElse.Store(common.GlobalBlockNumber, common.TrieUpdateElseTemp)
-	common.TrieUpdateElse[common.GlobalBlockNumber] = &common.TrieUpdateElseTemp
-	// if common.GlobalBlockNumber == 46402 {
-	// 	fmt.Println("writeBlockAndSetHead")
-	// }
-	distance := 100000
-	if int(block.NumberU64())%distance == 0 {
-
-		trie.PrintTxDetail(int(block.NumberU64()), distance)
-		trie.PrintTxElse(int(block.NumberU64()), distance)
-		// trie.PrintDuplicatedFlushedNode(int(block.NumberU64()), distance)
-		// trie.PrintFlushedNode(int(block.NumberU64()), distance)
-		trie.PrintAddrhash2Addr(int(block.NumberU64()), distance)
-
-		// os.Exit(0)
+	if common.GlobalDistance == 0 {
+		distance = 100000
+	} else {
+		distance = common.GlobalDistance
+	}
+	if common.GlobalBlockNumber%distance == 0 { // distance is heuristic number for not to shutdown
+		// fmt.Println("txDetail distance : ", distance)
+		printResult(distance) //jhkim
 	}
 
-	// if int(block.NumberU64()) == distance+2 {
-	// 	os.Exit(0)
-	// }
-
 	common.FlushedNodeList = map[common.Hash]int{}
-	common.TrieUpdateElseTemp = make([]common.Address, 0)
+	common.TrieUpdateElseTemp = []common.Address{}
 	common.GlobalTxHash = common.HexToHash("0x0")
 	common.GlobalBlockMiner = common.Address{}
 	common.GlobalBlockUncles = []common.Address{}
+	// common.MinerUnlce = map[int]map[common.Address]uint64{}
 	common.GlobalBlockNumber = common.GlobalBlockNumber + 1
-
-	// common.GlobalBlockNumber = int(block.NumberU64()) + 1
-	// common.FlushedNodeDuplicate_block = map[common.Hash][]int{}
+	if common.GlobalBlockNumber == 2000001 {
+		os.Exit(0)
+	}
 
 	return status, nil
+}
+
+func printResult(distance int) {
+
+	// jhkim: write transaction details and flushed node list files every distance block
+
+	if common.GlobalBlockNumber < 2 {
+		common.TxDetail[common.HexToHash("0x0")] = &common.ZeroBlockTI
+	}
+
+	// fmt.Println(common.TrieUpdateElse)
+	trie.PrintTxDetail(common.GlobalBlockNumber, distance)
+	trie.PrintTxElse(common.GlobalBlockNumber, distance)
+	trie.PrintDuplicatedFlushedNode(common.GlobalBlockNumber, distance)
+
+	trie.PrintFlushedNode(common.GlobalBlockNumber, distance)
+	trie.PrintAddrhash2Addr(common.GlobalBlockNumber, distance)
+
+	// os.Exit(0)
+
 }
 
 // addFutureBlock checks if the block is within the max allowed window to get

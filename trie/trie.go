@@ -558,7 +558,8 @@ func (t *Trie) Commit(onleaf LeafCallback) (common.Hash, int, error) {
 			h.commitLoop(t.db)
 		}()
 	}
-	newRoot, committed, err := h.Commit(t.root, t.db)
+	// newRoot, committed, err := h.Commit(t.root, t.db)
+	newRoot, committed, err := h.Commit(t, t.root, t.db) //jhkim: add trie argument to use trie.Print
 	if onleaf != nil {
 		// The leafch is created in newCommitter if there was an onleaf callback
 		// provided. The commitLoop only _reads_ from it, and the commit
@@ -594,12 +595,15 @@ func (t *Trie) Reset() {
 }
 
 // print trie nodes details in human readable form (jmlee)
-// func (t *Trie) Print() {
-// 	fmt.Println(t.root.toString("", t.db))
-// }
-func (t *Trie) Print() string {
-	return t.root.toString("", t.db)
+func (t *Trie) Print() {
+	if t.root != nil {
+		fmt.Println(t.root.toString("", t.db))
+	}
 }
+
+// func (t *Trie) Print() string {
+// 	return t.root.toString("", t.db)
+// }
 
 // get trie's db size (jmlee)
 func (t *Trie) Size() common.StorageSize {

@@ -292,5 +292,6 @@ func (n valueNode) toString(ind string, db *Database) string {
 	// 	}
 	// }
 	// return fmt.Sprintf("[ Nonce: %d / Balance: %s ]", acc.Nonce, acc.Balance.String())
-	return fmt.Sprintf("")
+	// return fmt.Sprintf("")
+	return fmt.Sprintf(common.Bytes2Hex([]byte(n)))
 }

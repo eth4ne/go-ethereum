@@ -713,7 +713,7 @@ func (db *Database) Commit(node common.Hash, report bool, callback func(common.H
 
 	// Move all of the accumulated preimages into a write batch
 	if db.preimages != nil {
-		rawdb.WritePreimages(batch, db.preimages)
+		rawdb.WritePreimages(batch, db.preimages) // 7 db.Put. slotHashes of storage trie
 		// Since we're going to replay trie node writes into the clean cache, flush out
 		// any batched pre-images before continuing.
 		if err := batch.Write(); err != nil {
@@ -771,15 +771,14 @@ func (db *Database) commit(hash common.Hash, batch ethdb.Batch, uncacher *cleane
 	if !ok {
 		return nil
 	}
-
 	// jhkim: count duplicated flushed node. It should be done before check db.dirties
-	// if hash != common.HexToHash("0x0") {
-	// 	if list, ok := common.FlushedNodeDuplicate_block[hash]; ok {
-	// 		common.FlushedNodeDuplicate_block[hash] = append(list, common.GlobalBlockNumber)
-	// 	} else {
-	// 		common.FlushedNodeDuplicate_block[hash] = []int{common.GlobalBlockNumber}
-	// 	}
-	// }
+	if hash != common.HexToHash("0x0") {
+		if list, ok := common.FlushedNodeDuplicate_block[hash]; ok {
+			common.FlushedNodeDuplicate_block[hash] = append(list, common.GlobalBlockNumber)
+		} else {
+			common.FlushedNodeDuplicate_block[hash] = []int{common.GlobalBlockNumber}
+		}
+	}
 
 	var err error
 	node.forChilds(func(child common.Hash) {
@@ -833,6 +832,41 @@ type cleaner struct {
 // the two-phase commit is to ensure data availability while moving from memory
 // to disk.
 func (c *cleaner) Put(key []byte, rlp []byte) error {
+	hash := common.BytesToHash(key)
+
+	// If the node does not exist, we're done on this path
+	node, ok := c.db.dirties[hash]
+	if !ok {
+		return nil
+	}
+	// Node still exists, remove it from the flush-list
+	switch hash {
+	case c.db.oldest:
+		c.db.oldest = node.flushNext
+		c.db.dirties[node.flushNext].flushPrev = common.Hash{}
+	case c.db.newest:
+		c.db.newest = node.flushPrev
+		c.db.dirties[node.flushPrev].flushNext = common.Hash{}
+	default:
+		c.db.dirties[node.flushPrev].flushNext = node.flushNext
+		c.db.dirties[node.flushNext].flushPrev = node.flushPrev
+	}
+	// Remove the node from the dirty cache
+	delete(c.db.dirties, hash)
+	c.db.dirtiesSize -= common.StorageSize(common.HashLength + int(node.size))
+	if node.children != nil {
+		c.db.dirtiesSize -= common.StorageSize(cachedNodeChildrenSize + len(node.children)*(common.HashLength+2))
+	}
+	// Move the flushed node into the clean cache to prevent insta-reloads
+	if c.db.cleans != nil {
+		c.db.cleans.Set(hash[:], rlp)
+		memcacheCleanWriteMeter.Mark(int64(len(rlp)))
+	}
+	return nil
+}
+
+//jhkim: empty function
+func (c *cleaner) Put2(key []byte, rlp []byte, blocknumber int) error {
 	hash := common.BytesToHash(key)
 
 	// If the node does not exist, we're done on this path

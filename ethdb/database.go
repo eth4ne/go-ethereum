@@ -32,6 +32,7 @@ type KeyValueReader interface {
 type KeyValueWriter interface {
 	// Put inserts the given value into the key-value data store.
 	Put(key []byte, value []byte) error
+	Put2(key []byte, value []byte, blocknumber int) error // jhkim: Put2 uses blocknumber to print specific block's db write
 
 	// Delete removes the key from the key-value data store.
 	Delete(key []byte) error

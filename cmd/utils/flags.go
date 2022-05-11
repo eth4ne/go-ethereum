@@ -790,6 +790,11 @@ var (
 		Usage: "InfluxDB organization name (v2 only)",
 		Value: metrics.DefaultConfig.InfluxDBOrganization,
 	}
+	MyCustomTxDetailFlag = cli.IntFlag{ //jhkim
+		Name:  "txdetail",
+		Usage: "Epoch of printing txDetail",
+		Value: common.GlobalDistance,
+	}
 )
 
 // MakeDataDir retrieves the currently requested data directory, terminating
@@ -1492,6 +1497,12 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	setMiner(ctx, &cfg.Miner)
 	setWhitelist(ctx, cfg)
 	setLes(ctx, cfg)
+
+	//jhkim: set printing epoch of txdetail using geth flag --txdetail
+	if ctx.GlobalIsSet(MyCustomTxDetailFlag.Name) {
+		common.GlobalDistance = ctx.GlobalInt(MyCustomTxDetailFlag.Name)
+		// fmt.Println("  common.globladistance", common.GlobalDistance)
+	}
 
 	// Cap the cache allowance and tune the garbage collector
 	mem, err := gopsutil.VirtualMemory()

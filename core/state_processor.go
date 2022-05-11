@@ -81,22 +81,12 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		common.GlobalBlockUncles = append(common.GlobalBlockUncles, uncle.Coinbase)
 	}
 
-	// if common.GlobalBlockNumber == 80631 {
-	// 	fmt.Println("block 80631", common.GlobalBlockMiner, common.GlobalBlockUncles)
-	// 	이거 의미없다. transaction이 수행되면서 miner랑 uncle이 결정될텐데 지금 count해봐야 의미가 없다
-	// 	근데 왜 잘찍히는지 모르겠다
 	// }
-	// fmt.Println("set GlobalBlockNumber", common.GlobalBlockNumber)
 
 	// Iterate over and process the individual transactions
-	// if common.GlobalBlockNumber == 198695 {
-	// 	fmt.Println("stateProcessor.go Process")
-	// }
 
 	for i, tx := range block.Transactions() {
-		// if common.GlobalBlockNumber == 55284 {
-		// 	fmt.Println("before applyTransaction", tx.Hash())
-		// }
+
 		common.GlobalTxHash = tx.Hash() // jhkim: set global variable
 		msg, err := tx.AsMessage(types.MakeSigner(p.config, header.Number), header.BaseFee)
 		if err != nil {
@@ -107,14 +97,11 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		if err != nil {
 			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
-		// if common.GlobalBlockNumber == 46402 {
-		// 	fmt.Println("46402 Did transactions")
-		// }
+
 		receipts = append(receipts, receipt)
 		allLogs = append(allLogs, receipt.Logs...)
 
 		//jhkim: reset global variable after process each transaction
-		// common.GlobalTxHash = common.HexToHash("0x0")
 
 		common.GlobalTxTo = common.Address{}
 		common.GlobalTxFrom = common.Address{}
@@ -139,9 +126,7 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	common.GlobalMutex.Lock()
 
 	if _, ok := common.TxDetail[tx.Hash()]; !ok {
-		// if common.GlobalBlockNumber == 55284 {
-		// 	fmt.Println("WriteTxDetail", tx.Hash())
-		// }
+
 		WriteTxDetail(tx, msg, blockNumber, statedb) //jhkim
 	} else {
 		fmt.Println("Error: Tx already exist!", tx.Hash(), common.GlobalBlockNumber)
@@ -149,7 +134,7 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	}
 	common.GlobalMutex.Unlock()
 	if tx.To() == nil {
-		common.GlobalContractAddress = crypto.CreateAddress(evm.TxContext.Origin, tx.Nonce()) // jhkim: for cacheing
+		common.GlobalDeployedContractAddress = crypto.CreateAddress(evm.TxContext.Origin, tx.Nonce()) // jhkim: for cacheing
 	}
 
 	// Update the state with pending changes.
@@ -224,8 +209,10 @@ func WriteTxDetail(tx *types.Transaction, msg types.Message, number *big.Int, st
 	txInform := common.TxInformation{}
 	txInform.ContractAddress_SlotHash = map[common.Address]*[]common.Hash{}
 	txInform.BlockNumber = (*number).Int64()
-	txInform.Else = []common.Address{}
+	txInform.Internal = []common.Address{}
+	txInform.InternalCA = []common.Address{}
 	txInform.DeployedContractAddress = common.Address{}
+	txInform.AccountBalance = map[common.Address]uint64{}
 
 	if tx.To() == nil {
 		txInform.Types = 2 // contract creation

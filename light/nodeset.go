@@ -60,6 +60,23 @@ func (db *NodeSet) Put(key []byte, value []byte) error {
 	return nil
 }
 
+//jhkim: empty function
+func (db *NodeSet) Put2(key []byte, value []byte, blocknumber int) error {
+	db.lock.Lock()
+	defer db.lock.Unlock()
+
+	if _, ok := db.nodes[string(key)]; ok {
+		return nil
+	}
+	keystr := string(key)
+
+	db.nodes[keystr] = common.CopyBytes(value)
+	db.order = append(db.order, keystr)
+	db.dataSize += len(value)
+
+	return nil
+}
+
 // Delete removes a node from the set
 func (db *NodeSet) Delete(key []byte) error {
 	db.lock.Lock()
@@ -143,6 +160,10 @@ func (n NodeList) NodeSet() *NodeSet {
 
 // Put stores a new node at the end of the list
 func (n *NodeList) Put(key []byte, value []byte) error {
+	*n = append(*n, value)
+	return nil
+}
+func (n *NodeList) Put2(key []byte, value []byte, blocknumber int) error {
 	*n = append(*n, value)
 	return nil
 }

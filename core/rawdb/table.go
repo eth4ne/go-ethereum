@@ -107,6 +107,11 @@ func (t *table) Put(key []byte, value []byte) error {
 	return t.db.Put(append([]byte(t.prefix), key...), value)
 }
 
+//jhkim: empty function
+func (t *table) Put2(key []byte, value []byte, blocknumber int) error {
+	return t.db.Put(append([]byte(t.prefix), key...), value)
+}
+
 // Delete removes the given prefixed key from the database.
 func (t *table) Delete(key []byte) error {
 	return t.db.Delete(append([]byte(t.prefix), key...))
@@ -184,6 +189,11 @@ func (b *tableBatch) Put(key, value []byte) error {
 	return b.batch.Put(append([]byte(b.prefix), key...), value)
 }
 
+//jhkim
+func (b *tableBatch) Put2(key, value []byte, blocknumber int) error {
+	return b.batch.Put(append([]byte(b.prefix), key...), value)
+}
+
 // Delete inserts the a key removal into the batch for later committing.
 func (b *tableBatch) Delete(key []byte) error {
 	return b.batch.Delete(append([]byte(b.prefix), key...))
@@ -213,6 +223,12 @@ type tableReplayer struct {
 
 // Put implements the interface KeyValueWriter.
 func (r *tableReplayer) Put(key []byte, value []byte) error {
+	trimmed := key[len(r.prefix):]
+	return r.w.Put(trimmed, value)
+}
+
+//jhkim
+func (r *tableReplayer) Put2(key []byte, value []byte, blocknumber int) error {
 	trimmed := key[len(r.prefix):]
 	return r.w.Put(trimmed, value)
 }

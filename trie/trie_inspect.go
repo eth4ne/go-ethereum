@@ -5,7 +5,6 @@ import (
 	"math/big"
 	"os"
 	"runtime"
-	"runtime/debug"
 	"sort"
 	"strconv"
 	"sync"
@@ -15,7 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
-var path = "/home/jhkim/go/src/github.com/ethereum/go-ethereum/txDetail/"
+var path = "/home/jhkim/go/src/github.com/ethereum/go-ethereum/txDetail/" // used absolute path
 var _ = os.MkdirAll(path, 0777)
 
 func increaseSize(nodeSize int, node string, tir *TrieInspectResult, depth int) {
@@ -80,11 +79,12 @@ func PrintFlushedNode(blocknumber, distance int) {
 	start := time.Now()
 	tmp := ""
 	for key, val := range common.Flushednode_block {
+		// fmt.Println("flushednode_block", key)
 		s := ""
-		s += fmt.Sprintf("  Block %d:", key)
+		s += fmt.Sprintf("  /Block %d:", key)
 		cf, cn := 0, 0 // count
 		tmp = ""
-		for k, v := range *val {
+		for k, v := range val {
 			tmp += fmt.Sprintf("\t%v", k)
 			if v == 1 {
 				tmp += fmt.Sprintf("\t Full Node\n")
@@ -107,7 +107,7 @@ func PrintFlushedNode(blocknumber, distance int) {
 	ss += fmt.Sprintln(" in", elapsed.Seconds(), "seconds")
 	fmt.Print(ss)
 
-	common.Flushednode_block = map[int]*map[common.Hash]int{}
+	common.Flushednode_block = map[int]map[common.Hash]int{}
 }
 
 func PrintAddrhash2Addr(blocknumber, distance int) {
@@ -137,6 +137,40 @@ func PrintAddrhash2Addr(blocknumber, distance int) {
 	fmt.Print(ss)
 
 	common.AddrHash2Addr = map[common.Hash]common.Address{}
+
+	///////////////////////////////////////////////////////////////////////
+	// slothash to slot
+	ss = fmt.Sprintf("Write SlotHash to Slot Map %d-%d in txt file", blocknumber-distance, blocknumber)
+
+	filepath = path + "Slothash2Slot_" + strconv.FormatInt(int64(blocknumber-distance+1), 10) + "-" + strconv.FormatInt(int64(blocknumber), 10) + ".txt"
+
+	f, err = os.Create(filepath)
+	if err != nil {
+		fmt.Printf("Cannot create result file.\n")
+		os.Exit(1)
+	}
+	defer f.Close()
+
+	start = time.Now()
+	for k, v := range common.Account_SlotHash2Slot {
+
+		s := fmt.Sprintln("/acc:", k)
+		for _, vv := range v {
+
+			// blocknumber, _ := strconv.ParseInt(common.Bytes2Hex(vv[3]), 16, 64)
+			// s += fmt.Sprintln("  blocknumber", string(vv[3]), "slothash", common.BytesToHash(vv[0]), "slot", common.BytesToAddress(vv[1]), "value", common.Bytes2Hex(vv[2]))
+			s += fmt.Sprintln("  blocknumber", vv.Blocknumber, "slothash", vv.Hashkey, "slot", vv.Key, "value", common.Bytes2Hex(vv.Value))
+		}
+
+		fmt.Fprintln(f, s)
+	}
+
+	elapsed = time.Since(start)
+	ss += fmt.Sprintln(" in", elapsed.Seconds(), "seconds")
+	fmt.Print(ss)
+
+	common.Account_SlotHash2Slot = map[common.Address][]common.SlotDetail{}
+
 }
 
 func PrintTxDetail(blocknumber, distance int) {
@@ -173,7 +207,7 @@ func PrintTxDetail(blocknumber, distance int) {
 
 		if v.Types != 1 { //except transfer transaction
 
-			s += fmt.Sprintln("TxID:", k)
+			s += fmt.Sprintln("/TxID:", k)
 			s += fmt.Sprintln("  Block:", v.BlockNumber)
 			if v.Types == 1 {
 				s += fmt.Sprintln("  Tx: Transfer")
@@ -188,12 +222,12 @@ func PrintTxDetail(blocknumber, distance int) {
 				s += fmt.Sprintln("  Wrong Tx Information")
 			}
 
-			s += fmt.Sprintln("    From:\t", v.From)
+			s += fmt.Sprintln("    From:", v.From, "Bal:", v.AccountBalance[v.From])
 			if v.Types == 1 {
-				s += fmt.Sprintln("    To(EOA):\t", v.To)
+				s += fmt.Sprintln("    To(EOA):", v.To, "Bal:", v.AccountBalance[v.To])
 				// s += fmt.Sprintln("    To: \t\t", v.To)
 			} else if v.Types == 3 {
-				s += fmt.Sprintln("    To(CA):\t", v.To)
+				s += fmt.Sprintln("    To(CA):", v.To, "Bal:", v.AccountBalance[v.To])
 			} else if v.Types == 4 {
 				// Do nothing
 			} else {
@@ -202,13 +236,16 @@ func PrintTxDetail(blocknumber, distance int) {
 
 			if v.Types != 1 && v.Types != 4 {
 				s += fmt.Sprintln("    Contract related Address")
-				for _, v := range v.Else {
-					s += fmt.Sprintln("      EOA:", v) // EOAs called by contract
+				for _, vv := range v.Internal {
+					s += fmt.Sprintln("      EOA:", vv, "Bal:", v.AccountBalance[vv]) // EOAs balance modified by contract
+				}
+				for _, vv := range v.InternalCA {
+					s += fmt.Sprintln("      CAs:", vv, "Bal:", v.AccountBalance[vv]) // CAs balance modified by contract
 				}
 
 				for kk, vv := range v.ContractAddress_SlotHash {
 
-					s += fmt.Sprintln("      CA:", kk)
+					s += fmt.Sprintln("      CA:", kk, "Bal:", v.AccountBalance[kk])
 					s += fmt.Sprintln("        SlotHash:", vv)
 				}
 			}
@@ -230,10 +267,6 @@ func PrintTxElse(blocknumber, distance int) {
 	common.GlobalMutex.Lock()
 	defer common.GlobalMutex.Unlock()
 
-	count := 0
-	c := 0
-	gap := len(common.TrieUpdateElse) / 4
-
 	ss := fmt.Sprintf("Write TxElse %d-%d in txt file", blocknumber-distance, blocknumber)
 	filepath := path + "TrieUpdateElse_" + strconv.FormatInt(int64(blocknumber-distance+1), 10) + "-" + strconv.FormatInt(int64(blocknumber), 10) + ".txt"
 	f, err := os.Create(filepath)
@@ -246,31 +279,42 @@ func PrintTxElse(blocknumber, distance int) {
 	start := time.Now()
 	for k, v := range common.TrieUpdateElse {
 
-		count++
-		if gap != 0 {
-			if count%gap == 0 {
-				c++
-				elapsed := time.Since(start)
-				fmt.Println("Writing TxElse...[", c, "/4]", "elapsed", elapsed.Seconds(), "seconds")
-			}
-		}
-		if len(*v) != 0 {
+		if len(v) != 0 {
 			s := ""
 			s += fmt.Sprintf("%v,", k)
-			for _, val := range *v {
+			for _, val := range v {
 				s += fmt.Sprintf("%v,", val)
 			}
 			// s += fmt.Sprintln("")
-			fmt.Fprintln(f, s)
+			if s != "" {
+				fmt.Fprintln(f, s)
+			}
 		}
 
+	}
+
+	fmt.Fprintln(f, "Miner and uncles")
+	for k, v := range common.MinerUnlce {
+		s := ""
+		if len(v) != 0 {
+			s += fmt.Sprintf("%d,%v", k, v)
+		}
+		fmt.Fprintln(f, s)
+	}
+	common.MinerUnlce = map[int]map[common.Address]uint64{}
+	if blocknumber-distance == 0 { // write only first file
+		fmt.Fprintln(f, "Block 0 state")
+		for k, v := range common.ZeroBlockTI.AccountBalance {
+			s := fmt.Sprintf("%v,%v", k, v)
+			fmt.Fprintln(f, s)
+		}
 	}
 
 	elapsed := time.Since(start)
 	ss += fmt.Sprintln(" in", elapsed.Seconds(), "seconds")
 	fmt.Print(ss)
 
-	common.TrieUpdateElse = map[int]*[]common.Address{}
+	common.TrieUpdateElse = map[int][]common.Address{}
 }
 
 func PrintDuplicatedFlushedNode(blocknumber, distance int) {
@@ -305,6 +349,7 @@ func PrintDuplicatedFlushedNode(blocknumber, distance int) {
 
 	common.FlushedNodeDuplicate_block = map[common.Hash][]int{}
 	common.FlushedNodeDuplicate = map[common.Hash]int{}
+
 }
 
 // Trie size inspection from nakamoto.snu.ac.kr(jhkim)
@@ -337,7 +382,8 @@ type TrieInspectResult struct {
 	ShortNodeNum    int // # of short node in the trie
 	ShortNodeSize   int
 	EmptyRootHash   int
-	ErrorNum        int // # of error occurence while inspecting the trie
+	ErrorNum        int                // # of error occurence while inspecting the trie
+	AccountBalance  map[string]big.Int // key: addressHash, value: account balance
 
 	StateTrieFullNodeDepth  [20]int
 	StateTrieShortNodeDepth [20]int
@@ -352,18 +398,17 @@ type TrieInspectResult struct {
 	StorageTrieShortNodeNum  int
 	StorageTrieShortNodeSize int
 
-	// StorageTrieSizeTop100    [100]string
 	StorageTrieLeafNodeDepth map[string]([20]int) // map Key:codeHash, value:leafnode depth. 20 is hard coded number. Depth of Trie will not exceed 20
 	StorageTrieNodeMap       map[string]([6]int)  // map Key:codeHash, value: [shortnode count, size, fullnode count, size, leafnode count, size]
 	AddressHashTocodeHash    map[string]string    // In state trie, map Key: addressHash, value: codeHash
 	StorageTrieSlotHash      map[string][]string  // Storage Trie SlotHash, key: addressHash, value: slotHash List
 	StorageTrieRoot          map[string]string    // map Key: storageTrie Root Hash, value: addressHash
-	// StorageTrieNodeMap       map[string]([6]int)  // map Key:codeHash, value: [shortnode count, size, fullnode count, size, leafnode count, size]
+
 }
 
 func (tir *TrieInspectResult) PrintTrieInspectResult(blockNumber uint64, elapsedTime int) {
-	f1, err := os.Create("/home/jhkim/go/src/github.com/ethereum/new_result_" + strconv.FormatUint(blockNumber, 10) + ".txt") // goroutine version
-	// f1, err := os.Create("/home/jhkim/go/src/github.com/ethereum/new_result_" + strconv.FormatUint(blockNumber, 10) + "_vanilla.txt") // vanilla version
+	// f1, err := os.Create("/home/jhkim/go/src/github.com/ethereum/go-ethereum/build/bin/new_result_" + strconv.FormatUint(blockNumber, 10) + ".txt") // goroutine version
+	f1, err := os.Create("/home/jhkim/go/src/github.com/ethereum/new_result_" + strconv.FormatUint(blockNumber, 10) + "_vanilla.txt") // vanilla version
 	if err != nil {
 		fmt.Printf("Cannot create result file.\n")
 		os.Exit(1)
@@ -371,8 +416,8 @@ func (tir *TrieInspectResult) PrintTrieInspectResult(blockNumber uint64, elapsed
 	defer f1.Close()
 
 	output := ""
-	output += fmt.Sprintf("trie inspect result at block %d with %d goroutines (it took %d seconds)\n", blockNumber, maxGoroutine, elapsedTime)
-	// output += fmt.Sprintf("trie inspect result at block %d with vanilla goroutines (it took %d seconds)\n", blockNumber, elapsedTime) // vanilla version
+	// output += fmt.Sprintf("trie inspect result at block %d with %d goroutines (it took %d seconds)\n", blockNumber, maxGoroutine, elapsedTime)
+	output += fmt.Sprintf("trie inspect result at block %d with vanilla goroutines (it took %d seconds)\n", blockNumber, elapsedTime) // vanilla version
 	output += fmt.Sprintf("  total trie size: %d bytes (about %d MB)\n", tir.TrieSize, tir.TrieSize/1000000)
 	output += fmt.Sprintf("  # of full nodes: %d\n", tir.FullNodeNum)
 	output += fmt.Sprintf("  \ttotal size of full nodes: %d\n", tir.FullNodeSize)
@@ -398,8 +443,18 @@ func (tir *TrieInspectResult) PrintTrieInspectResult(blockNumber uint64, elapsed
 
 	output += fmt.Sprintf("  # of errors: %d\n", tir.ErrorNum) // this should be 0, of course
 
+	fmt.Fprintln(f1, output) // write text file
+	// fmt.Println(output)      // console print
+
+	output = fmt.Sprintf("Balance of Accounts\n")
+	for key, value := range tir.AccountBalance {
+		output += fmt.Sprintf("  %s,%v\n", key, value.Uint64())
+	}
+	fmt.Fprintln(f1, output) // write text file
+	fmt.Println(output)      // console print
+
 	// list all StorageTrie's codehash, leafnode depth, each node size
-	output += fmt.Sprintf("\n\nNonZero StorageTrie Leaf Node Depth: addressHash, codeHash, leaf node depth, [SN #, size, FN #, size, LN #, size]\n")
+	output = fmt.Sprintf("\n\nNonZero StorageTrie Leaf Node Depth: addressHash, codeHash, leaf node depth, [SN #, size, FN #, size, LN #, size]\n")
 	for key, value := range tir.StorageTrieLeafNodeDepth {
 		output += fmt.Sprintf("\n  %s,%v,%v,%v\n", key, tir.AddressHashTocodeHash[key], value, tir.StorageTrieNodeMap[key])
 		output += fmt.Sprintf("    StorageTrieRoot: %v\n", tir.StorageTrieRoot[key])
@@ -409,7 +464,7 @@ func (tir *TrieInspectResult) PrintTrieInspectResult(blockNumber uint64, elapsed
 		// }
 	}
 	fmt.Fprintln(f1, output) // write text file
-	fmt.Println(output)      // console print
+	// fmt.Println(output)      // console print
 
 }
 
@@ -420,14 +475,19 @@ type Account struct {
 	CodeHash []byte
 }
 
+type trieType int
+
+const stateTrie trieType = 1
+const storageTrie trieType = 2
+
 // inspect the trie
 func (t *Trie) InspectTrie() TrieInspectResult {
-	if isFirst {
+	// if isFirst {
 
-		isFirst = false
-		debug.SetMaxThreads(15000) // default MaxThread is 10000
-		runtime.GOMAXPROCS(runtime.NumCPU())
-	}
+	// 	isFirst = false
+	// 	debug.SetMaxThreads(15000) // default MaxThread is 10000
+	// 	runtime.GOMAXPROCS(runtime.NumCPU())
+	// }
 	// debug.FreeOSMemory()
 	var tir TrieInspectResult
 	// _, _ = os.Create(filename)
@@ -436,19 +496,20 @@ func (t *Trie) InspectTrie() TrieInspectResult {
 	tir.AddressHashTocodeHash = map[string]string{}
 	tir.StorageTrieSlotHash = map[string][]string{}
 	tir.StorageTrieRoot = map[string]string{}
+	tir.AccountBalance = map[string]big.Int{}
 
 	fmt.Println("\n\n#################\nINSPECTATION START\n#################")
-	// t.inspectTrieNodes(t.root, &tir, &wg, 0, "state")      // Inspect Start
-	t.inspectTrieNodes(t.root, &tir, &wg, 0, "state", nil) // Inspect Start
+	// t.inspectTrieNodes(t.root, &tir, &wg, 0, "state") // Inspect Start
+	t.inspectTrieNodes(t.root, &tir, &wg, 0, stateTrie, nil) // Inspect Start
 
 	// wait for all gourtines finished
-	timeout := 48 * time.Hour
+	// timeout := 48 * time.Hour
 
-	if waitTimeout(&wg, timeout) {
-		fmt.Println("Timed out waiting for wait group")
-	} else {
-		fmt.Println("Wait group finished")
-	}
+	// if waitTimeout(&wg, timeout) {
+	// 	fmt.Println("Timed out waiting for wait group")
+	// } else {
+	// 	fmt.Println("Wait group finished")
+	// }
 	wg.Wait() // ***WARNING: if you sets maxgoroutine number wrong, infinite waiting
 	fmt.Println("\n\n#################\nINSPECTATION DONE\n#################")
 	return tir
@@ -457,28 +518,29 @@ func (t *Trie) InspectTrie() TrieInspectResult {
 func (t *Trie) InspectStorageTrie() TrieInspectResult {
 
 	var tir TrieInspectResult
-	// t.inspectTrieNodes(t.root, &tir, &wg, 0, "storage")
+
 	tir.StorageTrieLeafNodeDepth = map[string][20]int{}
 	tir.StorageTrieNodeMap = map[string][6]int{}
 	tir.AddressHashTocodeHash = map[string]string{}
 	tir.StorageTrieSlotHash = map[string][]string{}
 
-	t.inspectTrieNodes(t.root, &tir, &wg, 0, "storage", nil)
+	t.inspectTrieNodes(t.root, &tir, &wg, 0, storageTrie, nil)
+	// t.inspectTrieNodes(t.root, &tir, &wg, 0, "storage")
 	return tir
 }
 
-func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGroup, depth int, trie string, addressKey []byte) {
+func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGroup, depth int, trie trieType, addressKey []byte) {
 	// func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGroup, depth int, trie string) {
 
 	cnt += 1
-	if cnt%100000 == 0 && trie == "state" {
+	if cnt%100000 == 0 && trie == stateTrie {
 		cnt = 0
 		fmt.Println("  intermediate result -> trie size:", tir.TrieSize/1000000, "MB / goroutines", runtime.NumGoroutine(), "/ EOA:", tir.EOANum, "/ CA:", tir.CANum, "/ time:", time.Now().Format("01-02 3:04:05"), "/ err:", tir.ErrorNum)
 	}
 
 	switch n := n.(type) {
 	case *shortNode:
-		// fmt.Printf("	inspectTrieNodes, addressKey %v ->", hex.EncodeToString(addressKey))
+
 		hn, _ := n.cache()
 		hash := common.BytesToHash(hn)
 		if hn == nil { // storage trie case
@@ -501,12 +563,15 @@ func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGro
 			fmt.Println("ERROR: short node not found -> node hash:", hash.Hex())
 			os.Exit(1)
 		}
+		// fmt.Println("    Short node: addressKey", hex.EncodeToString(addressKey), "+", hex.EncodeToString(n.Key), " (length of key:", len(n.Key), ")")
 		addressKey = append(addressKey, n.Key...)
+
 		increaseSize(len(nodeBytes), "short", tir, depth)             // increase tir
 		t.inspectTrieNodes(n.Val, tir, wg, depth+1, trie, addressKey) // go child node
+		// t.inspectTrieNodes(n.Val, tir, wg, depth+1, trie) // go child node
 
 	case *fullNode:
-		// fmt.Printf("	inspectTrieNodes, addressKey %v ->", hex.EncodeToString(addressKey))
+
 		hn, _ := n.cache()
 		nodeBytes, err := t.db.Node(common.BytesToHash(hn))
 		if err != nil {
@@ -514,46 +579,49 @@ func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGro
 			fmt.Println("ERROR: full node not found -> node hash:", common.BytesToHash(hn).Hex())
 			os.Exit(1)
 		}
-		// temp_addressKey := addressKey
+		temp_addressKey := addressKey
 		increaseSize(len(nodeBytes), "full", tir, depth) // increase tir
 
 		// // vanilla version
-		// for i, child := range &n.Children {
-		// 	if child != nil {
-		// 		// nodeKeyByte := common.HexToHash("0x" + indices[i])
-		// 		nodeKeyByte := common.HexToHash("0x" + indices[i])
-		// 		addressKey = append(temp_addressKey, nodeKeyByte[len(nodeKeyByte)-1])
-		// 		t.inspectTrieNodes(child, tir, wg, depth+1, trie, addressKey)
-		// 	}
-		// }
+		for i, child := range &n.Children {
+			if child != nil {
+				nodeKeyByte := common.HexToHash("0x" + indices[i])
+				// fmt.Println("child of fullNode", "index", i, "nodekeyByte", nodeKeyByte)
+				// fmt.Println("    Full  node: addressKey", hex.EncodeToString(addressKey), "+", nodeKeyByte[len(nodeKeyByte)-1])
+				addressKey = append(temp_addressKey, nodeKeyByte[len(nodeKeyByte)-1])
 
-		// goroutine version
-		gortn := runtime.NumGoroutine()
-		if gortn < maxGoroutine && trie == "state" { // if current number of goroutines exceed max goroutine number
-			for i, child := range &n.Children {
-				if child != nil {
-					nodeKeyByte := common.HexToHash("0x" + indices[i])
-					addressKey = append(addressKey, nodeKeyByte[len(nodeKeyByte)-1])
-
-					wg.Add(1)
-					go func(child node, tir *TrieInspectResult, wg *sync.WaitGroup, depth int, trie string) {
-						defer wg.Done()
-						t.inspectTrieNodes(child, tir, wg, depth+1, trie, addressKey)
-						// t.inspectTrieNodes(child, tir, wg, depth+1, trie)
-					}(child, tir, wg, depth, trie)
-				}
-			}
-		} else {
-			for i, child := range &n.Children {
-				if child != nil {
-					// t.inspectTrieNodes(child, tir, wg, depth+1, trie)
-					nodeKeyByte := common.HexToHash("0x" + indices[i])
-					addressKey = append(addressKey, nodeKeyByte[len(nodeKeyByte)-1])
-
-					t.inspectTrieNodes(child, tir, wg, depth+1, trie, addressKey)
-				}
+				t.inspectTrieNodes(child, tir, wg, depth+1, trie, addressKey)
+				// t.inspectTrieNodes(child, tir, wg, depth+1, trie)
 			}
 		}
+
+		// goroutine version
+		// gortn := runtime.NumGoroutine()
+		// if gortn < maxGoroutine && trie == "state" { // if current number of goroutines exceed max goroutine number
+		// 	for i, child := range &n.Children {
+		// 		if child != nil {
+		// 			nodeKeyByte := common.HexToHash("0x" + indices[i])
+		// 			addressKey = append(addressKey, nodeKeyByte[len(nodeKeyByte)-1])
+
+		// 			wg.Add(1)
+		// 			go func(child node, tir *TrieInspectResult, wg *sync.WaitGroup, depth int, trie string) {
+		// 				defer wg.Done()
+		// 				t.inspectTrieNodes(child, tir, wg, depth+1, trie, addressKey)
+		// 				// t.inspectTrieNodes(child, tir, wg, depth+1, trie)
+		// 			}(child, tir, wg, depth, trie)
+		// 		}
+		// 	}
+		// } else {
+		// 	for i, child := range &n.Children {
+		// 		if child != nil {
+		// 			// t.inspectTrieNodes(child, tir, wg, depth+1, trie)
+		// 			nodeKeyByte := common.HexToHash("0x" + indices[i])
+		// 			addressKey = append(addressKey, nodeKeyByte[len(nodeKeyByte)-1])
+
+		// 			t.inspectTrieNodes(child, tir, wg, depth+1, trie, addressKey)
+		// 		}
+		// 	}
+		// }
 
 	case hashNode:
 		hash := common.BytesToHash([]byte(n))
@@ -571,34 +639,36 @@ func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGro
 	case valueNode:
 
 		// Value nodes don't have children so they're left as were
-		// fmt.Println("this node is value node (size:", len(n), "bytes)")
-		// fmt.Printf("	inspectTrieNodes, addressKey %v ->", hex.EncodeToString(addressKey))
+
 		increaseSize(len(n), "value", tir, depth)
 		// value node has account info, decode it
 		addressHash := common.BytesToHash(hexToKeybytes(addressKey)).Hex()
+		// fmt.Printf("	inspectTrieNodes, addressKey %v ->", hex.EncodeToString(addressKey))
+		// fmt.Printf("this node is value node (size: %d bytes) ", len(n))
+		// fmt.Println("addressHash:", addressHash)
+
 		var acc Account
 		if err := rlp.DecodeBytes(n, &acc); err != nil {
-			// if inspectig trie is "storage Trie"
-			tir.AddressHashTocodeHash[addressHash] = "" // addressHash means slotHash of storage Trie, and codeHash is useless
+			// valuenode is not an account, which means inspectig trie is "storage Trie"
+			tir.AddressHashTocodeHash[addressHash] = "" // In this case, addressHash means slotHash of storage Trie and codeHash is empty
+
 		} else {
+			// valuenode is an account, which means inspectig trie is "state Trie"
 			// check if account has empty codeHash value or not
 			codeHash := common.Bytes2Hex(acc.CodeHash)
-
-			if trie != "state" {
-				fmt.Printf("  Account's AddressKey : %v, rootHash: %v, codeHash: %v\n", addressHash, acc.Root.Hex(), codeHash)
-			}
-
 			tir.AddressHashTocodeHash[addressHash] = codeHash
 
-			if codeHash == "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470" { // empty code hash
+			if codeHash == "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470" { // empty code hash. This account is EOA
 				rwMutex.Lock()
 				tir.EOANum += 1
 				tir.LeafNodeEOASize += len(n)
+				tir.AccountBalance[addressHash] = *acc.Balance
 				rwMutex.Unlock()
 			} else {
 				rwMutex.Lock()
 				tir.CANum += 1
 				tir.LeafNodeCASize += len(n)
+				tir.AccountBalance[addressHash] = *acc.Balance
 				rwMutex.Unlock()
 
 				// inspect CA's storage trie (if it is not empty trie)

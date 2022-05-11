@@ -156,6 +156,8 @@ var (
 		utils.GpoMaxGasPriceFlag,
 		utils.GpoIgnoreGasPriceFlag,
 		utils.MinerNotifyFullFlag,
+		utils.MyCustomTxDetailFlag, // jhkim
+
 		configFileFlag,
 	}
 

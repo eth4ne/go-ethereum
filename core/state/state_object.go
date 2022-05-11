@@ -389,7 +389,14 @@ func (s *stateObject) CommitTrie(db Database) (int, error) {
 	if metrics.EnabledExpensive {
 		defer func(start time.Time) { s.db.StorageCommits += time.Since(start) }(time.Now())
 	}
+	// jhkim: commit storage trie
 	root, committed, err := s.trie.Commit(nil)
+	// if common.GlobalBlockNumber == 432361 || common.GlobalBlockNumber == 432368 {
+	// 	fmt.Println("  Print Storage Trie", s.trie.Hash())
+	// 	s.trie.Print()
+
+	// 	fmt.Println()
+	// }
 	if err == nil {
 		s.data.Root = root
 	}

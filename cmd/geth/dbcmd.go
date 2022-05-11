@@ -72,6 +72,7 @@ Remove blockchain and state databases`,
 			dbImportCmd,
 			dbExportCmd,
 			dbMetadataCmd,
+			dbMyTrieTraverse, // jhkim: geth trie traverse command line. ex) geth db trieinspect <blocknumber>
 		},
 	}
 	dbInspectCmd = cli.Command{
@@ -251,6 +252,17 @@ WARNING: This is a low-level operation which may cause database corruption!`,
 		},
 		Description: "Shows metadata about the chain status.",
 	}
+	dbMyTrieTraverse = cli.Command{ // jhkim: trie inspect. ex) geth db trieinspect <blocknumber>
+		Action:    utils.MigrateFlags(trieInspect),
+		Name:      "trieinspect",
+		Usage:     "Traverse world state trie and make traverse result txt",
+		ArgsUsage: "<blocknumber (int)>",
+		Flags: []cli.Flag{
+			utils.DataDirFlag,
+			// utils.SyncModeFlag,
+		},
+		Description: "Traverse World state trie and make traverse result txt",
+	}
 )
 
 func removeDB(ctx *cli.Context) error {
@@ -342,6 +354,56 @@ func inspect(ctx *cli.Context) error {
 	defer db.Close()
 
 	return rawdb.InspectDatabase(db, prefix, start)
+}
+
+// jhkim: geth db trieinspect <blocknumber>
+func trieInspect(ctx *cli.Context) error {
+
+	stack, _ := makeConfigNode(ctx)
+	defer stack.Close()
+
+	chaindb := utils.MakeChainDatabase(ctx, stack, true)
+
+	if ctx.NArg() > 1 {
+		log.Error("Too many arguments given")
+		return errors.New("too many arguments")
+	}
+	var (
+		blocknumber int
+		err         error
+	)
+	if ctx.NArg() == 1 {
+		blocknumber, err = strconv.Atoi(ctx.Args().Get(0))
+		if err != nil {
+			log.Error("Failed to resolve blocknumber", "err", err)
+			return err
+		}
+		log.Info("Start traversing the world state trie")
+	}
+
+	blockhash := rawdb.ReadCanonicalHash(chaindb, uint64(blocknumber))
+	block := rawdb.ReadBlock(chaindb, blockhash, uint64(blocknumber))
+	fmt.Println("The hash of block", blocknumber, ":", blockhash)
+
+	stateTrie, err := trie.New(block.Root(), trie.NewDatabase(chaindb))
+	if err != nil {
+		return fmt.Errorf("failed to make secure trie %v", err)
+	}
+
+	if stateTrie == nil {
+		return fmt.Errorf("stateTrie is nil")
+	} else {
+		fmt.Println("StateTrie Root", stateTrie.Hash())
+	}
+
+	start := time.Now()
+	tir := stateTrie.InspectTrie()
+	// stateTrie.GetLastKey()
+	elapsed := time.Since(start).Seconds()
+	tir.PrintTrieInspectResult(uint64(blocknumber), int(elapsed))
+
+	return nil
+
 }
 
 func showLeveldbStats(db ethdb.Stater) {

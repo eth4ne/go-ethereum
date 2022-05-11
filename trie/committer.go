@@ -73,11 +73,12 @@ func returnCommitterToPool(h *committer) {
 }
 
 // Commit collapses a node down into a hash node and inserts it into the database
-func (c *committer) Commit(n node, db *Database) (hashNode, int, error) {
+func (c *committer) Commit(t *Trie, n node, db *Database) (hashNode, int, error) {
 	if db == nil {
 		return nil, 0, errors.New("no db provided")
 	}
-	h, committed, err := c.commit(n, db)
+	h, committed, err := c.commit(t, n, db) //jhkim: add trie argument to use trie.Print
+	// h, committed, err := c.commit(n, db)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -85,7 +86,7 @@ func (c *committer) Commit(n node, db *Database) (hashNode, int, error) {
 }
 
 // commit collapses a node down into a hash node and inserts it into the database
-func (c *committer) commit(n node, db *Database) (node, int, error) {
+func (c *committer) commit(t *Trie, n node, db *Database) (node, int, error) {
 	// if this path is clean, use available cached data
 	hash, dirty := n.cache()
 	if hash != nil && !dirty {
@@ -101,7 +102,8 @@ func (c *committer) commit(n node, db *Database) (node, int, error) {
 		// otherwise it can only be hashNode or valueNode.
 		var childCommitted int
 		if _, ok := cn.Val.(*fullNode); ok {
-			childV, committed, err := c.commit(cn.Val, db)
+			childV, committed, err := c.commit(t, cn.Val, db) //jhkim: add trie argument to use trie.Print
+			// childV, committed, err := c.commit(cn.Val, db)
 			if err != nil {
 				return nil, 0, err
 			}
@@ -115,7 +117,8 @@ func (c *committer) commit(n node, db *Database) (node, int, error) {
 		}
 		return collapsed, childCommitted, nil
 	case *fullNode:
-		hashedKids, childCommitted, err := c.commitChildren(cn, db)
+		// hashedKids, childCommitted, err := c.commitChildren( cn, db)
+		hashedKids, childCommitted, err := c.commitChildren(t, cn, db) //jhkim: add trie argument to use trie.Print
 		if err != nil {
 			return nil, 0, err
 		}
@@ -136,7 +139,7 @@ func (c *committer) commit(n node, db *Database) (node, int, error) {
 }
 
 // commitChildren commits the children of the given fullnode
-func (c *committer) commitChildren(n *fullNode, db *Database) ([17]node, int, error) {
+func (c *committer) commitChildren(t *Trie, n *fullNode, db *Database) ([17]node, int, error) {
 	var (
 		committed int
 		children  [17]node
@@ -156,7 +159,8 @@ func (c *committer) commitChildren(n *fullNode, db *Database) ([17]node, int, er
 		// Commit the child recursively and store the "hashed" value.
 		// Note the returned node can be some embedded nodes, so it's
 		// possible the type is not hashNode.
-		hashed, childCommitted, err := c.commit(child, db)
+		hashed, childCommitted, err := c.commit(t, child, db) //jhkim: add trie argument to use trie.Print
+		// hashed, childCommitted, err := c.commit(child, db)
 		if err != nil {
 			return children, 0, err
 		}
