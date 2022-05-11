@@ -277,7 +277,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		// decode rlp encoded data
 		var data []interface{}
 		rlp.Decode(bytes.NewReader(input), &data)
-		log.Info("### print input decode", "data", data)
+		// log.Info("### print input decode", "data", data)
 
 		cnt := 0
 		limit := len(data)
@@ -347,7 +347,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 			// get a merkle proof from tx data
 			merkleProof, blockHeader := parseProof(data, int64(checkpointBlock), &cnt, limit)
 			merkleProof_1 := merkleProof // for getKey
-			log.Info("### merkleProof", "merkleProof", merkleProof)
+			// log.Info("### merkleProof", "merkleProof", merkleProof)
 
 			blockRoot = blockHeader.Root
 

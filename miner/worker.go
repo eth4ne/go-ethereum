@@ -1178,10 +1178,10 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 		common.IsSecond = true
 		return 
 	} else if common.IsSecond == true { // 2nd
-		if bn % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-2 { // delEpoch
+		if bn % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-1 { // delEpoch
 
 			// skip at the first epoch (joonha)
-			if bn == common.DeleteLeafNodeEpoch-2 {
+			if bn == common.DeleteLeafNodeEpoch-1 {
 				return 
 			}
 
@@ -1243,10 +1243,10 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 		return 
 	} else if common.IsSecond == true { // 2nd
 		common.IsSecond = false
-		if bn % common.InactivateLeafNodeEpoch == common.InactivateLeafNodeEpoch-2 { // inactEpoch
+		if bn % common.InactivateLeafNodeEpoch == common.InactivateLeafNodeEpoch-1 { // inactEpoch
 
 			// skip at the first epoch (joonha)
-			if bn == common.InactivateLeafNodeEpoch-2 {
+			if bn == common.InactivateLeafNodeEpoch-1 {
 				return 
 			}
 
@@ -1265,12 +1265,12 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 			// fmt.Println("\nbn: ", bn)
 			// fmt.Println("bn-(common.InactivateCriterion-2): ", bn-(common.InactivateCriterion-2))
 			// lastKeyToCheck := common.CheckpointKeys[bn-(common.InactivateCriterion-2)]-1 // [3] 2204010 (joonha)
-			lastKeyToCheck := common.CheckpointKeys[bn-(common.InactivateCriterion-2)] // [4] 2204014 (joonha)
+			lastKeyToCheck := common.CheckpointKeys[bn-(common.InactivateCriterion-1)] // [4] 2204014 (joonha)
 
 			// fmt.Println("FROM: ", common.InactiveBoundaryKey)
 			// fmt.Println("TO: ", lastKeyToCheck)
 			// inactivatedAccountsNum := env.state.InactivateLeafNodes(common.InactiveBoundaryKey, lastKeyToCheck) // [1] orig
-			firstKeyToCheck := common.CheckpointKeys[bn-(2*common.InactivateCriterion-2)]
+			firstKeyToCheck := common.CheckpointKeys[bn-(2*common.InactivateCriterion-1)]
 			inactivatedAccountsNum := env.state.InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck) // [2] 220410 (joonha)
 			
 			common.InactiveBoundaryKey += inactivatedAccountsNum

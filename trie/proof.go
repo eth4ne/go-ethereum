@@ -252,7 +252,20 @@ func getKeyFromMerkleProof(nodeHash common.Hash, origNode node, tKey []byte, pro
 		// fmt.Println("proofDb is nil") 
 
 		hexToInt := new(big.Int)
-		hexToInt.SetString(common.BytesToHash(hexToKeybytes(tKey)).Hex()[2:], 16)
+
+		// fmt.Println("tKey: ", tKey)
+		// fmt.Println("len(tKey): ", len(tKey))
+		if len(tKey) % 2 == 0 {
+			// 앞에 0을 추가하자.
+			// fmt.Println("length is even!")
+			tKey = append([]byte{0}, tKey...)
+			// fmt.Println("tKey: ", tKey)
+			// fmt.Println("len(tKey): ", len(tKey))
+			hexToInt.SetString(common.BytesToHash(hexToKeybytes(tKey)).Hex()[2:], 16) /////////// panic: can't convert hex key of odd length
+		} else {
+			hexToInt.SetString(common.BytesToHash(hexToKeybytes(tKey)).Hex()[2:], 16) /////////// panic: can't convert hex key of odd length
+		}
+		// hexToInt.SetString(common.BytesToHash(hexToKeybytes(tKey)).Hex()[2:], 16) /////////// panic: can't convert hex key of odd length
 
 		// get the target valueNode
 		for i := 0; ; i++ {

@@ -1229,6 +1229,8 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	// Commit all cached state changes into underlying memory database.
 	root, err := state.Commit(bc.chainConfig.IsEIP158(block.Number())) // here, statedb.go > Commit() being executed (joonha)
 
+	// fmt.Println("^^^^^^^len(AddrToKeyDirty_inactive): ", len(state.AddrToKeyDirty_inactive)) // (joonha)
+
 	if err != nil {
 		return err
 	}
@@ -1362,9 +1364,9 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 
 	// delete leaf nodes from disk (joonha)
 	// fmt.Println("\nBLOCK NUMBER: ", block.Header().Number.Int64())
-	if (block.Header().Number.Int64()) == common.DeleteLeafNodeEpoch-2 {
+	if (block.Header().Number.Int64()) == common.DeleteLeafNodeEpoch-1 {
 		// skip
-	} else if (block.Header().Number.Int64()) % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-2 {
+	} else if (block.Header().Number.Int64()) % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-1 {
 		// fmt.Println("THIS IS THE DELETING EPOCH\n")
 		for _, addr := range common.AccountsToDeleteFromDisk {
 			// fmt.Println("\nDeleting addr: ", addr)
@@ -1430,16 +1432,16 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	// bn := (block.Header().Number.Int64())
 	bn := (block.Header().Number.Int64()+1)
 	//fmt.Println("BLOCKCHAIN >>>>>>>>>>>>> bn: ", bn)
-	if bn == common.DeleteLeafNodeEpoch-2 {
+	if bn == common.DeleteLeafNodeEpoch-1 {
 		// skip (default = false)
-	} else if bn % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-2 {
+	} else if bn % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-1 {
 		common.DoDeleteLeafNode = true
 	} else {
 		common.DoDeleteLeafNode = false
 	}
 
-	// common.IsFirst = false
-	common.IsSecond = true
+	// common.IsFirst = true
+	common.IsSecond = false
 
 	// /*********************************/
 	// // PRINTINNG COMPACTTRIE

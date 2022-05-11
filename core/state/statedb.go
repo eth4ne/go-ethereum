@@ -438,7 +438,7 @@ func (s *StateDB) GetState(addr common.Address, hash common.Hash) common.Hash {
 // GetProof returns the Merkle proof for a given account.
 func (s *StateDB) GetProof(addr common.Address) ([][]byte, error) {
 	if len(common.AddrToKey_inactive[addr]) <= 0 {
-		return nil, errors.New("No Account to Restore (ethane) (1)")
+		return nil, errors.New("No Account to Restore (ethane) (1)") //////////// 여기에 걸리네
 	}
 	lastIndex := len(common.AddrToKey_inactive[addr]) - 1
 	// fmt.Println("lastIndex is ", lastIndex)
@@ -1592,7 +1592,9 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 	}
 
 	// apply dirties to common.AddrToKey_inactive (joonha)
-	// fmt.Println("len(s.AddrToKeyDirty_inactive): ", len(s.AddrToKeyDirty_inactive))
+	fmt.Println("===========================================================================")
+	fmt.Println("===========================================================================")
+	fmt.Println("len(s.AddrToKeyDirty_inactive): ", len(s.AddrToKeyDirty_inactive))
 	for key, _ := range s.AddrToKeyDirty_inactive {
 		prevLen := 0
 		_, doExist_1 := common.AddrToKey_inactive[key]
@@ -1632,6 +1634,7 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 			delete(common.AddrToKey_inactive, key);
 		}
 	}
+	fmt.Println("len(common.AddrToKey_inactive): ", len(common.AddrToKey_inactive))
 
 	// apply dirties to common.KeysToDelete (jmlee)
 	// for i := 0; i < len(s.KeysToDeleteDirty); i++ {
@@ -1847,8 +1850,12 @@ func (s *StateDB) DeletePreviousLeafNodes(keysToDelete []common.Hash) {
 // InactivateLeafNodes inactivates inactive accounts (i.e., move old leaf nodes to left) (jmlee)
 func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int64 {
 
-	// fmt.Println("\ninspect trie to inactivate:", firstKeyToCheck, "~",lastKeyToCheck)
-	// fmt.Println("trie root before inactivate leaf nodes:", s.trie.Hash().Hex())
+	fmt.Println("/******************************/")
+	fmt.Println("InactivateLeafNodes")
+	fmt.Println("/******************************/")
+
+	fmt.Println("\ninspect trie to inactivate:", firstKeyToCheck, "~",lastKeyToCheck)
+	fmt.Println("trie root before inactivate leaf nodes:", s.trie.Hash().Hex())
 
 	// normTrie := s.trie.GetTrie() // TODO: using this function, we can delete SecureTrie.***_SetKey functions
 
@@ -1965,8 +1972,20 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 	}
 
 	// print result
-	// fmt.Println("inactivate", len(KeysToInactivate), "accounts")
-	// fmt.Println("trie root after inactivate leaf nodes:", s.trie.Hash().Hex())
+	fmt.Println("inactivate", len(KeysToInactivate), "accounts")
+	fmt.Println("trie root after inactivate leaf nodes:", s.trie.Hash().Hex())
+
+	for index, account := range AccountsToInactivate {
+		target := common.HexToAddress("0x2A3e8b070fB0691B090E9326AE95e029A4776ce4")
+		if(target == common.BytesToAddress(account)){
+			fmt.Println("the target account is inactivated.")
+			fmt.Println("[0x2A3e8b070fB0691B090E9326AE95e029A4776ce4] is ", index, "-th elem of AccountsToInactivate")
+		}
+		// fmt.Println(common.BytesToAddress(account))
+		// if(index >= 100){
+		// 	break
+		// }
+	}
 
 	// return # of inactivated accounts
 	return int64(len(KeysToInactivate))
