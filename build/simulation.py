@@ -38,7 +38,7 @@ db_name = 'ethereum'
 
 geth_ipc = '' #fill in the IPC path.
 
-start_block = 7000000
+start_block = 7000001
 end_block = 7300000
 password = '' #fill in the geth coinbase password.
 epoch = 315
@@ -133,6 +133,16 @@ def get_tx_pool_len(web3):
   return pending + queued
   
 
+class RestoreWorker(threading.Thread):
+  def __init__(self, web3, tx):
+    threading.Thread.__init__(self)
+    self.web3 = web3
+    self.tx = tx
+  
+  def run(self):
+    self.web3.eth.sendTransaction(self.tx)
+  
+
 def run(_from, _to):
   totalblock = 0
   totaltx = 0
@@ -158,6 +168,8 @@ def run(_from, _to):
   offset = _from # - 1
   realblock = 0
   txcount = 0
+  
+  gasprice_init = 1000000000
 
   with open(restorefile, 'r') as f:
     restoredata = f.read()
@@ -171,6 +183,17 @@ def run(_from, _to):
     result = db.fetchall()
     print('Block #{}: fetched {} txs'.format(i, len(result)))
     workers = []
+
+    if str(i-restore_offset) in restoredata:
+      for j in restoredata[str(i-restore_offset)]:
+        txcount += 1
+        tx = makeRestoreTx(web3, i-restore_offset - offset, j, gasprice_init-txcount)
+        worker = RestoreWorker(web3, tx)
+        worker.start()
+        workers.append(worker)
+    
+      print('Block #{}: Restored {} accounts'.format(i, len(restoredata[str(i-restore_offset)])))
+
     for j in result:
       to = j['to']
       txcount += 1
@@ -183,7 +206,7 @@ def run(_from, _to):
         'delegatedFrom': Web3.toChecksumAddress(j['from'].hex()),
         'gas': '0x0',
         #'gasPrice': '0x3b9aca00', #1000000000
-        'gasPrice': hex(txcount),
+        'gasPrice': hex(gasprice_init-txcount),
       }
       if execution_mode == MODE_ETHANE:
         tx['data'] = '0x'+j['input'].hex()
@@ -207,12 +230,6 @@ def run(_from, _to):
       j.join()
 
     print('Block #{}: processed all txs'.format(i))
-
-    if str(i-restore_offset) in restoredata:
-      for j in restoredata[str(i-restore_offset)]:
-        sendRestoreTx(web3, i - offset, j)
-    
-      print('Block #{}: Restored {} accounts'.format(i, len(restoredata[str(i+1)])))
 
     totalblock += 1
 
@@ -240,7 +257,7 @@ def run(_from, _to):
     print('='*60)
 
 
-def sendRestoreTx(web3, currentBlock, address):
+def makeRestoreTx(web3, currentBlock, address, gasprice=1000000000):
   print('Restore: {} at {}'.format(address, currentBlock))
   latestCheckPoint = currentBlock - (currentBlock % epoch)
   latestCheckPoint = 0 if latestCheckPoint < 0 else latestCheckPoint
@@ -284,11 +301,9 @@ def sendRestoreTx(web3, currentBlock, address):
     'value': '0x0',
     'data': rlped,
     'gas': '0x0',
-    'gasPrice': '0x3b9aca00', #1000000000
+    'gasPrice': hex(gasprice)
   }
 
-  web3.eth.sendTransaction(tx)
-
-  return min(rlpeds), max(rlpeds) #, np.average(rlpeds)
+  return tx
 
 run(start_block, end_block)
