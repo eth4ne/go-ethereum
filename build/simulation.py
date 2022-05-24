@@ -43,6 +43,7 @@ end_block = 7300000
 password = '' #fill in the geth coinbase password.
 epoch = 315
 restore_offset = -1
+restore_offset = 0
 
 MODE_ETHANOS = 0
 MODE_ETHANE = 1
