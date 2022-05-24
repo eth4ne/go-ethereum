@@ -1346,13 +1346,15 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) []*types.Trans
 		}
 		log.Trace("Removed old queued transactions", "count", len(forwards))
 		// Drop all transactions that are too costly (low balance or out of gas)
-		drops, _ := list.Filter(pool.currentState.GetBalance(addr), pool.currentMaxGas)
-		for _, tx := range drops {
-			hash := tx.Hash()
-			pool.all.Remove(hash)
-		}
-		log.Trace("Removed unpayable queued transactions", "count", len(drops))
-		queuedNofundsMeter.Mark(int64(len(drops)))
+		// Remove the logic to drop unpayable transactions
+		//drops, _ := list.Filter(pool.currentState.GetBalance(addr), pool.currentMaxGas)
+		//Disable balance check before tx
+		//for _, tx := range drops {
+			//hash := tx.Hash()
+			//pool.all.Remove(hash)
+		//}
+		//log.Trace("Removed unpayable queued transactions", "count", len(drops))
+		//queuedNofundsMeter.Mark(int64(len(drops)))
 
 		// Gather all executable transactions and promote them
 		readies := list.Ready(pool.pendingNonces.get(addr))
@@ -1377,10 +1379,10 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) []*types.Trans
 			queuedRateLimitMeter.Mark(int64(len(caps)))
 		}
 		// Mark all the items dropped as removed
-		pool.priced.Removed(len(forwards) + len(drops) + len(caps))
-		queuedGauge.Dec(int64(len(forwards) + len(drops) + len(caps)))
+		pool.priced.Removed(len(forwards) + /*len(drops) +*/ len(caps))
+		queuedGauge.Dec(int64(len(forwards) + /*len(drops) +*/ len(caps)))
 		if pool.locals.contains(addr) {
-			localGauge.Dec(int64(len(forwards) + len(drops) + len(caps)))
+			localGauge.Dec(int64(len(forwards) + /*len(drops) +*/ len(caps)))
 		}
 		// Delete the entire queue entry if it became empty.
 		if list.Empty() {
