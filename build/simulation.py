@@ -44,6 +44,7 @@ password = '' #fill in the geth coinbase password.
 epoch = 315
 restore_offset = -1
 restore_offset = 0
+EthToWei = 1000000000000000000
 
 MODE_ETHANOS = 0
 MODE_ETHANE = 1
