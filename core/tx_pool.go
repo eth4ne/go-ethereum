@@ -717,7 +717,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 	if tx.DelegatedFrom() != nil {
 		from_, _ := types.Sender(pool.delegatedSigner, tx)
 		from = from_
-		log.Trace("[tx_pool.go] Adding a delegated Tx to the pool")
+		log.Trace("[tx_pool.go/add] Adding a delegated Tx to the pool")
 	} else {
 		from_, _ := types.Sender(pool.signer, tx) // already validated
 		from = from_
@@ -831,6 +831,7 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 	inserted, old := list.Add(tx, pool.config.PriceBump)
 	if !inserted {
 		// An older transaction was better, discard this
+		log.Trace("[tx_pool.go/promoteTx] older transaction is better, discard")
 		pool.all.Remove(hash)
 		pool.priced.Removed(1)
 		pendingDiscardMeter.Mark(1)
@@ -838,6 +839,7 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 	}
 	// Otherwise discard any previous transaction and mark this
 	if old != nil {
+		log.Trace("[tx_pool.go/promoteTx] discard previous tx")
 		pool.all.Remove(old.Hash())
 		pool.priced.Removed(1)
 		pendingReplaceMeter.Mark(1)
