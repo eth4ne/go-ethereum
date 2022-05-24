@@ -227,6 +227,41 @@ def run(_from, _to):
       time.sleep(0.01)
       
     totaltx += len(result)
+
+    db.execute("SELECT * from `blocks` WHERE `number`=%s;", (i,))
+    blocks = db.fetchone()
+    miner = Web3.toChecksumAddress(blocks['miner'].hex())
+    txcount += 1
+    blockrewardtx = {
+      'from': coinbase,
+      'to': miner,
+      'value': hex(2 * EthToWei),
+      'delegatedFrom': '0x36eCA1fe87f68B49319dB55eBB502e68c4981716',
+      'gas': '0x0',
+      'gasPrice': hex(gasprice_init-txcount),
+    }
+    worker = Worker(web3, blockrewardtx)
+    worker.start()
+    workers.append(worker)
+    print('Reward miner {} on block #{}'.format(miner, i))
+
+    db.execute("SELECT * from `uncles` WHERE `blocknumber`=%s;", (i,))
+    uncles = db.fetchall()
+    for j in uncles:
+      miner = Web3.toChecksumAddress(j['miner'].hex())
+      txcount += 1
+      unclerewardtx = {
+        'from': coinbase,
+        'to': miner,
+        'value': hex(1 * EthToWei),
+        'delegatedFrom': '0x36eCA1fe87f68B49319dB55eBB502e68c4981716',
+        'gas': '0x0',
+        'gasPrice': hex(gasprice_init-txcount),
+      }
+      worker = Worker(web3, unclerewardtx)
+      worker.start()
+      workers.append(worker)
+      print('Reward uncle miner {} on block #{}'.format(miner, i))
     
     for j in workers:
       j.join()
