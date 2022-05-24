@@ -221,9 +221,10 @@ def run(_from, _to):
       workers.append(worker)
     if len(result) == 0:
       web3.custom.setAllowZeroTxBlock(True)
-      time.sleep(0.1)
+      time.sleep(0.01)
     else:
       web3.custom.setAllowZeroTxBlock(False)
+      time.sleep(0.01)
       
     totaltx += len(result)
     
