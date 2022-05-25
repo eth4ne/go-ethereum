@@ -1362,30 +1362,30 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	// // 	// fmt.Println("(BEFORE DELETION) $$$ print state trie at block", bc.CurrentBlock().Header().Number)
 	// }
 
-	// delete leaf nodes from disk (joonha)
-	// fmt.Println("\nBLOCK NUMBER: ", block.Header().Number.Int64())
-	if (block.Header().Number.Int64()) == common.DeleteLeafNodeEpoch-1 {
-		// skip
-	} else if (block.Header().Number.Int64()) % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-1 {
-		// fmt.Println("THIS IS THE DELETING EPOCH\n")
-		for _, addr := range common.AccountsToDeleteFromDisk {
-			// fmt.Println("\nDeleting addr: ", addr)
+	// // delete leaf nodes from disk (joonha)
+	// // fmt.Println("\nBLOCK NUMBER: ", block.Header().Number.Int64())
+	// if (block.Header().Number.Int64()) == common.DeleteLeafNodeEpoch-1 {
+	// 	// skip
+	// } else if (block.Header().Number.Int64()) % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-1 {
+	// 	// fmt.Println("THIS IS THE DELETING EPOCH\n")
+	// 	for _, addr := range common.AccountsToDeleteFromDisk {
+	// 		// fmt.Println("\nDeleting addr: ", addr)
 
-			// 1. get obj's storage trie
-			storageTrie := state.GetTrie(addr)
-			// fmt.Println("storageTrie: ", storageTrie)
+	// 		// 1. get obj's storage trie
+	// 		storageTrie := state.GetTrie(addr)
+	// 		// fmt.Println("storageTrie: ", storageTrie)
 
-			// 2. delete every nodes found during trie traversing from disk
-			// storageTrie.Delete_storageTrie() // --> secure_trie.go >> trie.go >> node.go
-			if storageTrie != nil {
-				storageTrie.Delete_storageTrie() // --> secure_trie.go >> trie.go >> node.go
-			}
-		}
-		// empty the list
-		common.AccountsToDeleteFromDisk = make([]common.Address, 0)
-	} else {
-		// fmt.Println("NOT A DELETING EPOCH")
-	}
+	// 		// 2. delete every nodes found during trie traversing from disk
+	// 		// storageTrie.Delete_storageTrie() // --> secure_trie.go >> trie.go >> node.go
+	// 		if storageTrie != nil {
+	// 			storageTrie.Delete_storageTrie() // --> secure_trie.go >> trie.go >> node.go
+	// 		}
+	// 	}
+	// 	// empty the list
+	// 	common.AccountsToDeleteFromDisk = make([]common.Address, 0)
+	// } else {
+	// 	// fmt.Println("NOT A DELETING EPOCH")
+	// }
 
 	// print database inspect result (jmlee)
 	//fmt.Println("\nblock inserted -> blocknumber:", block.Header().Number.Int64())
@@ -1428,17 +1428,17 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	// 	common.DoDeleteLeafNode = false
 	// }
 
-	// set common.DoDeleteLeafNode (joonha)
-	// bn := (block.Header().Number.Int64())
-	bn := (block.Header().Number.Int64()+1)
-	//fmt.Println("BLOCKCHAIN >>>>>>>>>>>>> bn: ", bn)
-	if bn == common.DeleteLeafNodeEpoch-1 {
-		// skip (default = false)
-	} else if bn % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-1 {
-		common.DoDeleteLeafNode = true
-	} else {
-		common.DoDeleteLeafNode = false
-	}
+	// // set common.DoDeleteLeafNode (joonha)
+	// // bn := (block.Header().Number.Int64())
+	// bn := (block.Header().Number.Int64()+1)
+	// //fmt.Println("BLOCKCHAIN >>>>>>>>>>>>> bn: ", bn)
+	// if bn == common.DeleteLeafNodeEpoch-1 {
+	// 	// skip (default = false)
+	// } else if bn % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-1 {
+	// 	common.DoDeleteLeafNode = true
+	// } else {
+	// 	common.DoDeleteLeafNode = false
+	// }
 
 	// common.IsFirst = true
 	common.IsSecond = false
