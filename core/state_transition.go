@@ -316,11 +316,8 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		log.Info("[state_transition.go/TransitionDb] Processing reward transaction", "to", msg.To(), "amount", msg.Value())
 		st.state.AddBalance(*msg.To(), msg.Value())
 		//st.state.SetNonce(*msg.To(), st.state.GetNonce(*msg.To())+1)
-		return &ExecutionResult{
-			UsedGas:    st.gasUsed(),
-			Err:        nil,
-			ReturnData: nil,
-		}, nil
+		return nil, fmt.Errorf("Processed a reward for %v", 
+		msg.To())
 	}
 
 	// Check clause 6
