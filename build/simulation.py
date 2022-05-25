@@ -297,7 +297,8 @@ def run(_from, _to):
 
 def makeRestoreTx(web3, currentBlock, address, gasprice=1000000000):
   print('Restore: {} at {}'.format(address, currentBlock))
-  latestCheckPoint = currentBlock - (currentBlock % epoch)
+  # latestCheckPoint = currentBlock - (currentBlock % epoch)
+  latestCheckPoint = currentBlock - ((currentBlock+1) % epoch)
   latestCheckPoint = 0 if latestCheckPoint < 0 else latestCheckPoint
 
   rlpeds = list()
