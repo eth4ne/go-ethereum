@@ -33,17 +33,17 @@ import binascii
 
 db_host = 'localhost'
 db_user = 'ethereum'
-db_pass = '' #fill in the MariaDB/MySQL password.
+db_pass = '1234' #fill in the MariaDB/MySQL password.
 db_name = 'ethereum'
 
-geth_ipc = '' #fill in the IPC path.
+geth_ipc = '/ethereum/geth-test/geth.ipc' #fill in the IPC path.
 
 start_block = 7000001
 end_block = 7300000
-password = '' #fill in the geth coinbase password.
 epoch = 315
-restore_offset = -1
 restore_offset = 0
+password = '1234' #fill in the geth coinbase password.
+
 EthToWei = 1000000000000000000
 
 MODE_ETHANOS = 0
