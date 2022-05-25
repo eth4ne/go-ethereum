@@ -204,10 +204,9 @@ def run(_from, _to):
       tx = {
         'from': coinbase,
         'to': to,
-        'value': '0x0',
+        'value': hex(j['value']),
         'delegatedFrom': Web3.toChecksumAddress(j['from'].hex()),
         'gas': '0x0',
-        #'gasPrice': '0x3b9aca00', #1000000000
         'gasPrice': hex(gasprice_init-txcount),
       }
       if execution_mode == MODE_ETHANE:
