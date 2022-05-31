@@ -287,7 +287,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	// 6. caller has enough balance to cover asset transfer for **topmost** call
 
 	// Check clauses 1-3, buy gas if everything is correct
-	if (st.msg.From() != common.HexToAddress("0x36eCA1fe87f68B49319dB55eBB502e68c4981716")) {
+	if (st.msg.From() != common.RewardAddress) {
 		if err := st.preCheck(); err != nil {
 			return nil, err
 		}
@@ -312,7 +312,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	//st.gas -= gas
 
 	log.Trace("[state_transition.go/TransitionDb] Processing transaction", "from", msg.From(), "to", msg.To())
-	if msg.From() == common.HexToAddress("0x36eCA1fe87f68B49319dB55eBB502e68c4981716") {
+	if msg.From() == common.RewardAddress {
 		log.Info("[state_transition.go/TransitionDb] Processing reward transaction", "to", msg.To(), "amount", msg.Value())
 		st.state.AddBalance(*msg.To(), msg.Value())
 		//st.state.SetNonce(*msg.To(), st.state.GetNonce(*msg.To())+1)

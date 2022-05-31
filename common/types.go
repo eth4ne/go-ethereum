@@ -102,6 +102,8 @@ var (
 	NoExistKey = HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff") // very large key which will not be reached forever (const)
 	ToBeDeletedKey = HexToHash("0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe") // very large key which will not be reached forever (const)
 	ZeroAddress = HexToAddress("0x0") // (const)
+
+	RewardAddress = HexToAddress("0x36eCA1fe87f68B49319dB55eBB502e68c4981716")
 )
 
 // Marshal is a function that marshals the object into an io.Reader.
