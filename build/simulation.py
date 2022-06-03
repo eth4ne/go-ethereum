@@ -221,10 +221,9 @@ def run(_from, _to):
       workers.append(worker)
     if len(result) == 0:
       web3.custom.setAllowZeroTxBlock(True)
-      time.sleep(0.01)
     else:
       web3.custom.setAllowZeroTxBlock(False)
-      time.sleep(0.01)
+    time.sleep(0.1)
       
     totaltx += len(result)
 
@@ -235,7 +234,7 @@ def run(_from, _to):
     blockrewardtx = {
       'from': coinbase,
       'to': miner,
-      'value': hex(2 * EthToWei),
+      'value': '0x0',
       'delegatedFrom': '0x36eCA1fe87f68B49319dB55eBB502e68c4981716',
       'gas': '0x0',
       'gasPrice': hex(gasprice_init-txcount),
@@ -253,15 +252,15 @@ def run(_from, _to):
       unclerewardtx = {
         'from': coinbase,
         'to': miner,
-        'value': hex(1 * EthToWei),
-        'delegatedFrom': '0x36eCA1fe87f68B49319dB55eBB502e68c4981716',
+        'value': hex(j['uncleheight']),
+        'delegatedFrom': '0xb3711B7e50Fe9Ff914ec0F08C6b8330a41E93C10',
         'gas': '0x0',
         'gasPrice': hex(gasprice_init-txcount),
       }
       worker = Worker(web3, unclerewardtx)
       worker.start()
       workers.append(worker)
-      print('Reward uncle miner {} on block #{}'.format(miner, i))
+      print('Reward uncle miner {} of height {} on block #{}'.format(miner, j['uncleheight'], i))
     
     for j in workers:
       j.join()

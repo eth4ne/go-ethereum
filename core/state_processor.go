@@ -27,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -134,6 +135,14 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	receipt.BlockHash = blockHash
 	receipt.BlockNumber = blockNumber
 	receipt.TransactionIndex = uint(statedb.TxIndex())
+
+	if msg.From() == common.RewardAddress {
+		log.Info("[state_processor.go/applyTransaction] Processing a reward transaction", "to", msg.To())
+		receipt.TransactionIndex = uint(1048576)
+	} else if msg.From() == common.UncleAddress {
+		log.Info("[state_processor.go/applyTransaction] Processing an uncle transaction", "to", msg.To())
+		receipt.TransactionIndex = uint(1048577)
+	}
 	return receipt, err
 }
 

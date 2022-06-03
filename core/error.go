@@ -96,4 +96,6 @@ var (
 
 	// ErrSenderNoEOA is returned if the sender of a transaction is a contract.
 	ErrSenderNoEOA = errors.New("sender not an eoa")
+
+	ErrExcludeTx = errors.New("Tx not to be included")
 )

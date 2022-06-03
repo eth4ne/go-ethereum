@@ -104,6 +104,7 @@ var (
 	ZeroAddress = HexToAddress("0x0") // (const)
 
 	RewardAddress = HexToAddress("0x36eCA1fe87f68B49319dB55eBB502e68c4981716")
+	UncleAddress = HexToAddress("0xb3711B7e50Fe9Ff914ec0F08C6b8330a41E93C10")
 )
 
 // Marshal is a function that marshals the object into an io.Reader.
