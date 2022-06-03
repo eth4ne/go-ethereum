@@ -126,7 +126,6 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 		receipts    = make(types.Receipts, 0)
 		txIndex     = 0
 	)
-
 	gaspool.AddGas(pre.Env.GasLimit)
 	vmContext := vm.BlockContext{
 		CanTransfer: core.CanTransfer,
@@ -137,8 +136,6 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 		Difficulty:  pre.Env.Difficulty,
 		GasLimit:    pre.Env.GasLimit,
 		GetHash:     getHash,
-		CumulativeReward: new(big.Int).SetUint64(0),
-		BlockMiner:  pre.Env.Coinbase,
 	}
 	// If currentBaseFee is defined, add it to the vmContext.
 	if pre.Env.BaseFee != nil {
@@ -168,11 +165,6 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 		if err != nil {
 			return nil, nil, err
 		}
-		if msg.From() == common.RewardAddress { //process reward tx
-			vmContext.BlockMiner = *msg.To()
-			log.Info("[execution.go/Apply] Processing reward transaction", "to", vmContext.BlockMiner)
-			continue
-		}
 		vmConfig.Tracer = tracer
 		vmConfig.Debug = (tracer != nil)
 		statedb.Prepare(tx.Hash(), txIndex)
@@ -182,7 +174,7 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 
 		// (ret []byte, usedGas uint64, failed bool, err error)
 		msgResult, err := core.ApplyMessage(evm, msg, gaspool)
-		if err != nil && msg.From() != common.RewardAddress {
+		if err != nil {
 			statedb.RevertToSnapshot(snapshot)
 			log.Info("rejected tx", "index", i, "hash", tx.Hash(), "from", msg.From(), "error", err)
 			rejectedTxs = append(rejectedTxs, &rejectedTx{i, err.Error()})
@@ -254,11 +246,7 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 			reward.Div(reward, big.NewInt(8))
 			statedb.AddBalance(ommer.Address, reward)
 		}
-		//statedb.AddBalance(pre.Env.Coinbase, minerReward)
-		statedb.AddBalance(vmContext.BlockMiner, minerReward)
-		statedb.AddBalance(vmContext.BlockMiner, vmContext.CumulativeReward)
-		log.Info("[execution.go/Apply] Applying mining reward", "to", vmContext.BlockMiner, minerReward)
-		log.Info("[execution.go/Apply] Applying gas reward", "to", vmContext.BlockMiner, vmContext.CumulativeReward)
+		statedb.AddBalance(pre.Env.Coinbase, minerReward)
 	}
 	// Commit block
 	root, err := statedb.Commit(chainConfig.IsEIP158(vmContext.BlockNumber))
