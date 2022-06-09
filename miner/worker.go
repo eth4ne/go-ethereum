@@ -247,6 +247,8 @@ type worker struct {
 	skipSealHook func(*task) bool                   // Method to decide whether skipping the sealing.
 	fullTaskHook func()                             // Method to call before pushing the full sealing task.
 	resubmitHook func(time.Duration, time.Duration) // Method to call upon updating resubmitting interval.
+
+	blockMiner   common.Address
 }
 
 func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(header *types.Header) bool, init bool) *worker {
@@ -310,7 +312,7 @@ func (w *worker) setEtherbase(addr common.Address) {
 func (w *worker) setAllowZeroTxBlock(flag bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	log.Trace("SetAllowZeroTxBlock called on worker.go", "flag", flag)
+	log.Trace("[worker.go/setAllowZeroTxBlock] SetAllowZeroTxBlock called on worker.go", "flag", flag)
 	
 	w.allowZeroTxBlock = flag
 }
@@ -574,6 +576,7 @@ func (w *worker) mainLoop() {
 			// sealing block for higher profit.
 			if w.isRunning() && w.current != nil && len(w.current.uncles) < 2 {
 				start := time.Now()
+				log.Trace("[worker.go/mainLoop] add uncle")
 				if err := w.commitUncle(w.current, ev.Block.Header()); err == nil {
 					w.commit(w.current.copy(), nil, true, start)
 				}
@@ -843,6 +846,7 @@ func (w *worker) commitUncle(env *environment, uncle *types.Header) error {
 		return errors.New("uncle already included")
 	}
 	env.uncles[hash] = uncle
+	log.Trace("[worker.go/commitUncle] successfully added an uncle")
 	return nil
 }
 
@@ -865,10 +869,37 @@ func (w *worker) updateSnapshot(env *environment) {
 func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*types.Log, error) {
 	snap := env.state.Snapshot()
 
-	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &env.coinbase, env.gasPool, env.state, env.header, tx, &env.header.GasUsed, *w.chain.GetVMConfig())
+	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &w.blockMiner, env.gasPool, env.state, env.header, tx, &env.header.GasUsed, *w.chain.GetVMConfig())
 	if err != nil {
+		log.Info("[worker.go/commitTransaction] ApplyTransaction error", "to", tx.To())
 		env.state.RevertToSnapshot(snap)
 		return nil, err
+	}
+	if receipt.TransactionIndex == uint(1048576) {
+		log.Info("[worker.go/commitTransaction] Processed a reward tx", "to", tx.To())
+		w.blockMiner = *tx.To()
+		//return receipt.Logs, nil
+		return nil, core.ErrExcludeTx
+	}
+	if receipt.TransactionIndex == uint(1048577) {
+		uncleHeight := tx.Value()
+		parentHeight := new(big.Int).Sub(uncleHeight, common.Big1)
+		parent := w.chain.GetBlockByNumber(parentHeight.Uint64())
+		log.Info("[worker.go/commitTransaction] Processed an uncle tx", "to", tx.To(), "uncleheight", uncleHeight, "parentHeight", parentHeight)
+		header := &types.Header{
+			ParentHash: parent.Hash(),
+			Number:     uncleHeight,
+			GasLimit:   core.CalcGasLimit(parent.GasLimit(), w.config.GasCeil),
+			Coinbase:   *tx.To(),
+		}
+		block := types.NewBlockWithHeader(header)
+		w.localUncles[block.Hash()] = block
+		//err = w.commitUncle(env, header)
+		//if err != nil {
+		//	log.Info("[worker.go/commitTransaction] Uncle rejected")
+		//}
+		//return receipt.Logs, nil
+		return nil, core.ErrExcludeTx
 	}
 	if tx.Type() == types.DelegatedTxType {
 		v, r, s := tx.RawSignatureValues()
@@ -953,7 +984,7 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 				Data:     tx.Data(),
 			})
 			newTx.SetRawSignatureValues(v, r, s) 
-			env.state.Prepare(newTx.Hash(), env.tcount)
+			env.state.Prepare(tx.Hash(), env.tcount)
 		} else {
 			env.state.Prepare(tx.Hash(), env.tcount)
 		}
@@ -985,6 +1016,10 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 			// Pop the unsupported transaction without shifting in the next from the account
 			log.Trace("Skipping unsupported transaction type", "sender", from, "type", tx.Type())
 			txs.Pop()
+
+		case errors.Is(err, core.ErrExcludeTx):
+			log.Debug("Excluding the tx", "to", tx.To(), "err", err)
+			txs.Shift()
 
 		default:
 			// Strange error, discard the transaction and get the next in line (note, the
@@ -1100,6 +1135,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	}
 	// Accumulate the uncles for the sealing work only if it's allowed.
 	if !genParams.noUncle {
+		log.Trace("[worker.go/prepareWork] accumulating the uncles")
 		commitUncles := func(blocks map[common.Hash]*types.Block) {
 			for hash, uncle := range blocks {
 				if len(env.uncles) == 2 {
@@ -1327,6 +1363,8 @@ func (w *worker) generateWork(params *generateParams) (*types.Block, error) {
 	}
 	defer work.discard()
 
+	log.Trace("[worker.go/generateWork] generateWork")
+
 	w.fillTransactions(nil, work)
 	return w.engine.FinalizeAndAssemble(w.chain, work.header, work.state, work.txs, work.unclelist(), work.receipts)
 }
@@ -1343,7 +1381,8 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 			log.Error("Refusing to mine without etherbase")
 			return
 		}
-		coinbase = w.coinbase // Use the preset address as the fee recipient
+		log.Info("[worker.go/commitWork] mining for the recipient", "to", w.blockMiner)
+		coinbase = w.blockMiner // Use the preset address as the fee recipient
 	}
 	work, err := w.prepareWork(&generateParams{
 		timestamp: uint64(timestamp),
@@ -1389,6 +1428,7 @@ func (w *worker) commit(env *environment, interval func(), update bool, start ti
 		// https://github.com/ethereum/go-ethereum/issues/24299
 		env := env.copy()
 		// fmt.Println("call FinalizeAndAssemble() at worker.commit()") // (jmlee)
+		log.Trace("[worker.go/commit] Finalizing the block", "txs", len(env.txs), "uncles", len(env.unclelist()))
 		block, err := w.engine.FinalizeAndAssemble(w.chain, env.header, env.state, env.txs, env.unclelist(), env.receipts)
 		if err != nil {
 			return err

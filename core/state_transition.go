@@ -199,18 +199,16 @@ func (st *StateTransition) buyGas() error {
 		balanceCheck = balanceCheck.Mul(balanceCheck, st.gasFeeCap)
 		balanceCheck.Add(balanceCheck, st.value)
 	}
-	//Removed payment for the gas
-	//if have, want := st.state.GetBalance(st.msg.From()), balanceCheck; have.Cmp(want) < 0 {
-	//	return fmt.Errorf("%w: address %v have %v want %v", ErrInsufficientFunds, st.msg.From().Hex(), have, want)
-	//}
+	if have, want := st.state.GetBalance(st.msg.From()), balanceCheck; have.Cmp(want) < 0 {
+		return fmt.Errorf("%w: address %v have %v want %v", ErrInsufficientFunds, st.msg.From().Hex(), have, want)
+	}
 	if err := st.gp.SubGas(st.msg.Gas()); err != nil {
 		return err
 	}
 	st.gas += st.msg.Gas()
 
 	st.initialGas = st.msg.Gas()
-	//Removed payment for the gas
-	//st.state.SubBalance(st.msg.From(), mgval)
+	st.state.SubBalance(st.msg.From(), mgval)
 	return nil
 }
 
@@ -287,74 +285,84 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	// 6. caller has enough balance to cover asset transfer for **topmost** call
 
 	// Check clauses 1-3, buy gas if everything is correct
-	if (st.msg.From() != common.HexToAddress("0x36eCA1fe87f68B49319dB55eBB502e68c4981716")) {
+	if st.msg.From() == common.RewardAddress {
+		log.Info("[state_transition.go/TransitionDb] Processing reward transaction", "to", st.msg.To())
+		//st.state.AddBalance(*msg.To(), msg.Value())
+		//st.state.SetNonce(*msg.To(), st.state.GetNonce(*msg.To())+1)
+		//st.evm.Context.BlockMiner = *st.msg.To()
+		//return &ExecutionResult{
+		//	UsedGas:    st.gasUsed(),
+		//	Err:        nil,
+		//	ReturnData: nil,
+		//}, nil
+	} else if st.msg.From() == common.UncleAddress {
+		log.Info("[state_transition.go/TransitionDb] Processing uncle transaction", "to", st.msg.To(), "height", st.msg.Value())
+	} else {
 		if err := st.preCheck(); err != nil {
 			return nil, err
 		}
 	}
 	msg := st.msg
 	sender := vm.AccountRef(msg.From())
-	//homestead := st.evm.ChainConfig().IsHomestead(st.evm.Context.BlockNumber)
-	//istanbul := st.evm.ChainConfig().IsIstanbul(st.evm.Context.BlockNumber)
+	homestead := st.evm.ChainConfig().IsHomestead(st.evm.Context.BlockNumber)
+	istanbul := st.evm.ChainConfig().IsIstanbul(st.evm.Context.BlockNumber)
 	london := st.evm.ChainConfig().IsLondon(st.evm.Context.BlockNumber)
 	contractCreation := msg.To() == nil
 
 	// Check clauses 4-5, subtract intrinsic gas if everything is correct
-	//gas, err := IntrinsicGas(st.data, st.msg.AccessList(), contractCreation, homestead, istanbul)
-	//if err != nil {
-	//	return nil, err
-	//}
-	
-	//2022: not using gas
-	//if st.gas < gas {
-	//	return nil, fmt.Errorf("%w: have %d, want %d", ErrIntrinsicGas, st.gas, gas)
-	//}
-	//st.gas -= gas
-
-	log.Trace("[state_transition.go/TransitionDb] Processing transaction", "from", msg.From(), "to", msg.To())
-	if msg.From() == common.HexToAddress("0x36eCA1fe87f68B49319dB55eBB502e68c4981716") {
-		log.Info("[state_transition.go/TransitionDb] Processing reward transaction", "to", msg.To(), "amount", msg.Value())
-		st.state.AddBalance(*msg.To(), msg.Value())
-		//st.state.SetNonce(*msg.To(), st.state.GetNonce(*msg.To())+1)
-		return nil, fmt.Errorf("Processed a reward for %v", 
-		msg.To())
+	gas, err := IntrinsicGas(st.data, st.msg.AccessList(), contractCreation, homestead, istanbul)
+	if err != nil {
+		log.Info("[state_transition.go/TransitionDb] ErrIntrinsicGas")
+		return nil, err
 	}
 
-	// Check clause 6
-	// removed balance check
-	if msg.Value().Sign() > 0 && !st.evm.Context.CanTransfer(st.state, msg.From(), msg.Value()) {
-	//	return nil, fmt.Errorf("%w: address %v", ErrInsufficientFundsForTransfer, msg.From().Hex())
-		st.state.AddBalance(msg.From(), msg.Value())
-	}
-
-	// Set up the initial access list.
-	if rules := st.evm.ChainConfig().Rules(st.evm.Context.BlockNumber, st.evm.Context.Random != nil); rules.IsBerlin {
-		st.state.PrepareAccessList(msg.From(), msg.To(), vm.ActivePrecompiles(rules), msg.AccessList())
-	}
 	var (
 		ret   []byte
 		vmerr error // vm errors do not effect consensus and are therefore not assigned to err
 	)
-	if contractCreation {
-		ret, _, st.gas, vmerr = st.evm.Create(sender, st.data, st.gas, st.value)
+
+	//2022: not using gas
+	if st.msg.From() != common.RewardAddress && st.msg.From() != common.UncleAddress {
+		if st.gas < gas {
+			return nil, fmt.Errorf("%w: have %d, want %d", ErrIntrinsicGas, st.gas, gas)
+		}
+		st.gas -= gas
+
+		log.Trace("[state_transition.go/TransitionDb] Processing transaction", "from", msg.From(), "to", msg.To())
+
+		// Check clause 6
+		if msg.Value().Sign() > 0 && !st.evm.Context.CanTransfer(st.state, msg.From(), msg.Value()) {
+			return nil, fmt.Errorf("%w: address %v", ErrInsufficientFundsForTransfer, msg.From().Hex())
+		}
+
+		// Set up the initial access list.
+		if rules := st.evm.ChainConfig().Rules(st.evm.Context.BlockNumber, st.evm.Context.Random != nil); rules.IsBerlin {
+			st.state.PrepareAccessList(msg.From(), msg.To(), vm.ActivePrecompiles(rules), msg.AccessList())
+		}
+		if contractCreation {
+			ret, _, st.gas, vmerr = st.evm.Create(sender, st.data, st.gas, st.value)
+		} else {
+			// Increment the nonce for the next transaction
+			st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+			ret, st.gas, vmerr = st.evm.Call(sender, st.to(), st.data, st.gas, st.value)
+		}
+		if !london {
+			// Before EIP-3529: refunds were capped to gasUsed / 2
+			st.refundGas(params.RefundQuotient)
+		} else {
+			// After EIP-3529: refunds are capped to gasUsed / 5
+			st.refundGas(params.RefundQuotientEIP3529)
+		}
 	} else {
-		// Increment the nonce for the next transaction
-		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-		ret, st.gas, vmerr = st.evm.Call(sender, st.to(), st.data, st.gas, st.value)
+
 	}
 
-	if !london {
-		// Before EIP-3529: refunds were capped to gasUsed / 2
-		st.refundGas(params.RefundQuotient)
-	} else {
-		// After EIP-3529: refunds are capped to gasUsed / 5
-		st.refundGas(params.RefundQuotientEIP3529)
-	}
 	effectiveTip := st.gasPrice
 	if london {
 		effectiveTip = cmath.BigMin(st.gasTipCap, new(big.Int).Sub(st.gasFeeCap, st.evm.Context.BaseFee))
 	}
 	st.state.AddBalance(st.evm.Context.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), effectiveTip))
+	//st.evm.Context.CumulativeReward = new(big.Int).Add(st.evm.Context.CumulativeReward, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), effectiveTip))
 
 	return &ExecutionResult{
 		UsedGas:    st.gasUsed(),
