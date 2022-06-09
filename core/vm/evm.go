@@ -330,6 +330,8 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		resAcc = &state.Account{}
 		resAcc.Balance = big.NewInt(0)
 		var accounts []*state.Account // v1.10.3
+		var retrievedKeys []common.Hash
+		var targetAccounts [][]byte
 
 		cnt++
 		cnt++
@@ -373,10 +375,14 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 			/********************************************/
 			// retrieve a Key from the merkle proof
 			// (proof.go/GetKeyFromMerkleProof)
-			targetAccount, retrievedKey := trie.GetKeyFromMerkleProof(blockHeader.Root, merkleProof) // return type is *big.Int
-			log.Info("retrievedKey", "retrievedKey", retrievedKey) 
-			inactiveKey = retrievedKey
-			acc := targetAccount
+			targetAccounts, retrievedKeys = trie.GetKeyFromMerkleProof(blockHeader.Root, merkleProof) // return type is *big.Int
+			
+			// targetAccounts -> targetAccount
+			// retrievedKeys -> retrievedKey
+			
+			log.Info("retrievedKeys", "retrievedKeys", retrievedKeys) 
+			// inactiveKey = retrievedKey
+			// acc := targetAccount
 
 
 			/***************************************/
@@ -423,18 +429,23 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 			/***********************************************/
 			// ACCOUNT IS READY TO BE USED
 			/***********************************************/
-			if acc == nil { // there is no account
-				log.Info("### flag 4-6 No account in the merkle proof")
-				accounts = append(accounts, nil)
-			} else { // there is the account
-				log.Info("### flag 4-7 There is the account in the merkle proof")
-				curAcc = &state.Account{}
-				rlp.DecodeBytes(acc, &curAcc)
-				accounts = append(accounts, curAcc)
+			for i := 0; i < len(targetAccounts); i++ {
+				acc := targetAccounts[i]
 
-				// fmt.Println("curAcc: ", curAcc)
-				// fmt.Println("curAcc.CodeHash: ", curAcc.CodeHash)
-				resAcc.CodeHash = curAcc.CodeHash
+				if acc == nil { // there is no account
+					log.Info("### flag 4-6 No account in the merkle proof")
+					accounts = append(accounts, nil)
+				} else { // there is the account
+					log.Info("### flag 4-7 There is the account in the merkle proof")
+					
+					curAcc = &state.Account{}
+					rlp.DecodeBytes(acc, &curAcc)
+					accounts = append(accounts, curAcc)
+					
+					// fmt.Println("curAcc: ", curAcc)
+					// fmt.Println("curAcc.CodeHash: ", curAcc.CodeHash)
+					resAcc.CodeHash = curAcc.CodeHash // this may be a redundant operation
+				}
 			}
 		}
 
@@ -494,6 +505,11 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 
 		}
 
+		// MERGE for the rest of the retrieved accounts
+		for i := 1; i < len(accounts); i++ {
+			resAcc.Balance.Add(resAcc.Balance, accounts[i].Balance)
+		}
+
 		// fmt.Println("resAcc.CodeHash: ", resAcc.CodeHash)
 		evm.Context.Restore(evm.StateDB, inactiveAddr, resAcc.Balance, resAcc.CodeHash, evm.Context.BlockNumber, isMerge) // restore balance
 
@@ -507,7 +523,10 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		// 3. remove inactive snapshot
 
 		if common.UsingInactiveStorageSnapshot { // when inactive storage snapshot option is on, rebuild storage trie from snapshot
-			evm.StateDB.RebuildStorageTrieFromSnapshot(blockRoot, inactiveAddr, inactiveKey)
+			// evm.StateDB.RebuildStorageTrieFromSnapshot(blockRoot, inactiveAddr, inactiveKey)
+			for i := 0; i < len(retrievedKeys); i++ {
+				evm.StateDB.RebuildStorageTrieFromSnapshot(blockRoot, inactiveAddr, retrievedKeys[i])
+			}
 		} else {
 			log.Info("Snapshot option is OFF... Please rebuild the storage trie in another way.")
 		}
@@ -518,7 +537,10 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		// Remove inactive account from AddrToKey_inactive map
 		evm.StateDB.RemoveRestoredKeyFromAddrToKeyDirty_inactive(inactiveAddr)
 		// Remove inactive account from inactive Trie
-		keysToDelete = append(keysToDelete, common.BytesToHash(inactiveKey[:]))
+		for i := 0; i < len(retrievedKeys); i++ {
+			keysToDelete = append(keysToDelete, common.BytesToHash(retrievedKeys[i][:]))
+		}
+		// keysToDelete = append(keysToDelete, common.BytesToHash(inactiveKey[:]))
 		evm.StateDB.DeletePreviousLeafNodes(keysToDelete)
 
 
