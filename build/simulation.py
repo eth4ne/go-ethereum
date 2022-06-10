@@ -50,6 +50,12 @@ MODE_ETHANOS = 0
 MODE_ETHANE = 1
 execution_mode = MODE_ETHANOS
 
+RESTORE_ALL = 0
+RESTORE_RECENT = 1
+RESTORE_OLDEST = 2
+RESTORE_BIGGEST = 3 # not programmed
+restore_mode = RESTORE_ALL
+
 restorefile = 'restore_315_7000001_7010000.json'
 
 conn_geth = lambda path: Web3(Web3.IPCProvider(path))
@@ -311,6 +317,27 @@ def makeRestoreTx(web3, currentBlock, address, gasprice=1000000000):
       [],
       block_identifier=targetBlock
     )
+    
+    # Restore following the restore mode (recent, all, etc.) (joonha)
+    # default: RESTORE_ALL
+    # if restore_mode == RESTORE_RECENT then crop only the last proof here (because prooves gotten are for RESTORE_ALL)
+    # if restore_mode == RESTORE_OLDEST then crop only the first proof here (because prooves gotten are for RESTORE_ALL)
+    # if restore_mode == RESTORE_BIGGEST then nothing seems to be available here (maybe adding new field to AddrToKey_inactive such as "biggest value and its idx" might work)
+    if restore_mode == RESTORE_RECENT:
+      start_idx = 0
+      for i in range(len(proof)-1, 0):
+        if proof[i][0] == '@':
+          start_idx = i-1
+          break
+      proof = proof[start_idx:]
+    elif restore_mode == RESTORE_OLDEST:
+      end_idx = len(proof)
+      for i in range(0, len(proof)-1):
+        if proof[i][0] == '@':
+          end_idx = i
+          break
+      proof = proof[:end_idx]
+
     proofs.append(proof)
 
   if len(proofs) != len(targetBlocks):
