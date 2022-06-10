@@ -324,21 +324,52 @@ def makeRestoreTx(web3, currentBlock, address, gasprice=1000000000):
     # if restore_mode == RESTORE_OLDEST then crop only the first proof here (because prooves gotten are for RESTORE_ALL)
     # if restore_mode == RESTORE_BIGGEST then nothing seems to be available here (maybe adding new field to AddrToKey_inactive such as "biggest value and its idx" might work)
     if restore_mode == RESTORE_RECENT:
+      print("\n>>> restore mode is RESTORE_RECENT <<<\n")
       start_idx = 0
-      for i in range(len(proof)-1, 0):
-        if proof[i][0] == '@':
-          start_idx = i-1
-          break
-      proof = proof[start_idx:]
+      for i in range(len(proof['accountProof'])-1, 0, -1):
+          if proof['accountProof'][i] == HexBytes('0x4000'):
+              start_idx = i
+              # print("\nstart_idx is ", start_idx, "\n")
+              break
+      proof_new = {}
+      proof_new['address'] = proof['address']
+      # replace dummy nodes
+      proof_replaced_accountProof = list()
+      for i in range(start_idx, len(proof['accountProof'])):
+          if proof['accountProof'][i][0] == 64:
+              idx = proof['accountProof'][i][1]
+              proof_replaced_accountProof.append(proof['accountProof'][idx])
+          else:
+              proof_replaced_accountProof.append(proof['accountProof'][i])
+      proof_new['accountProof'] = proof_replaced_accountProof
+      proof_new['balance'] = proof['balance']
+      proof_new['codeHash'] = proof['codeHash']
+      proof_new['storageHash'] = proof['storageHash']
+      proof_new['storageProof'] = proof['storageProof']
+      # print("\nproof_new: ", proof_new, "\n")
+        
     elif restore_mode == RESTORE_OLDEST:
+      print("\n>>> restore mode is RESTORE_OLDEST <<<\n")
       end_idx = len(proof)
-      for i in range(0, len(proof)-1):
-        if proof[i][0] == '@':
-          end_idx = i
-          break
-      proof = proof[:end_idx]
-
-    proofs.append(proof)
+      for i in range(0, len(proof['accountProof'])-1):
+          if proof['accountProof'][i] == HexBytes('0x4000'):
+              end_idx = i
+              # print("\nend_idx is ", end_idx, "\n")
+              break
+      proof_new = {}
+      proof_new['address'] = proof['address']
+      proof_new['accountProof'] = proof['accountProof'][:end_idx]
+      proof_new['balance'] = proof['balance']
+      proof_new['codeHash'] = proof['codeHash']
+      proof_new['storageHash'] = proof['storageHash']
+      proof_new['storageProof'] = proof['storageProof']
+      # print("\nproof_new: ", proof_new, "\n")
+      
+    else: # RESTORE_ALL
+        print("\n>>> restore mode is RESTORED ALL <<<\n")
+        proof_new = proof
+      
+    proofs.append(proof_new)
 
   if len(proofs) != len(targetBlocks):
     targetBlocks = targetBlocks[:len(proofs)]
