@@ -524,9 +524,10 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 
 		if common.UsingInactiveStorageSnapshot { // when inactive storage snapshot option is on, rebuild storage trie from snapshot
 			// evm.StateDB.RebuildStorageTrieFromSnapshot(blockRoot, inactiveAddr, inactiveKey)
-			for i := 0; i < len(retrievedKeys); i++ {
-				evm.StateDB.RebuildStorageTrieFromSnapshot(blockRoot, inactiveAddr, retrievedKeys[i])
-			}
+			// for i := 0; i < len(retrievedKeys); i++ {
+			// 	evm.StateDB.RebuildStorageTrieFromSnapshot(blockRoot, inactiveAddr, retrievedKeys[i])
+			// }
+			evm.StateDB.RebuildStorageTrieFromSnapshot(blockRoot, inactiveAddr, retrievedKeys[0])
 		} else {
 			log.Info("Snapshot option is OFF... Please rebuild the storage trie in another way.")
 		}
