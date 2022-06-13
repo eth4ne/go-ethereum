@@ -38,8 +38,8 @@ db_name = 'ethereum'
 
 geth_ipc = '/ethereum/geth-test/geth.ipc' #fill in the IPC path.
 
-start_block = 7000001
-end_block = 7300000
+start_block = 1
+end_block = 1000000
 epoch = 315
 restore_offset = 0
 password = '1234' #fill in the geth coinbase password.
@@ -50,7 +50,7 @@ MODE_ETHANOS = 0
 MODE_ETHANE = 1
 execution_mode = MODE_ETHANOS
 
-restorefile = 'restore_315_7000001_7010000.json'
+restorefile = 'restore_315_1_2000000.json'
 
 conn_geth = lambda path: Web3(Web3.IPCProvider(path))
 conn_mariadb = lambda host, user, password, database: pymysql.connect(host=host, user=user, password=password, database=database, cursorclass=pymysql.cursors.DictCursor)
