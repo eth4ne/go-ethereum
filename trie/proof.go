@@ -191,17 +191,82 @@ func VerifyProof_restore(rootHash common.Hash, proofDb common.ProofList) (value 
 	return nil, err
 }
 
-// GetKeyFromMerkleProof returns the leaf account and its key from merkle proof (joonha)
-func GetKeyFromMerkleProof(rootHash common.Hash, proofDb common.ProofList) ([]byte, common.Hash) {
+// GetKeyFromMerkleProof returns the leaf accounts and its keys from merkle prooves (joonha)
+func GetKeyFromMerkleProof(rootHash common.Hash, proofDb common.ProofList) ([][]byte, []common.Hash) {
+
+	var targetNodes [][]byte
+	var retrievedKeys []common.Hash
+
+	// proofDb는 현재 여러 MP가 뭉쳐있는 것임.
+	// 이를 [64 0]을 기준으로 잘라주면 될 것 같음.
+	// 자른 proofDb마다 getKeyFromMerkleProof를 호출하면 될 것.
+
+	dummy_root := []byte{'@', 0}
+	// fmt.Println("dummy_root: ", dummy_root)
+	// fmt.Println("\n\nproofDb ===>")
+	// fmt.Println(proofDb, "\n===> end of proofDb\n\n")
+	// fmt.Println("proofDb length is ", len(proofDb))
+	// fmt.Println("\n\nproofDb[1:3] is", proofDb[1:3])
+	
+	start_idx := 0
+	for i := 0; i < len(proofDb); i++ {
+		if bytes.Equal(proofDb[i], dummy_root) == true {
+			// current i is a new start of the MP
+			// start_idx ~ i까지를 잘라서 함수 호출하면 될 듯.
+			// start iteration from the root node
+
+			// replace dummy_nodes with original ref nodes
+			for j := start_idx; j < i; j++ {
+				if proofDb[j][0] == '@' {
+					ref_idx := proofDb[j][1]
+					proofDb[j] = proofDb[ref_idx]
+				}
+			}
+
+			targetNode, tKey := getKeyFromMerkleProof(rootHash, nil, nil, proofDb[start_idx:i])
+
+			start_idx = i
+
+			// convert to a key format (hash)
+			tKey_i := tKey.Int64() // big.Int -> int64
+			retrievedKey := common.HexToHash(strconv.FormatInt(tKey_i, 16)) // int64 -> hex -> hash
+			// fmt.Println("flag 3")
+			// fmt.Println("\n\ntargetNode ===>")
+			// fmt.Println(targetNode, "\n===> end of targetNode\n")
+			// fmt.Println("retrievedKey ===>")
+			// fmt.Println(retrievedKey, "\n===> end of retrievedKey\n\n")
+
+			targetNodes = append(targetNodes, targetNode)
+			retrievedKeys = append(retrievedKeys, retrievedKey)
+		}
+	}
+
+	/* for last MP */
+	for j := start_idx; j < len(proofDb); j++ {
+		if proofDb[j][0] == '@' {
+			ref_idx := proofDb[j][1]
+			proofDb[j] = proofDb[ref_idx]
+		}
+	}
 
 	// start iteration from the root node
-	targetNode, tKey := getKeyFromMerkleProof(rootHash, nil, nil, proofDb)
+	// targetNode, tKey := getKeyFromMerkleProof(rootHash, nil, nil, proofDb)
+	targetNode, tKey := getKeyFromMerkleProof(rootHash, nil, nil, proofDb[start_idx:])
 
 	// convert to a key format (hash)
 	tKey_i := tKey.Int64() // big.Int -> int64
 	retrievedKey := common.HexToHash(strconv.FormatInt(tKey_i, 16)) // int64 -> hex -> hash
 
-	return targetNode, retrievedKey
+	// fmt.Println("flag 4")
+	// fmt.Println("\n\ntargetNode ===>")
+	// fmt.Println(targetNode, "\n===> end of targetNode\n")
+	// fmt.Println("retrievedKey ===>")
+	// fmt.Println(retrievedKey, "\n===> end of retrievedKey\n\n")
+
+	targetNodes = append(targetNodes, targetNode)
+	retrievedKeys = append(retrievedKeys, retrievedKey)
+
+	return targetNodes, retrievedKeys
 }
 
 // internal function of GetKeyFromMerkleProof (joonha)

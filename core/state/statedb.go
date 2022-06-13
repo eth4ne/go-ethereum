@@ -434,24 +434,74 @@ func (s *StateDB) GetState(addr common.Address, hash common.Hash) common.Hash {
 // 	return s.GetProofByHash(crypto.Keccak256Hash(addr.Bytes()))
 // }
 
-// (joonha)
-// GetProof returns the Merkle proof for a given account.
+// // Just one recent node (joonha)
+// // GetProof returns the Merkle proof for a given account.
+// func (s *StateDB) GetProof(addr common.Address) ([][]byte, error) {
+// 	if len(common.AddrToKey_inactive[addr]) <= 0 {
+// 		return nil, errors.New("No Account to Restore (ethane) (1)") //////////// 여기에 걸리네
+// 	}
+// 	lastIndex := len(common.AddrToKey_inactive[addr]) - 1
+// 	// fmt.Println("lastIndex is ", lastIndex)
+// 	// fmt.Println("addrToKey_inactive is ", common.AddrToKey_inactive[addr])
+// 	if common.AddrToKey_inactive[addr][lastIndex] == common.ToBeDeletedKey {
+// 		return nil, errors.New("No Account to Restore (ethane) (2)")
+// 	}
+// 	_, ok := common.AddrToKey_inactive[addr];
+// 	if !ok { // empty map
+// 		// fmt.Println("AddrToKey_inactive mapped value does not exist")
+// 	}
+// 	key := common.AddrToKey_inactive[addr][lastIndex]
+// 	return s.GetProofByHash(key)
+// }
+
+// 2022-06-09 (joonha)
+// GetProof returns the Merkle proofs for *ALL KEYS* of the given account.
 func (s *StateDB) GetProof(addr common.Address) ([][]byte, error) {
 	if len(common.AddrToKey_inactive[addr]) <= 0 {
-		return nil, errors.New("No Account to Restore (ethane) (1)") //////////// 여기에 걸리네
+		return nil, errors.New("No Account to Restore (ethane) (1)")
 	}
-	lastIndex := len(common.AddrToKey_inactive[addr]) - 1
-	// fmt.Println("lastIndex is ", lastIndex)
-	// fmt.Println("addrToKey_inactive is ", common.AddrToKey_inactive[addr])
-	if common.AddrToKey_inactive[addr][lastIndex] == common.ToBeDeletedKey {
-		return nil, errors.New("No Account to Restore (ethane) (2)")
+
+	// GET ALL PROOVES
+	var mps [][]byte
+	for i := 0; i < len(common.AddrToKey_inactive[addr]); i++ {
+		key := common.AddrToKey_inactive[addr][i]
+		if key != common.ToBeDeletedKey {
+			mp, _ := s.GetProofByHash(key)
+			mps = append(mps, mp...)
+		}
 	}
-	_, ok := common.AddrToKey_inactive[addr];
-	if !ok { // empty map
-		// fmt.Println("AddrToKey_inactive mapped value does not exist")
+
+	/***********************************/
+	// REMOVE REDUNDANT NODES
+	/***********************************/
+	// fmt.Println("\n\nmps ===>")
+	// fmt.Println(mps, "\n===> end of mps\n\n")
+
+	var mps_no_redundancy [][]byte
+	m := make(map[string]int)
+	// dummy := []byte{'@'}
+	// fmt.Println("\n\ndummy ===>")
+	// fmt.Println(dummy, "\n===> end of dummy\n\n")
+
+	for idx, node := range mps {
+    	if _, ok := m[string(node[:])]; !ok {
+			// first appearance
+            m[string(node[:])] = idx
+            mps_no_redundancy = append(mps_no_redundancy, node)
+    	} else if ok {
+			// redundant
+			dummy := []byte{'@'}
+			dummy = append(dummy, byte(m[string(node[:])])) // dummy: @ + index of the ref node
+			// 아마 byte -> int 로 바꿔야 원래 index를 retrieve 할 수 있을 것임.
+			mps_no_redundancy = append(mps_no_redundancy, dummy)
+		}
 	}
-	key := common.AddrToKey_inactive[addr][lastIndex]
-	return s.GetProofByHash(key)
+	// fmt.Println("\n\nmps_no_redundancy ===>")
+	// fmt.Println(mps_no_redundancy, "\n===> end of mps_no_redundancy\n\n")
+
+	// return nil, errors.New("Let's stop here and watch the MPs")
+
+	return mps_no_redundancy, nil
 }
 
 // GetProofByHash returns the Merkle proof for a given account.
@@ -1592,9 +1642,9 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 	}
 
 	// apply dirties to common.AddrToKey_inactive (joonha)
-	fmt.Println("===========================================================================")
-	fmt.Println("===========================================================================")
-	fmt.Println("len(s.AddrToKeyDirty_inactive): ", len(s.AddrToKeyDirty_inactive))
+	// fmt.Println("===================================")
+	// fmt.Println("===================================")
+	// fmt.Println("len(s.AddrToKeyDirty_inactive): ", len(s.AddrToKeyDirty_inactive))
 	for key, _ := range s.AddrToKeyDirty_inactive {
 		prevLen := 0
 		_, doExist_1 := common.AddrToKey_inactive[key]
@@ -1850,12 +1900,12 @@ func (s *StateDB) DeletePreviousLeafNodes(keysToDelete []common.Hash) {
 // InactivateLeafNodes inactivates inactive accounts (i.e., move old leaf nodes to left) (jmlee)
 func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int64 {
 
-	fmt.Println("/******************************/")
-	fmt.Println("InactivateLeafNodes")
-	fmt.Println("/******************************/")
+	// fmt.Println("/******************************/")
+	// fmt.Println("InactivateLeafNodes")
+	// fmt.Println("/******************************/")
 
-	fmt.Println("\ninspect trie to inactivate:", firstKeyToCheck, "~",lastKeyToCheck)
-	fmt.Println("trie root before inactivate leaf nodes:", s.trie.Hash().Hex())
+	// fmt.Println("\ninspect trie to inactivate:", firstKeyToCheck, "~",lastKeyToCheck)
+	// fmt.Println("trie root before inactivate leaf nodes:", s.trie.Hash().Hex())
 
 	// normTrie := s.trie.GetTrie() // TODO: using this function, we can delete SecureTrie.***_SetKey functions
 
@@ -1867,8 +1917,8 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 	// fmt.Println("")
 	// fmt.Println("Accounts length: ", len(AccountsToInactivate))
 	// fmt.Println("Keys length: ", len(KeysToInactivate))
-	// fmt.Println("AccountsToInactivate: ", AccountsToInactivate)
-	// fmt.Println("KeysToInactivate: ", KeysToInactivate)
+	// // fmt.Println("AccountsToInactivate: ", AccountsToInactivate)
+	// // fmt.Println("KeysToInactivate: ", KeysToInactivate)
 
 	// move inactive leaf nodes to left
 	for index, key := range KeysToInactivate { 
@@ -1971,21 +2021,21 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 		}
 	}
 
-	// print result
-	fmt.Println("inactivate", len(KeysToInactivate), "accounts")
-	fmt.Println("trie root after inactivate leaf nodes:", s.trie.Hash().Hex())
+	// // print result
+	// fmt.Println("inactivate", len(KeysToInactivate), "accounts")
+	// fmt.Println("trie root after inactivate leaf nodes:", s.trie.Hash().Hex())
 
-	for index, account := range AccountsToInactivate {
-		target := common.HexToAddress("0x2A3e8b070fB0691B090E9326AE95e029A4776ce4")
-		if(target == common.BytesToAddress(account)){
-			fmt.Println("the target account is inactivated.")
-			fmt.Println("[0x2A3e8b070fB0691B090E9326AE95e029A4776ce4] is ", index, "-th elem of AccountsToInactivate")
-		}
-		// fmt.Println(common.BytesToAddress(account))
-		// if(index >= 100){
-		// 	break
-		// }
-	}
+	// for index, account := range AccountsToInactivate {
+	// 	target := common.HexToAddress("0x2A3e8b070fB0691B090E9326AE95e029A4776ce4")
+	// 	if(target == common.BytesToAddress(account)){
+	// 		fmt.Println("the target account is inactivated.")
+	// 		fmt.Println("[0x2A3e8b070fB0691B090E9326AE95e029A4776ce4] is ", index, "-th elem of AccountsToInactivate")
+	// 	}
+	// 	// fmt.Println(common.BytesToAddress(account))
+	// 	// if(index >= 100){
+	// 	// 	break
+	// 	// }
+	// }
 
 	// return # of inactivated accounts
 	return int64(len(KeysToInactivate))
