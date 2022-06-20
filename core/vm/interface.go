@@ -84,7 +84,7 @@ type StateDB interface {
 	CreateAccount_restoring(common.Address)
 	CreateAccount_withBlockNum(common.Address, *big.Int)
 	UpdateAlreadyRestoredDirty(common.Hash)
-	RemoveRestoredKeyFromAddrToKeyDirty_inactive(common.Address)
+	RemoveRestoredKeyFromAddrToKeyDirty_inactive(common.Address, []common.Hash)
 	RebuildStorageTrieFromSnapshot(common.Hash, common.Address, common.Hash)
 	SetCode_Restore(common.Address, []byte)
 }

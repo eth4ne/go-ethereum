@@ -191,7 +191,7 @@ func VerifyProof_restore(rootHash common.Hash, proofDb common.ProofList) (value 
 	return nil, err
 }
 
-// GetKeyFromMerkleProof returns the leaf accounts and its keys from merkle prooves (joonha)
+// GetKeyFromMerkleProof returns the leaf accounts and its keys from merkle proofs (joonha)
 func GetKeyFromMerkleProof(rootHash common.Hash, proofDb common.ProofList) ([][]byte, []common.Hash) {
 
 	var targetNodes [][]byte

@@ -23,6 +23,7 @@ import (
 	"math/big"
 	"strings"
 	"time"
+	"strconv"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/ethereum/go-ethereum/accounts"
@@ -651,7 +652,7 @@ type AccountResult struct {
 	CodeHash     common.Hash     `json:"codeHash"`
 	Nonce        hexutil.Uint64  `json:"nonce"`
 	StorageHash  common.Hash     `json:"storageHash"`
-	StorageProof []StorageResult `json:"storageProof"`
+	// StorageProof []StorageResult `json:"storageProof"`
 }
 
 type StorageResult struct {
@@ -670,7 +671,7 @@ func (s *PublicBlockChainAPI) GetProof(ctx context.Context, address common.Addre
 	storageTrie := state.StorageTrie(address)
 	storageHash := types.EmptyRootHash
 	codeHash := state.GetCodeHash(address)
-	storageProof := make([]StorageResult, len(storageKeys))
+	// storageProof := make([]StorageResult, len(storageKeys))
 
 	// if we have a storageTrie, (which means the account exists), we can update the storagehash
 	if storageTrie != nil {
@@ -680,17 +681,38 @@ func (s *PublicBlockChainAPI) GetProof(ctx context.Context, address common.Addre
 		codeHash = crypto.Keccak256Hash(nil)
 	}
 
-	// create the proof for the storageKeys
-	for i, key := range storageKeys {
-		if storageTrie != nil {
-			proof, storageError := state.GetStorageProof(address, common.HexToHash(key))
-			if storageError != nil {
-				return nil, storageError
-			}
-			storageProof[i] = StorageResult{key, (*hexutil.Big)(state.GetState(address, common.HexToHash(key)).Big()), toHexSlice(proof)}
-		} else {
-			storageProof[i] = StorageResult{key, &hexutil.Big{}, []string{}}
-		}
+	// // create the proof for the storageKeys // --> original code
+	// for i, key := range storageKeys {
+	// 	if storageTrie != nil {
+	// 		proof, storageError := state.GetStorageProof(address, common.HexToHash(key))
+	// 		if storageError != nil {
+	// 			return nil, storageError
+	// 		}
+	// 		storageProof[i] = StorageResult{key, (*hexutil.Big)(state.GetState(address, common.HexToHash(key)).Big()), toHexSlice(proof)}
+	// 	} else {
+	// 		storageProof[i] = StorageResult{key, &hexutil.Big{}, []string{}}
+	// 	}
+	// }
+
+	/*************************************************************/
+	// conjugate the storageKeys as a restore option (joonha)
+	/*************************************************************/
+	// fmt.Println("\n\nGetProof >>> storageKeys: ", storageKeys)
+	// fmt.Println("GetProof >>> storageKeys[0]: ", storageKeys[0])
+	cleaned := strings.Replace(storageKeys[0], "0x", "", -1)
+	restoreMode, _ := strconv.ParseInt(cleaned, 10, 64) // string to int
+	
+	if (restoreMode == 0) { // ALL
+		common.RestoreMode = 0
+	} else if (restoreMode == 1) { // RECENT
+		common.RestoreMode = 1
+	} else if (restoreMode == 2) { // OLDEST
+		common.RestoreMode = 2
+	} else if (restoreMode == 3) { // OPTIMIZED
+		cleaned := strings.Replace(storageKeys[1], "0x", "", -1)
+		amount, _ := strconv.ParseInt(cleaned, 10, 64) // string to int
+		common.RestoreMode = 3
+		common.RestoreAmount = big.NewInt(amount)
 	}
 
 	// create the accountProof
@@ -706,7 +728,7 @@ func (s *PublicBlockChainAPI) GetProof(ctx context.Context, address common.Addre
 		CodeHash:     codeHash,
 		Nonce:        hexutil.Uint64(state.GetNonce(address)),
 		StorageHash:  storageHash,
-		StorageProof: storageProof,
+		// StorageProof: storageProof,
 	}, state.Error()
 }
 

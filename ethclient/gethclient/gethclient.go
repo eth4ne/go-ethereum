@@ -66,7 +66,7 @@ type AccountResult struct {
 	CodeHash     common.Hash     `json:"codeHash"`
 	Nonce        uint64          `json:"nonce"`
 	StorageHash  common.Hash     `json:"storageHash"`
-	StorageProof []StorageResult `json:"storageProof"`
+	// StorageProof []StorageResult `json:"storageProof"`
 }
 
 // StorageResult provides a proof for a key-value pair.
@@ -93,20 +93,20 @@ func (ec *Client) GetProof(ctx context.Context, account common.Address, keys []s
 		CodeHash     common.Hash     `json:"codeHash"`
 		Nonce        hexutil.Uint64  `json:"nonce"`
 		StorageHash  common.Hash     `json:"storageHash"`
-		StorageProof []storageResult `json:"storageProof"`
+		// StorageProof []storageResult `json:"storageProof"`
 	}
 
 	var res accountResult
 	err := ec.c.CallContext(ctx, &res, "eth_getProof", account, keys, toBlockNumArg(blockNumber))
-	// Turn hexutils back to normal datatypes
-	storageResults := make([]StorageResult, 0, len(res.StorageProof))
-	for _, st := range res.StorageProof {
-		storageResults = append(storageResults, StorageResult{
-			Key:   st.Key,
-			Value: st.Value.ToInt(),
-			Proof: st.Proof,
-		})
-	}
+	// // Turn hexutils back to normal datatypes
+	// storageResults := make([]StorageResult, 0, len(res.StorageProof))
+	// for _, st := range res.StorageProof {
+	// 	storageResults = append(storageResults, StorageResult{
+	// 		Key:   st.Key,
+	// 		Value: st.Value.ToInt(),
+	// 		Proof: st.Proof,
+	// 	})
+	// }
 	result := AccountResult{
 		Address:      res.Address,
 		AccountProof: res.AccountProof,

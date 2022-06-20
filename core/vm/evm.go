@@ -308,8 +308,6 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 			ii++
 		}
 
-		inactiveKey := common.NoExistKey
-
 
 		// blockNum은 restore.py에서 지정한 checkpointBlock의 number를 받는다. 
 
@@ -415,15 +413,16 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 			/***********************************************/
 			// CHECK DOUBLE SPENDING OF THE INACTIVE KEY
 			/***********************************************/
-			_, doExist := common.AlreadyRestored[inactiveKey]
-			if !doExist { // first time to be restored 
-				// declaring a empty variable
-				evm.StateDB.UpdateAlreadyRestoredDirty(inactiveKey)
-			} else { // already restored
-				log.Info("restore err: it has already been restored")
-				return nil, gas, ErrInvalidProof // TODO: alter the err msg
+			for i := 0; i < len(retrievedKeys); i++ {
+				_, doExist := common.AlreadyRestored[retrievedKeys[i]]
+				if !doExist { // first time to be restored 
+					// declaring a empty variable
+					evm.StateDB.UpdateAlreadyRestoredDirty(retrievedKeys[i])
+				} else { // already restored
+					log.Info("restore err: it has already been restored")
+					return nil, gas, ErrInvalidProof // TODO: alter the err msg
+				}
 			}
-
 
 
 			/***********************************************/
@@ -536,7 +535,8 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		// REMOVE FROM INACTIVE TRIE
 		/***************************************/
 		// Remove inactive account from AddrToKey_inactive map
-		evm.StateDB.RemoveRestoredKeyFromAddrToKeyDirty_inactive(inactiveAddr)
+		evm.StateDB.RemoveRestoredKeyFromAddrToKeyDirty_inactive(inactiveAddr, retrievedKeys)
+		
 		// Remove inactive account from inactive Trie
 		for i := 0; i < len(retrievedKeys); i++ {
 			keysToDelete = append(keysToDelete, common.BytesToHash(retrievedKeys[i][:]))

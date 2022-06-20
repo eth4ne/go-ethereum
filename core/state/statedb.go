@@ -457,19 +457,97 @@ func (s *StateDB) GetState(addr common.Address, hash common.Hash) common.Hash {
 // 2022-06-09 (joonha)
 // GetProof returns the Merkle proofs for *ALL KEYS* of the given account.
 func (s *StateDB) GetProof(addr common.Address) ([][]byte, error) {
+	
+	// fmt.Println("\ncommon.RestoreMode: ", common.RestoreMode)
+	// fmt.Println("common.RestoreAmount: ", common.RestoreAmount,"\n")
+	// common.RestoreMode:
+	// 0 All
+	// 1 RECENT
+	// 2 OLDEST
+	// 3 OPTIMIZED (w/ common.RestoreAmount)
+
+	
 	if len(common.AddrToKey_inactive[addr]) <= 0 {
 		return nil, errors.New("No Account to Restore (ethane) (1)")
 	}
 
-	// GET ALL PROOVES
+	/***********************************/
+	// GET PROOFS
+	/***********************************/
+	// optimize opportunity: store balance of inactive accounts with AddrToKey_inactive from the first (TODO)
 	var mps [][]byte
-	for i := 0; i < len(common.AddrToKey_inactive[addr]); i++ {
-		key := common.AddrToKey_inactive[addr][i]
-		if key != common.ToBeDeletedKey {
-			mp, _ := s.GetProofByHash(key)
+
+	if common.RestoreMode == 0 { // ALL
+		for i := 0; i < len(common.AddrToKey_inactive[addr]); i++ {
+			key := common.AddrToKey_inactive[addr][i]
+			if key != common.ToBeDeletedKey {
+				mp, _ := s.GetProofByHash(key)
+				mps = append(mps, mp...)
+			}
+		}
+	} else if common.RestoreMode == 1 { // RECENT
+		for i := len(common.AddrToKey_inactive[addr])-1; i >= 0; i-- {
+			key := common.AddrToKey_inactive[addr][i]
+			if key != common.ToBeDeletedKey { // found valid inactive account
+				mp, _ := s.GetProofByHash(key)
+				mps = append(mps, mp...)
+				break;
+			}
+		}
+	} else if common.RestoreMode == 2 { // OLDEST
+		for i := 0; i < len(common.AddrToKey_inactive[addr]); i++ {
+			key := common.AddrToKey_inactive[addr][i]
+			if key != common.ToBeDeletedKey { // found valid inactive account
+				mp, _ := s.GetProofByHash(key)
+				mps = append(mps, mp...)
+				break;
+			}
+		}
+	} else if common.RestoreMode == 3 { // OPTIMIZED
+		type myDataType struct {
+			index int
+			balance *big.Int
+		}
+		mySlice := make([]myDataType, 0)
+
+		for i := 0; i < len(common.AddrToKey_inactive[addr]); i++ {
+			key := common.AddrToKey_inactive[addr][i]
+			if key != common.ToBeDeletedKey { // found valid inactive account
+				// balance
+				enc, _ := s.trie.TryGet_SetKey(key[:])
+				// var data *types.StateAccount
+				data := new(types.StateAccount) //...?
+				rlp.DecodeBytes(enc, data)
+				// fmt.Println("Balance of ", i, " is ", data.Balance)
+				var myData myDataType
+				myData.index = i
+				myData.balance = data.Balance
+				mySlice = append(mySlice, myData)
+			}
+		}
+		// sort by balance (ascending order)
+		sort.Slice(mySlice, func(i, j int) bool {
+			return (mySlice[j].balance.Cmp(mySlice[i].balance) == 1)
+		})
+		// [2, 3, 3] 이고 request 5일 땐, 3 + 3을 restore 하도록 구현되어 있음.
+		// MP 크기가 작다면 2 + 3 을 restore 하는 것이 더 최적일 수 있으나, 이는 당장은 고려하지 않음. (과한 최적화 같아서.)
+		sum := big.NewInt(0)
+		for i := len(mySlice)-1; i >= 0; i-- {
+			// fmt.Println("Restoring ", mySlice[i].index, "th inactive account (indiv balance:", mySlice[i].balance, ")")
+			sum.Add(sum, mySlice[i].balance)
+			mp, _ := s.GetProofByHash(common.AddrToKey_inactive[addr][mySlice[i].index])
 			mps = append(mps, mp...)
+			if sum.Cmp(common.RestoreAmount) >= 0 {
+				break;
+			}
+		}
+		// fmt.Println("\nRequested Balance: ", common.RestoreAmount)
+		// fmt.Println("Total Restored Balance: ", sum)
+		if sum.Cmp(common.RestoreAmount) < 0 {
+			log.Error("The requested balance is bigger than the total inactive balances - anyway, we will restore the total")
 		}
 	}
+	
 
 	/***********************************/
 	// REMOVE REDUNDANT NODES
@@ -923,7 +1001,7 @@ func (s *StateDB) getDeletedStateObject(addr common.Address, restoring int64) *s
 			key = common.NoExistKey
 		}
 
-		// get key from inactive trie (during restoring) (joonha)
+		// get key from inactive trie (during restoring) (joonha) --> is this really the case? TODO (joonha)
 		if restoring == 1 {
 			lastIndex := len(common.AddrToKey_inactive[addr]) - 1
 			if lastIndex < 0 { // error handling
@@ -1642,8 +1720,6 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 	}
 
 	// apply dirties to common.AddrToKey_inactive (joonha)
-	// fmt.Println("===================================")
-	// fmt.Println("===================================")
 	// fmt.Println("len(s.AddrToKeyDirty_inactive): ", len(s.AddrToKeyDirty_inactive))
 	for key, _ := range s.AddrToKeyDirty_inactive {
 		prevLen := 0
@@ -1665,26 +1741,30 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 		}
 		common.AddrToKey_inactive[key] = common.AddrToKey_inactive[key][prevLen:]
 
-		if len(s.AddrToKeyDirty_inactive[key]) > 0 { 
-			delNum := 0
-			for i := len(s.AddrToKeyDirty_inactive[key]) - 1; i > 0; i-- {
-				if s.AddrToKeyDirty_inactive[key][i] == common.ToBeDeletedKey {
-						s.AddrToKeyDirty_inactive[key] = s.AddrToKeyDirty_inactive[key][:len(s.AddrToKeyDirty_inactive[key])-1]
-						delNum++
-				} else {
-					break
+		orig_len := len(s.AddrToKeyDirty_inactive[key])
+		if orig_len > 0 { 
+			for i := 0; i < orig_len; i++ {
+				for j := 0; j < len(s.AddrToKeyDirty_inactive[key]); j++ {
+					if s.AddrToKeyDirty_inactive[key][j] == common.ToBeDeletedKey {
+						s.AddrToKeyDirty_inactive[key] = append(s.AddrToKeyDirty_inactive[key][:j], s.AddrToKeyDirty_inactive[key][j+1:]...)
+						common.AddrToKey_inactive[key] = append(common.AddrToKey_inactive[key][:j], common.AddrToKey_inactive[key][j+1:]...)
+						break;
+					}
 				}
 			}
-			// fmt.Println("delNum: ", delNum)
-			common.AddrToKey_inactive[key] = common.AddrToKey_inactive[key][:len(common.AddrToKey_inactive[key])-delNum]
 		}
 
-		_, ok := s.AddrToKeyDirty_inactive[key];
-		if !ok { // empty map
+		if len(s.AddrToKeyDirty_inactive[key]) == 0 {
 			delete(common.AddrToKey_inactive, key);
 		}
+
+		// fmt.Println("s.AddrToKeyDirty_inactive[",key,"]: ", s.AddrToKeyDirty_inactive[key])
+		// fmt.Println("common.AddrToKey_inactive[",key,"]: ", common.AddrToKey_inactive[key])
 	}
-	fmt.Println("len(common.AddrToKey_inactive): ", len(common.AddrToKey_inactive))
+	// fmt.Println("\nlen(common.AddrToKey_inactive): ", len(common.AddrToKey_inactive))
+
+
+
 
 	// apply dirties to common.KeysToDelete (jmlee)
 	// for i := 0; i < len(s.KeysToDeleteDirty); i++ {
@@ -2057,15 +2137,26 @@ func (s *StateDB) UpdateAlreadyRestoredDirty(inactiveKey common.Hash) {
 }
 
 // remove restored account from the list s.AddrToKeyDirty_inactive (joonha)
-func (s *StateDB) RemoveRestoredKeyFromAddrToKeyDirty_inactive(inactiveAddr common.Address) {
-
+func (s *StateDB) RemoveRestoredKeyFromAddrToKeyDirty_inactive(inactiveAddr common.Address, retrievedKeys []common.Hash) {
 	_, doExist := s.AddrToKeyDirty_inactive[inactiveAddr]
 	if !doExist {
 		s.AddrToKeyDirty_inactive[inactiveAddr] = common.AddrToKey_inactive[inactiveAddr]
 	}
 
-	s.AddrToKeyDirty_inactive[inactiveAddr][len(s.AddrToKeyDirty_inactive[inactiveAddr])-1] = common.ToBeDeletedKey
-	// fmt.Println("len(s.AddrToKeyDirty_inactive[inactiveAddr]): ", len(s.AddrToKeyDirty_inactive[inactiveAddr]))
+	temp := 0
+	for i := len(s.AddrToKeyDirty_inactive[inactiveAddr])-1; i >= 0; i-- {
+		for j := temp; j < len(retrievedKeys); j++ {
+			if s.AddrToKeyDirty_inactive[inactiveAddr][i] == retrievedKeys[j] {
+				// fmt.Println("Remove", i, "th elem of AddrToKeyDirty_inactive[", inactiveAddr, "]")
+				// fmt.Println("retrievedKeys[",j,"]: ", retrievedKeys[j])
+				s.AddrToKeyDirty_inactive[inactiveAddr][i] = common.ToBeDeletedKey
+				temp = j
+				break;
+			}
+		}
+	}
+
+	// fmt.Println("\n\nlen(s.AddrToKeyDirty_inactive[inactiveAddr]): ", len(s.AddrToKeyDirty_inactive[inactiveAddr]), "\n\n")
 }
 
 // rebuild a storage trie when restoring using snapshot (joonha)
