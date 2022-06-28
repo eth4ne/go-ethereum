@@ -588,6 +588,10 @@ func (t *Trie) Reset() {
 	t.unhashed = 0
 }
 
+// TrieDB returns its database (jmlee)
+func (t *Trie) TrieDB() *Database {
+	return t.db
+}
 
 // Print shows trie nodes details in human readable form (jmlee)
 func (t *Trie) Print() {
