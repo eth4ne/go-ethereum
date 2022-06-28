@@ -24,20 +24,35 @@ import (
 // formatting.
 type StorageSize float64
 
-// String implements the stringer interface.
+// String implements the stringer interface. (jmlee)
 func (s StorageSize) String() string {
-	if s > 1099511627776 {
-		return fmt.Sprintf("%.2f TiB", s/1099511627776)
-	} else if s > 1073741824 {
-		return fmt.Sprintf("%.2f GiB", s/1073741824)
-	} else if s > 1048576 {
-		return fmt.Sprintf("%.2f MiB", s/1048576)
-	} else if s > 1024 {
-		return fmt.Sprintf("%.2f KiB", s/1024)
+	if s > 1000000000000 {
+		return fmt.Sprintf("%.12f TB", s/1000000000000)
+	} else if s > 1000000000 {
+		return fmt.Sprintf("%.9f GB", s/1000000000)
+	} else if s > 1000000 {
+		return fmt.Sprintf("%.6f MB", s/1000000)
+	} else if s > 1000 {
+		return fmt.Sprintf("%.3f KB", s/1000)
 	} else {
-		return fmt.Sprintf("%.2f B", s)
+		return fmt.Sprintf("%.0f B", s)
 	}
 }
+
+// // String implements the stringer interface.
+// func (s StorageSize) String() string {
+// 	if s > 1099511627776 {
+// 		return fmt.Sprintf("%.9f TiB", s/1099511627776)
+// 	} else if s > 1073741824 {
+// 		return fmt.Sprintf("%.9f GiB", s/1073741824)
+// 	} else if s > 1048576 {
+// 		return fmt.Sprintf("%.9f MiB", s/1048576)
+// 	} else if s > 1024 {
+// 		return fmt.Sprintf("%.9f KiB", s/1024)
+// 	} else {
+// 		return fmt.Sprintf("%.3f B", s)
+// 	}
+// }
 
 // TerminalString implements log.TerminalStringer, formatting a string for console
 // output during logging.
