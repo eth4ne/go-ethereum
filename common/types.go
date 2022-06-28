@@ -43,6 +43,30 @@ const (
 var (
 	hashT    = reflect.TypeOf(Hash{})
 	addressT = reflect.TypeOf(Address{})
+
+	//
+	// db stats for trie nodes (jmlee)
+	//
+	
+	// trieNodes[nodeHash] = node's size (for inspecting db)
+	TrieNodes = make(map[Hash]int)
+
+	// # of trie nodes in db
+	TotalTrieNodesNum = uint64(0)
+	// db size (bytes)
+	TotalTrieNodesSize = uint64(0)
+
+	// new trie nodes for latest flush (TODO: need to deprecate?)
+	NewTrieNodes = make(map[Hash]struct{})
+	// # of new nodes for latest flush
+	NewTrieNodesNum = uint64(0)
+	// increased db size for latest flush (bytes)
+	NewTrieNodesSize = uint64(0)
+	
+	// TrieNodesChildren[nodeHash] = hashes of its children
+	TrieNodesChildren = make(map[Hash][]Hash)
+	// mutex to avoid fatal error: "concurrent map read and map write"
+	TrieNodesChildrenMutex = sync.RWMutex{}
 )
 
 // Hash represents the 32 byte Keccak256 hash of arbitrary data.

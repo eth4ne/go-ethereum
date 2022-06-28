@@ -18,7 +18,10 @@ package trie
 
 import (
 	"sync"
+	"fmt"
+	"os"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
 	"golang.org/x/crypto/sha3"
@@ -79,6 +82,31 @@ func (h *hasher) hash(n node, force bool) (hashed node, cached node) {
 		// small to be hashed
 		if hn, ok := hashed.(hashNode); ok {
 			cached.flags.hash = hn
+
+			// record trie node connection: store child node hashes (jmlee)
+			myHash := common.BytesToHash(hn)
+			common.TrieNodesChildrenMutex.Lock()
+			if _, exist := common.TrieNodesChildren[myHash]; !exist {
+				switch v := cached.Val.(type) {
+				// case *hashNode:
+				//	shortNode's child cannot be shortNode
+				case *fullNode:
+					childHashNode, _ := v.cache()
+					childHash := common.BytesToHash(childHashNode)
+					// fmt.Println("short node hash:", myHash.Hex(), " / child fullNode hash:", childHash.Hex())
+					common.TrieNodesChildren[myHash] = append(common.TrieNodesChildren[myHash], childHash)
+				default:
+					// child node might be valueNode (i.e., no child)
+					// and also, child node cannot be hashNode when this function is executed
+					// fmt.Println("short node hash:", myHash.Hex(), " / no child hash")
+				}
+			} else {
+				// error: this cannot be happen
+				fmt.Println("can this happen?")
+				os.Exit(1)
+			}
+			common.TrieNodesChildrenMutex.Unlock()
+			
 		} else {
 			cached.flags.hash = nil
 		}
@@ -88,6 +116,38 @@ func (h *hasher) hash(n node, force bool) (hashed node, cached node) {
 		hashed = h.fullnodeToHash(collapsed, force)
 		if hn, ok := hashed.(hashNode); ok {
 			cached.flags.hash = hn
+
+			// record trie node connection: store child node hashes (jmlee)
+			myHash := common.BytesToHash(hn)
+			common.TrieNodesChildrenMutex.Lock()
+			if _, exist := common.TrieNodesChildren[myHash]; !exist {
+				for i := 0; i < 16; i++ {
+					if child := cached.Children[i]; child != nil {
+						childHashNode, _ := child.cache()
+						var childHash common.Hash
+						if childHashNode == nil {
+							// child is hashNode
+							childHash = common.BytesToHash([]byte(child.(hashNode)))
+						} else {
+							// child is not hashNode
+							childHash = common.BytesToHash(childHashNode)
+						}
+						// fmt.Println("full node hash:", myHash.Hex(), " / child hash:", childHash.Hex())
+						common.TrieNodesChildren[myHash] = append(common.TrieNodesChildren[myHash], childHash)
+					}
+				}
+				// fmt.Print("full node hash:", myHash.Hex(), "\n  -> ")
+				// for _, childHash := range common.TrieNodesChildren[myHash] {
+				// 	fmt.Print(childHash.Hex(), ", ")
+				// }
+				// fmt.Println("")
+			} else {
+				// error: this cannot be happen
+				fmt.Println("can this happen?")
+				os.Exit(1)
+			}
+			common.TrieNodesChildrenMutex.Unlock()
+			
 		} else {
 			cached.flags.hash = nil
 		}

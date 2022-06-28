@@ -93,8 +93,25 @@ func HasTrieNode(db ethdb.KeyValueReader, hash common.Hash) bool {
 	return ok
 }
 
+// flag
 // WriteTrieNode writes the provided trie node database.
 func WriteTrieNode(db ethdb.KeyValueWriter, hash common.Hash, node []byte) {
+
+	// measuring db stat: # of trie nodes & db size for trie nodes (jmlee)
+	// fmt.Println("WriteTrieNode() -> node hash:", hash.Hex())
+	if _, exist := common.TrieNodes[hash]; !exist {
+		// this new node will be flushed
+		nodeSize := 32 + len(node) // hash: 32 bytes
+
+		common.TrieNodes[hash] = nodeSize
+		common.TotalTrieNodesNum++
+		common.TotalTrieNodesSize += uint64(nodeSize)
+
+		common.NewTrieNodes[hash] = struct{}{}
+		common.NewTrieNodesNum++
+		common.NewTrieNodesSize += uint64(nodeSize)
+	}
+
 	if err := db.Put(hash.Bytes(), node); err != nil {
 		log.Crit("Failed to store trie node", "err", err)
 	}
