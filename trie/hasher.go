@@ -56,7 +56,17 @@ var hasherPool = sync.Pool{
 	},
 }
 
+// (jmlee)
+var HasherPool = hasherPool
+
 func newHasher(parallel bool) *hasher {
+	h := hasherPool.Get().(*hasher)
+	h.parallel = parallel
+	return h
+}
+
+// (jmlee)
+func NewHasher(parallel bool) *hasher {
 	h := hasherPool.Get().(*hasher)
 	h.parallel = parallel
 	return h
@@ -64,6 +74,11 @@ func newHasher(parallel bool) *hasher {
 
 func returnHasherToPool(h *hasher) {
 	hasherPool.Put(h)
+}
+
+// (jmlee)
+func (h *hasher) Sha() crypto.KeccakState {
+	return h.sha
 }
 
 // hash collapses a node down into a hash node, also returning a copy of the
