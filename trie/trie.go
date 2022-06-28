@@ -587,3 +587,10 @@ func (t *Trie) Reset() {
 	t.root = nil
 	t.unhashed = 0
 }
+
+
+// Print shows trie nodes details in human readable form (jmlee)
+func (t *Trie) Print() {
+	fmt.Println(t.root.toString("", t.db))
+}
+
