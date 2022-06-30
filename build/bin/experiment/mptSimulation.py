@@ -22,6 +22,15 @@ def getBlockNum():
     print("blockNum:", blockNum)
     return blockNum
 
+# get current trie's root hash
+def getTrieRootHash():
+    cmd = str("getTrieRootHash")
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    rootHash = data.decode()
+    print("root hash:", rootHash)
+    return rootHash
+
 # get number and size of all trie nodes in db
 def inspectDB():
     cmd = str("inspectDB")
@@ -34,15 +43,28 @@ def inspectDB():
     return inspectResult
 
 # get number and size of trie nodes in current state trie
-def inspectCurrentTrie():
-    cmd = str("inspectCurrentTrie")
+def inspectTrie():
+    cmd = str("inspectTrie")
     client_socket.send(cmd.encode())
     data = client_socket.recv(1024)
     inspectResult = data.decode().split(',')
     currentTrieNodesNum = int(inspectResult[0])
     currentTrieNodesSize = int(inspectResult[1])
-    print("inspectCurrentTrie result -> # of current trie nodes:", '{:,}'.format(currentTrieNodesNum), "/ current trie size:", '{:,}'.format(currentTrieNodesSize), "B")
+    print("inspectTrie result -> # of current trie nodes:", '{:,}'.format(currentTrieNodesNum), "/ current trie size:", '{:,}'.format(currentTrieNodesSize), "B")
     return inspectResult
+
+def estimateFlushResult():
+    cmd = str("estimateFlushResult")
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    estimateFlushResult = data.decode().split(',')
+    incTrieNum = int(estimateFlushResult[0])
+    incTrieSize = int(estimateFlushResult[1])
+    incTotalNodesNum = int(estimateFlushResult[2])
+    incTotalNodesSize = int(estimateFlushResult[3])
+    print("estimate flush result -> # of new trie nodes:", '{:,}'.format(incTrieNum), "/ increased trie size:", '{:,}'.format(incTrieSize), "B\n", 
+        "                          # of new nodes:", '{:,}'.format(incTotalNodesNum), " / increased db size:", '{:,}'.format(incTotalNodesSize), "B")
+    return estimateFlushResult
 
 # write dirty trie nodes in db
 def flush():
@@ -71,7 +93,14 @@ def reset():
     cmd = str("reset")
     client_socket.send(cmd.encode())
     data = client_socket.recv(1024)
-    print("response:", data.decode())
+    print("reset response:", data.decode())
+
+# rollback trie updates after latest flush
+def rollbackTrie():
+    cmd = str("rollbackTrie")
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    print("rollbacked root hash:", data.decode())
 
 # generate random address
 def makeRandAddr():
@@ -116,12 +145,12 @@ def generateSampleTrie():
         # updateTrie(makeRandHashLengthHexString()) # insert random keys
         updateTrie(intToHashLengthHexString(i)) # insert incremental keys (Ethane)
         if (i+1) % flushEpoch == 0:
-            print("flush! inserted", i+1, "accounts")
+            print("flush! inserted", '{:,}'.format(i+1), "accounts")
             flush()
     flush()
     endTime = datetime.now()
-    print("\nupdate", accNumToInsert, "accounts / flush epoch:", flushEpoch, "/ elapsed time:", endTime - startTime)
-    inspectCurrentTrie()
+    print("\nupdate", '{:,}'.format(accNumToInsert), "accounts / flush epoch:", flushEpoch, "/ elapsed time:", endTime - startTime)
+    inspectTrie()
     inspectDB()
 
 if __name__ == "__main__":

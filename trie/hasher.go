@@ -92,7 +92,7 @@ func (h *hasher) hash(n node, force bool) (hashed node, cached node) {
 	switch n := n.(type) {
 	case *shortNode:
 		collapsed, cached := h.hashShortNodeChildren(n)
-		hashed := h.shortnodeToHash(collapsed, force)
+		hashed, size := h.shortnodeToHash(collapsed, force)
 		// We need to retain the possibly _not_ hashed node, in case it was too
 		// small to be hashed
 		if hn, ok := hashed.(hashNode); ok {
@@ -100,8 +100,12 @@ func (h *hasher) hash(n node, force bool) (hashed node, cached node) {
 
 			// record trie node connection: store child node hashes (jmlee)
 			myHash := common.BytesToHash(hn)
-			common.TrieNodesChildrenMutex.Lock()
-			if _, exist := common.TrieNodesChildren[myHash]; !exist {
+			common.ChildHashesMutex.Lock()
+			if nodeInfo, exist := common.TrieNodeInfosDirty[myHash]; !exist {
+				nodeInfo.IsShortNode = true
+				nodeInfo.Key = common.Bytes2Hex(n.Key)
+				nodeInfo.Size = 32 + uint(size)
+
 				switch v := cached.Val.(type) {
 				// case *hashNode:
 				//	shortNode's child cannot be shortNode
@@ -109,33 +113,37 @@ func (h *hasher) hash(n node, force bool) (hashed node, cached node) {
 					childHashNode, _ := v.cache()
 					childHash := common.BytesToHash(childHashNode)
 					// fmt.Println("short node hash:", myHash.Hex(), " / child fullNode hash:", childHash.Hex())
-					common.TrieNodesChildren[myHash] = append(common.TrieNodesChildren[myHash], childHash)
+					nodeInfo.ChildHashes = append(nodeInfo.ChildHashes, childHash)
 				default:
 					// child node might be valueNode (i.e., no child)
 					// and also, child node cannot be hashNode when this function is executed
 					// fmt.Println("short node hash:", myHash.Hex(), " / no child hash")
 				}
+
+				common.TrieNodeInfosDirty[myHash] = nodeInfo
 			} else {
 				// error: this cannot be happen
 				fmt.Println("can this happen?")
 				os.Exit(1)
 			}
-			common.TrieNodesChildrenMutex.Unlock()
-			
+			common.ChildHashesMutex.Unlock()			
 		} else {
 			cached.flags.hash = nil
 		}
 		return hashed, cached
 	case *fullNode:
 		collapsed, cached := h.hashFullNodeChildren(n)
-		hashed = h.fullnodeToHash(collapsed, force)
+		var size int
+		hashed, size = h.fullnodeToHash(collapsed, force)
 		if hn, ok := hashed.(hashNode); ok {
 			cached.flags.hash = hn
 
 			// record trie node connection: store child node hashes (jmlee)
 			myHash := common.BytesToHash(hn)
-			common.TrieNodesChildrenMutex.Lock()
-			if _, exist := common.TrieNodesChildren[myHash]; !exist {
+			common.ChildHashesMutex.Lock()
+			if nodeInfo, exist := common.TrieNodeInfosDirty[myHash]; !exist {
+				nodeInfo.IsShortNode = false
+				nodeInfo.Size = 32 + uint(size)
 				for i := 0; i < 16; i++ {
 					if child := cached.Children[i]; child != nil {
 						childHashNode, _ := child.cache()
@@ -148,21 +156,18 @@ func (h *hasher) hash(n node, force bool) (hashed node, cached node) {
 							childHash = common.BytesToHash(childHashNode)
 						}
 						// fmt.Println("full node hash:", myHash.Hex(), " / child hash:", childHash.Hex())
-						common.TrieNodesChildren[myHash] = append(common.TrieNodesChildren[myHash], childHash)
+						nodeInfo.ChildHashes = append(nodeInfo.ChildHashes, childHash)
+						nodeInfo.Indices = append(nodeInfo.Indices, Indices[i])
 					}
 				}
-				// fmt.Print("full node hash:", myHash.Hex(), "\n  -> ")
-				// for _, childHash := range common.TrieNodesChildren[myHash] {
-				// 	fmt.Print(childHash.Hex(), ", ")
-				// }
-				// fmt.Println("")
+				
+				common.TrieNodeInfosDirty[myHash] = nodeInfo
 			} else {
 				// error: this cannot be happen
 				fmt.Println("can this happen?")
 				os.Exit(1)
 			}
-			common.TrieNodesChildrenMutex.Unlock()
-			
+			common.ChildHashesMutex.Unlock()
 		} else {
 			cached.flags.hash = nil
 		}
@@ -227,21 +232,21 @@ func (h *hasher) hashFullNodeChildren(n *fullNode) (collapsed *fullNode, cached 
 // should have hex-type Key, which will be converted (without modification)
 // into compact form for RLP encoding.
 // If the rlp data is smaller than 32 bytes, `nil` is returned.
-func (h *hasher) shortnodeToHash(n *shortNode, force bool) node {
+func (h *hasher) shortnodeToHash(n *shortNode, force bool) (node, int) {
 	h.tmp.Reset()
 	if err := rlp.Encode(&h.tmp, n); err != nil {
 		panic("encode error: " + err.Error())
 	}
 
 	if len(h.tmp) < 32 && !force {
-		return n // Nodes smaller than 32 bytes are stored inside their parent
+		return n, len(h.tmp) // Nodes smaller than 32 bytes are stored inside their parent
 	}
-	return h.hashData(h.tmp)
+	return h.hashData(h.tmp), len(h.tmp)
 }
 
 // shortnodeToHash is used to creates a hashNode from a set of hashNodes, (which
 // may contain nil values)
-func (h *hasher) fullnodeToHash(n *fullNode, force bool) node {
+func (h *hasher) fullnodeToHash(n *fullNode, force bool) (node, int) {
 	h.tmp.Reset()
 	// Generate the RLP encoding of the node
 	if err := n.EncodeRLP(&h.tmp); err != nil {
@@ -249,9 +254,9 @@ func (h *hasher) fullnodeToHash(n *fullNode, force bool) node {
 	}
 
 	if len(h.tmp) < 32 && !force {
-		return n // Nodes smaller than 32 bytes are stored inside their parent
+		return n, len(h.tmp) // Nodes smaller than 32 bytes are stored inside their parent
 	}
-	return h.hashData(h.tmp)
+	return h.hashData(h.tmp), len(h.tmp)
 }
 
 // hashData hashes the provided data
@@ -267,16 +272,19 @@ func (h *hasher) hashData(data []byte) hashNode {
 // node (for later RLP encoding) aswell as the hashed node -- unless the
 // node is smaller than 32 bytes, in which case it will be returned as is.
 // This method does not do anything on value- or hash-nodes.
-func (h *hasher) proofHash(original node) (collapsed, hashed node) {
+func (h *hasher) proofHash(original node) (collapsed, hashed node, leng int) {
 	switch n := original.(type) {
 	case *shortNode:
 		sn, _ := h.hashShortNodeChildren(n)
-		return sn, h.shortnodeToHash(sn, false)
+		hashed, leng := h.shortnodeToHash(sn, false)
+		return sn, hashed, leng
 	case *fullNode:
 		fn, _ := h.hashFullNodeChildren(n)
-		return fn, h.fullnodeToHash(fn, false)
+		hashed, leng := h.fullnodeToHash(fn, false)
+		return fn, hashed, leng
 	default:
 		// Value and hash nodes don't have children so they're left as were
-		return n, n
+		// leng is useless, so just set this as 0
+		return n, n, 0
 	}
 }

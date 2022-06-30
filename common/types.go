@@ -27,6 +27,7 @@ import (
 	"math/rand"
 	"reflect"
 	"strings"
+	"sync"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"golang.org/x/crypto/sha3"
@@ -47,9 +48,11 @@ var (
 	//
 	// db stats for trie nodes (jmlee)
 	//
-	
-	// trieNodes[nodeHash] = node's size (for inspecting db)
-	TrieNodes = make(map[Hash]int)
+
+	// TrieNodeInfos[nodeHash] = node's information (containing all nodes flushed to diskdb)
+	TrieNodeInfos = make(map[Hash]NodeInfo)
+	// infos for dirty trie nodes, that will be flushed or discarded
+	TrieNodeInfosDirty = make(map[Hash]NodeInfo)
 
 	// # of trie nodes in db
 	TotalTrieNodesNum = uint64(0)
@@ -62,12 +65,27 @@ var (
 	NewTrieNodesNum = uint64(0)
 	// increased db size for latest flush (bytes)
 	NewTrieNodesSize = uint64(0)
-	
-	// TrieNodesChildren[nodeHash] = hashes of its children
-	TrieNodesChildren = make(map[Hash][]Hash)
+
 	// mutex to avoid fatal error: "concurrent map read and map write"
-	TrieNodesChildrenMutex = sync.RWMutex{}
+	ChildHashesMutex = sync.RWMutex{}
 )
+
+// NodeInfo stores trie node related information
+type NodeInfo struct {
+	Size        uint   // size of node (i.e., len of rlp-encoded node)
+	ChildHashes []Hash // hashes of child nodes
+	IsShortNode bool   // type of node (short node vs full node)
+
+	Prefix          string   // root node has no prefix (causion: same nodes can have different Prefixes, in single state trie, with little probability)
+	Indices         []string // full node's indices for child nodes
+	Key             string   // short node's key
+	Depth           uint     // depth of this node in state trie (root node: 0 depth)
+	LeafNodesNum    uint     // # of leaf nodes under this node
+	SubTrieNodesNum uint64   // # of trie nodes of this node's sub tries (to efficiently measure the size of trie, dynamic programming)
+	SubTrieSize     uint64   // size of this node's sub tries (to efficiently measure the size of trie, dynamic programming)
+
+	// ParentShortNodeNum uint   // how many parent short nodes above this node
+}
 
 // Hash represents the 32 byte Keccak256 hash of arbitrary data.
 type Hash [HashLength]byte

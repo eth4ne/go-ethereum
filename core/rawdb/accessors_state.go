@@ -17,6 +17,9 @@
 package rawdb
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
@@ -99,17 +102,29 @@ func WriteTrieNode(db ethdb.KeyValueWriter, hash common.Hash, node []byte) {
 
 	// measuring db stat: # of trie nodes & db size for trie nodes (jmlee)
 	// fmt.Println("WriteTrieNode() -> node hash:", hash.Hex())
-	if _, exist := common.TrieNodes[hash]; !exist {
+	if _, exist := common.TrieNodeInfos[hash]; !exist {
 		// this new node will be flushed
-		nodeSize := 32 + len(node) // hash: 32 bytes
+		if _, exist := common.TrieNodeInfosDirty[hash]; !exist {
+			fmt.Println("error !!! this should not happen")
+			os.Exit(1)
+		}
 
-		common.TrieNodes[hash] = nodeSize
+		nodeSize := 32 + len(node) // size: 32 bytes hash + rlped node
+
 		common.TotalTrieNodesNum++
 		common.TotalTrieNodesSize += uint64(nodeSize)
 
 		common.NewTrieNodes[hash] = struct{}{}
 		common.NewTrieNodesNum++
 		common.NewTrieNodesSize += uint64(nodeSize)
+
+		nodeInfoDirty := common.TrieNodeInfosDirty[hash]
+		if nodeInfoDirty.Size != uint(nodeSize) {
+			fmt.Println("error! different size, this should not happen")
+			fmt.Println(nodeInfoDirty.Size, uint(nodeSize))
+			os.Exit(1)
+		}
+		common.TrieNodeInfos[hash] = nodeInfoDirty
 	}
 
 	if err := db.Put(hash.Bytes(), node); err != nil {
