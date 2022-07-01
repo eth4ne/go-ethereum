@@ -55,12 +55,6 @@ var (
 
 	// same as SecureTrie.hashKeyBuf (to mimic SecureTrie)
 	hashKeyBuf = make([]byte, common.HashLength)
-
-	// current block number (which will be increased after flushing trie nodes)
-	blockNumber = uint64(0)
-	// root hash of latest flushed trie
-	latestFlushedRoot  = emptyRoot
-	latestFlushedNonce = uint64(0)
 )
 
 func reset() {
@@ -90,13 +84,6 @@ func reset() {
 	// reset secure trie
 	secureTrie, _ = trie.NewSecure(common.Hash{}, trie.NewDatabase(memorydb.New()))
 
-	// reset block number
-	blockNumber = 0
-
-	// reset latest flushed root hash
-	latestFlushedRoot = emptyRoot
-	latestFlushedNonce = 0
-
 	// reset db stats
 	common.NewTrieNodesNum = 0
 	common.NewTrieNodesSize = 0
@@ -110,24 +97,95 @@ func reset() {
 	emptyAccount.Nonce = 0
 	emptyAccount.CodeHash = emptyCodeHash
 	emptyAccount.Root = emptyRoot
+
+	// reset blocks
+	common.Blocks = make(map[uint64]common.BlockInfo)
+	common.CurrentBlockNum = 0
+
+	// set genesis block (with empty state trie)
+	flushTrieNodes()
+	// tricky codes to correctly set genesis block and current block number
+	common.Blocks[0] = common.Blocks[1]
+	delete(common.Blocks, 1)
+	common.CurrentBlockNum = 0
 }
 
-// rollbackTrie opens the trie whose root hash is "root"
-// "root" must have been flushed
+// rollbackUncommittedUpdates goes back to latest flushed trie (i.e., undo all uncommitted trie updates)
 // discards unflushed dirty nodes
-func rollbackTrie(root common.Hash) {
-	if _, exist := common.TrieNodeInfos[root]; !exist {
-		fmt.Println("error: this trie is never flushed before, rollbackTrie() failed")
-		return
+func rollbackUncommittedUpdates() {
+	// open current state trie
+	currentRoot := common.Blocks[common.CurrentBlockNum].Root
+	normTrie, _ = trie.New(currentRoot, trie.NewDatabase(diskdb))
+
+	// rollback account nonce value
+	emptyAccount.Nonce = common.Blocks[common.CurrentBlockNum].MaxAccountNonce
+
+	// drop all dirty nodes
+	common.TrieNodeInfosDirty = make(map[common.Hash]common.NodeInfo)
+}
+
+// rollback goes back to the target block state
+func rollbackToBlock(targetBlockNum uint64) bool {
+
+	// check rollback validity
+	if targetBlockNum >= common.CurrentBlockNum {
+		fmt.Println("cannot rollback to current or future")
+		return false
+	}
+	if _, exist := common.Blocks[targetBlockNum]; !exist {
+		fmt.Println("cannot rollback to target block: target block info is deleted (rollback limit)")
+		return false
+	}
+	if targetBlockNum == 0 {
+		// just execute reset(), when we rollback to block 0
+		reset()
+		return true
 	}
 
-	normTrie, _ = trie.New(root, trie.NewDatabase(diskdb))
+	// rollback db modifications
+	fmt.Println("rollbackToBlock: from block", common.CurrentBlockNum, "to block", targetBlockNum)
+	for blockNum := common.CurrentBlockNum; blockNum > targetBlockNum; blockNum-- {
+		blockInfo, exist := common.Blocks[blockNum]
+		if !exist {
+			fmt.Println("rollbackToBlock error")
+			os.Exit(1)
+		}
 
-	emptyAccount.Nonce = latestFlushedNonce
+		// delete flushed nodes
+		for _, nodeHash := range blockInfo.FlushedNodeHashes {
+			// delete from disk
+			err := diskdb.Delete(nodeHash.Bytes())
+			if err != nil {
+				fmt.Println("diskdb.Delete error:", err)
+			}
 
-	common.NewTrieNodesNum = 0
-	common.NewTrieNodesSize = 0
-	common.TrieNodeInfosDirty = make(map[common.Hash]common.NodeInfo)
+			// update db stats
+			common.TotalTrieNodesNum--
+			common.TotalTrieNodesSize -= uint64(common.TrieNodeInfos[nodeHash].Size)
+
+			// delete from TrieNodeInfos
+			delete(common.TrieNodeInfos, nodeHash)
+		}
+
+		// delete block
+		delete(common.Blocks, blockNum)
+		common.CurrentBlockNum--
+	}
+
+	// open target block's trie
+	normTrie, _ = trie.New(common.Blocks[targetBlockNum].Root, trie.NewDatabase(diskdb))
+
+	// set nonce value at that time
+	emptyAccount.Nonce = common.Blocks[targetBlockNum].MaxAccountNonce
+
+	// reset new trie nodes info
+	common.NewTrieNodesNum = uint64(0)
+	common.NewTrieNodesSize = uint64(0)
+
+	// print db stats
+	fmt.Println("  rollback finished -> total trie nodes:", common.TotalTrieNodesNum, "/ db size:", common.TotalTrieNodesSize)
+
+	return true
 }
 
 // estimate storage increment when flush this trie
@@ -150,8 +208,10 @@ func estimateIncrement(hash common.Hash) (uint64, uint64) {
 
 // flushTrieNodes flushes dirty trie nodes to the db
 func flushTrieNodes() {
+	// increase block number
+	common.CurrentBlockNum++
+
 	// reset db stats before flush
-	common.NewTrieNodes = make(map[common.Hash]struct{})
 	common.NewTrieNodesNum = 0
 	common.NewTrieNodesSize = 0
 
@@ -159,11 +219,18 @@ func flushTrieNodes() {
 	normTrie.Commit(nil)
 	normTrie.TrieDB().Commit(normTrie.Hash(), false, nil)
 
+	// update block info (to be able to rollback to this state later)
 	// fmt.Println("new trie root after flush:", normTrie.Hash().Hex())
-
-	// update latest flushed root hash
-	latestFlushedRoot = normTrie.Hash()
-	latestFlushedNonce = emptyAccount.Nonce
+	blockInfo, _ := common.Blocks[common.CurrentBlockNum]
+	blockInfo.Root = normTrie.Hash()
+	blockInfo.MaxAccountNonce = emptyAccount.Nonce
+	common.Blocks[common.CurrentBlockNum] = blockInfo
+	// delete too old block to store
+	blockNumToDelete := common.CurrentBlockNum - common.MaxBlocksToStore - 1
+	if _, exist := common.Blocks[blockNumToDelete]; exist {
+		// fmt.Println("current block num:", common.CurrentBlockNum, "/ block num to delete:", blockNumToDelete)
+		delete(common.Blocks, blockNumToDelete)
+	}
 
 	// discard unflushed dirty nodes after flush
 	common.TrieNodeInfosDirty = make(map[common.Hash]common.NodeInfo)
@@ -171,9 +238,6 @@ func flushTrieNodes() {
 	// show db stat
 	fmt.Println("  new trie nodes:", common.NewTrieNodesNum, "/ increased db size:", common.NewTrieNodesSize)
 	fmt.Println("  total trie nodes:", common.TotalTrieNodesNum, "/ db size:", common.TotalTrieNodesSize)
-
-	// increase block number
-	blockNumber++
 }
 
 func randomHex(n int) string {
@@ -310,7 +374,7 @@ func ConnHandler(conn net.Conn) {
 
 			case "getBlockNum":
 				fmt.Println("execute getBlockNum()")
-				response = []byte(strconv.FormatUint(blockNumber, 10))
+				response = []byte(strconv.FormatUint(common.CurrentBlockNum, 10))
 
 			case "getTrieRootHash":
 				fmt.Println("execute getTrieRootHash()")
@@ -350,19 +414,28 @@ func ConnHandler(conn net.Conn) {
 					}
 				}
 
-			case "rollbackTrie":
-				fmt.Println("execute rollbackTrie()")
-				if latestFlushedRoot == emptyRoot {
-					fmt.Println("ERROR: cannot rollback to empty trie")
-					response = []byte("ERROR: cannot rollback to empty trie")
+			case "rollbackUncommittedUpdates":
+				fmt.Println("execute rollbackUncommittedUpdates()")
+				rollbackUncommittedUpdates()
+				response = []byte("success rollbackUncommittedUpdates")
+
+			case "rollbackToBlock":
+				targetBlockNum, err := strconv.ParseUint(params[1], 10, 64)
+				fmt.Println("rollback target block number:", targetBlockNum)
+				if err != nil {
+					fmt.Println("ParseUint error:", err)
+					os.Exit(1)
+				}
+				doSuccess := rollbackToBlock(targetBlockNum)
+				if doSuccess {
+					response = []byte("success rollbackToBlock")
 				} else {
-					rollbackTrie(latestFlushedRoot)
-					response = []byte(normTrie.Hash().Hex())
+					response = []byte("fail rollbackToBlock")
 				}
 
 			case "estimateFlushResult":
 				fmt.Println("execute estimateFlushResult()")
-				currentTrieNum, currentTrieSize := inspectTrie(latestFlushedRoot)
+				currentTrieNum, currentTrieSize := inspectTrie(common.Blocks[common.CurrentBlockNum].Root)
 				newTrieNum, newTrieSize := inspectTrie(normTrie.Hash())
 				incTrieNum := newTrieNum - currentTrieNum
 				incTrieSize := newTrieSize - currentTrieSize

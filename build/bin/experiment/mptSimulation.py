@@ -95,12 +95,23 @@ def reset():
     data = client_socket.recv(1024)
     print("reset response:", data.decode())
 
-# rollback trie updates after latest flush
-def rollbackTrie():
-    cmd = str("rollbackTrie")
+# undo all unflushed trie updates
+def rollbackUncommittedUpdates():
+    cmd = str("rollbackUncommittedUpdates")
     client_socket.send(cmd.encode())
     data = client_socket.recv(1024)
     print("rollbacked root hash:", data.decode())
+
+# goes back to the target block state
+def rollbackToBlock(targetBlockNum):
+    cmd = str("rollbackToBlock")
+    cmd += str(",")
+    cmd += str(targetBlockNum)
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    rollbackToBlockResult = data.decode()
+    print("rollbackToBlock result:", rollbackToBlockResult)
+    return rollbackToBlockResult
 
 # generate random address
 def makeRandAddr():

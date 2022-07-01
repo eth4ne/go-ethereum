@@ -111,13 +111,18 @@ func WriteTrieNode(db ethdb.KeyValueWriter, hash common.Hash, node []byte) {
 
 		nodeSize := 32 + len(node) // size: 32 bytes hash + rlped node
 
+		// update total db stat
 		common.TotalTrieNodesNum++
 		common.TotalTrieNodesSize += uint64(nodeSize)
 
-		common.NewTrieNodes[hash] = struct{}{}
+		// update current block's stat
 		common.NewTrieNodesNum++
 		common.NewTrieNodesSize += uint64(nodeSize)
+		blockInfo, _ := common.Blocks[common.CurrentBlockNum]
+		blockInfo.FlushedNodeHashes = append(blockInfo.FlushedNodeHashes, hash)
+		common.Blocks[common.CurrentBlockNum] = blockInfo
 
+		// confirm dirty node
 		nodeInfoDirty := common.TrieNodeInfosDirty[hash]
 		if nodeInfoDirty.Size != uint(nodeSize) {
 			fmt.Println("error! different size, this should not happen")

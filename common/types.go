@@ -59,8 +59,6 @@ var (
 	// db size (bytes)
 	TotalTrieNodesSize = uint64(0)
 
-	// new trie nodes for latest flush (TODO: need to deprecate?)
-	NewTrieNodes = make(map[Hash]struct{})
 	// # of new nodes for latest flush
 	NewTrieNodesNum = uint64(0)
 	// increased db size for latest flush (bytes)
@@ -68,6 +66,13 @@ var (
 
 	// mutex to avoid fatal error: "concurrent map read and map write"
 	ChildHashesMutex = sync.RWMutex{}
+
+	// Blocks[blockNum] = block's information
+	Blocks = make(map[uint64]BlockInfo)
+	// current block number (which will be increased after flushing trie nodes)
+	CurrentBlockNum = uint64(0)
+	// max number of blocks to store in "Blocks" (i.e., rollback limit)
+	MaxBlocksToStore = uint64(10000)
 )
 
 // NodeInfo stores trie node related information
@@ -85,6 +90,13 @@ type NodeInfo struct {
 	SubTrieSize     uint64   // size of this node's sub tries (to efficiently measure the size of trie, dynamic programming)
 
 	// ParentShortNodeNum uint   // how many parent short nodes above this node
+}
+
+// BlockInfo stores block related information
+type BlockInfo struct {
+	Root              Hash   // root hash of trie
+	FlushedNodeHashes []Hash // hashes of flushed nodes
+	MaxAccountNonce   uint64 // biggest nonce amoung accounts (just to regenerate same state root, not essential field)
 }
 
 // Hash represents the 32 byte Keccak256 hash of arbitrary data.
