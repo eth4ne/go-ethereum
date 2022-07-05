@@ -53,8 +53,9 @@ execution_mode = MODE_ETHANOS
 RESTORE_ALL = 0
 RESTORE_RECENT = 1
 RESTORE_OLDEST = 2
-RESTORE_BIGGEST = 3 # not programmed
-restore_mode = RESTORE_ALL
+RESTORE_OPTIMIZED = 3 # If the amount is given as an input, then automatically restore the least accounts whose sum is bigger than the amount
+restore_amount = '50' # requesting amount to be restored (only RESTORE_OPTIMIZED mode)
+restore_mode = RESTORE_OLDEST
 
 restorefile = 'restore_315_1_2000000.json'
 
@@ -311,65 +312,23 @@ def makeRestoreTx(web3, currentBlock, address, gasprice=1000000000):
   targetBlocks = list(range(latestCheckPoint, latestCheckPoint, -epoch))
   
   targetBlocks.append(latestCheckPoint)
+  
+  if restore_mode == RESTORE_ALL:
+        rmode = ['00']
+    elif restore_mode == RESTORE_RECENT:
+        rmode = ['01']
+    elif restore_mode == RESTORE_OLDEST:
+        rmode = ['02']
+    elif restore_mode == RESTORE_OPTIMIZED:
+        rmode = ['03', restore_amount]
+  
   for targetBlock in targetBlocks:
     proof = web3.eth.getProof(
       Web3.toChecksumAddress(address),
-      [],
+      rmode, # specify the restore option here (joonha)
       block_identifier=targetBlock
-    )
-    
-    # Restore following the restore mode (recent, all, etc.) (joonha)
-    # default: RESTORE_ALL
-    # if restore_mode == RESTORE_RECENT then crop only the last proof here (because prooves gotten are for RESTORE_ALL)
-    # if restore_mode == RESTORE_OLDEST then crop only the first proof here (because prooves gotten are for RESTORE_ALL)
-    # if restore_mode == RESTORE_BIGGEST then nothing seems to be available here (maybe adding new field to AddrToKey_inactive such as "biggest value and its idx" might work)
-    if restore_mode == RESTORE_RECENT:
-      print("\n>>> restore mode is RESTORE_RECENT <<<\n")
-      start_idx = 0
-      for i in range(len(proof['accountProof'])-1, 0, -1):
-          if proof['accountProof'][i] == HexBytes('0x4000'):
-              start_idx = i
-              # print("\nstart_idx is ", start_idx, "\n")
-              break
-      proof_new = {}
-      proof_new['address'] = proof['address']
-      # replace dummy nodes
-      proof_replaced_accountProof = list()
-      for i in range(start_idx, len(proof['accountProof'])):
-          if proof['accountProof'][i][0] == 64:
-              idx = proof['accountProof'][i][1]
-              proof_replaced_accountProof.append(proof['accountProof'][idx])
-          else:
-              proof_replaced_accountProof.append(proof['accountProof'][i])
-      proof_new['accountProof'] = proof_replaced_accountProof
-      proof_new['balance'] = proof['balance']
-      proof_new['codeHash'] = proof['codeHash']
-      proof_new['storageHash'] = proof['storageHash']
-      proof_new['storageProof'] = proof['storageProof']
-      # print("\nproof_new: ", proof_new, "\n")
-        
-    elif restore_mode == RESTORE_OLDEST:
-      print("\n>>> restore mode is RESTORE_OLDEST <<<\n")
-      end_idx = len(proof)
-      for i in range(0, len(proof['accountProof'])-1):
-          if proof['accountProof'][i] == HexBytes('0x4000'):
-              end_idx = i
-              # print("\nend_idx is ", end_idx, "\n")
-              break
-      proof_new = {}
-      proof_new['address'] = proof['address']
-      proof_new['accountProof'] = proof['accountProof'][:end_idx]
-      proof_new['balance'] = proof['balance']
-      proof_new['codeHash'] = proof['codeHash']
-      proof_new['storageHash'] = proof['storageHash']
-      proof_new['storageProof'] = proof['storageProof']
-      # print("\nproof_new: ", proof_new, "\n")
-      
-    else: # RESTORE_ALL
-        print("\n>>> restore mode is RESTORED ALL <<<\n")
-        proof_new = proof
-      
-    proofs.append(proof_new)
+    )      
+    proofs.append(proof)
 
   if len(proofs) != len(targetBlocks):
     targetBlocks = targetBlocks[:len(proofs)]

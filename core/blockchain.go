@@ -1362,7 +1362,9 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	// // 	// fmt.Println("(BEFORE DELETION) $$$ print state trie at block", bc.CurrentBlock().Header().Number)
 	// }
 
+	/***********************************************/
 	// // delete leaf nodes from disk (joonha)
+	/***********************************************/
 	// // fmt.Println("\nBLOCK NUMBER: ", block.Header().Number.Int64())
 	// if (block.Header().Number.Int64()) == common.DeleteLeafNodeEpoch-1 {
 	// 	// skip
@@ -1395,8 +1397,8 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		// inspect database
 		rawdb.InspectDatabase_save(rawdb.GlobalDB, nil, nil, block.Header().Number.Int64())
 
-		// print state trie (jmlee)
-		//fmt.Println("(AFTER DELETION) $$$ print state trie at block", bc.CurrentBlock().Header().Number)
+		// // print state trie (jmlee)
+		// fmt.Println("(AFTER DELETION) $$$ print state trie at block", bc.CurrentBlock().Header().Number)
 		// ldb := trie.NewDatabase(bc.db)
 		// stateTrie, _ := trie.NewSecure(bc.CurrentBlock().Root(), ldb)
 		// // stateTrie.Print()
@@ -1441,7 +1443,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	// }
 
 	// common.IsFirst = true
-	common.IsSecond = false
+	common.IsSecond = true // false // true when joonha_simulation, maybe false when simulation
 
 	// /*********************************/
 	// // PRINTINNG COMPACTTRIE
