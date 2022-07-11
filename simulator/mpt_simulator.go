@@ -10,11 +10,13 @@ import (
 	"io/ioutil"
 	"log"
 	"math/big"
+	mrand "math/rand"
 	"net"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/fdlimit"
@@ -477,6 +479,58 @@ func trieToGraph(hash common.Hash) {
 
 }
 
+// find shortest prefixes among short nodes in the trie
+func findShortestPrefixAmongShortNodes(hash common.Hash) ([]string, bool) {
+	// fmt.Println("@ node hash:", hash.Hex())
+	// check that the node exist
+	nodeInfo, exist := common.TrieNodeInfosDirty[hash]
+	if !exist {
+		nodeInfo, exist = common.TrieNodeInfos[hash]
+	}
+	if !exist {
+		// fmt.Println("  this node do not exist")
+		return []string{""}, false
+	}
+
+	// find shortest prefix
+	if nodeInfo.IsShortNode {
+		// this node is short node
+		// fmt.Println("  this node is short node")
+		return []string{""}, true
+	} else {
+		// this node is full node
+		shortestPrefixLen := 10000 // in secure trie, 64+1 is enough
+		shortestPrefixes := []string{}
+		findPrefix := false
+		for i, childHash := range nodeInfo.ChildHashes {
+			subPrefixes, success := findShortestPrefixAmongShortNodes(childHash)
+			for j, subPrefix := range subPrefixes {
+				subPrefixes[j] = nodeInfo.Indices[i] + subPrefix
+			}
+
+			if success {
+				findPrefix = true
+				if len(subPrefixes[0]) == shortestPrefixLen {
+					for _, subPrefix := range subPrefixes {
+						shortestPrefixes = append(shortestPrefixes, subPrefix)
+					}
+				} else if len(subPrefixes[0]) < shortestPrefixLen {
+					shortestPrefixLen = len(subPrefixes[0])
+					shortestPrefixes = []string{}
+					for _, subPrefix := range subPrefixes {
+						shortestPrefixes = append(shortestPrefixes, subPrefix)
+					}
+				}
+			}
+		}
+		if findPrefix {
+			return shortestPrefixes, true
+		}
+	}
+
+	// there is no short node in this trie
+	// fmt.Println("  there is no short node in this trie")
+	return []string{""}, false
 }
 
 func updateTrie(key []byte) error {
@@ -690,6 +744,44 @@ func ConnHandler(conn net.Conn) {
 
 				// return json file name (at trieGraphPath/hash.json)
 				response = []byte(root.Hex())
+
+			case "findShortestPrefixAmongShortNodes":
+				fmt.Println("execute findShortestPrefixAmongShortNodes()")
+				maxPrefixesNum, err := strconv.ParseUint(params[1], 10, 64)
+				fmt.Println("maxPrefixesNum:", maxPrefixesNum)
+				if err != nil {
+					fmt.Println("ParseUint error:", err)
+					os.Exit(1)
+				}
+
+				// get shortest prefixes
+				shortestPrefixes, success := findShortestPrefixAmongShortNodes(normTrie.Hash())
+
+				// pick prefixes among them (caution: this may contain duplications)
+				prefixes := make([]string, 0)
+				if uint64(len(shortestPrefixes)) <= maxPrefixesNum {
+					prefixes = shortestPrefixes
+				} else {
+					mrand.Seed(time.Now().Unix()) // initialize global pseudo random generator
+					for i := uint64(0); i < maxPrefixesNum; i++ {
+						randIndex := mrand.Intn(len(shortestPrefixes))
+						prefixes = append(prefixes, shortestPrefixes[randIndex])
+					}
+				}
+
+				resp := ""
+				cnt := 0
+				for _, prefix := range prefixes {
+					resp += prefix + ","
+					cnt++
+					if len(resp) > maxResponseLen-100 {
+						// fmt.Println("cutted -> include only", i, "prefixes / # of prefixes:", len(prefixes), "/ len of prefix:", len(prefixes[0]))
+						break
+					}
+				}
+				resp += strconv.FormatBool(success)
+				response = []byte(resp)
+				fmt.Println("include (", cnt, "/", len(shortestPrefixes), ") prefixes / len of prefix:", len(prefixes[0]))
 
 			case "printAllStats":
 				// save this as a file (param: file name)

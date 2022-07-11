@@ -85,7 +85,7 @@ type NodeInfo struct {
 	Indices     []string // full node's indices for child nodes
 	Key         string   // short node's key
 
-	Prefix string // root node has no prefix (causion: same nodes can have different Prefixes, in single state trie, with little probability)
+	Prefix string // root node has no prefix (caution: same nodes can have different Prefixes, in single state trie, with little probability)
 
 	// stats for sub trie (whose root is this node)
 	// so total nodes num of this sub trie is always >= 1

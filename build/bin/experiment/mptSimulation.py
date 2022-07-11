@@ -55,7 +55,7 @@ def inspectDB():
     return inspectResult
 
 # get number and size of trie nodes in current state trie
-# inspectResult: total nodes num/size, fullNode num/size, shortNode num/size, leafNode num/size
+# inspectResult: root hash, total nodes num/size, fullNode num/size, shortNode num/size, leafNode num/size
 def inspectTrie():
     cmd = str("inspectTrie")
     client_socket.send(cmd.encode())
@@ -65,7 +65,7 @@ def inspectTrie():
     return inspectResult
 
 # get number and size of trie nodes in certain state sub trie
-# inspectResult: total nodes num/size, fullNode num/size, shortNode num/size, leafNode num/size
+# inspectResult: root hash, total nodes num/size, fullNode num/size, shortNode num/size, leafNode num/size
 def inspectSubTrie(subTrieRoot):
     cmd = str("inspectSubTrie")
     cmd += str(",")
@@ -214,6 +214,107 @@ def generateSampleTrie():
     inspectDB()
 
 
+# for heuristic strategy, find shortest prefixes among short nodes in the current trie
+def findShortestPrefixAmongShortNodes(maxPrefixesNum):
+    cmd = str("findShortestPrefixAmongShortNodes")
+    cmd += str(",")
+    cmd += str(maxPrefixesNum)
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(maxResponseLen)
+    findResult = data.decode().split(',')
+    # print("findResult:", findResult)
+    shortestPrefixes = findResult[:-1] # ignore "success" field
+    # print("shortest prefixes:", shortestPrefixes, "/ success:", findResult[-1])
+    return shortestPrefixes
+
+def findAddrHashWithPrefix(prefixes):
+    if prefixes[0] == "":
+        return makeRandAddrHash()
+    else:
+        prefixLen = len(prefixes[0])
+        count = 0
+        maxTry = 1000
+        while True:
+            count += 1
+            addr, addrHash = makeRandAddrHash()
+            # print("addrHash[:prefixLen]:", addrHash[:prefixLen])
+            # print("prefix:", prefix)
+            if addrHash[:prefixLen] in prefixes:
+                # print("matching prefix:", addrHash[:prefixLen], "/ addrHash:", addrHash)
+                return addr, addrHash
+            if count > maxTry:
+                # print("cannot find proper address, just return random addrHash")
+                return makeRandAddrHash()
+
+# heuristic 1
+def strategy_heuristic_splitShortNodes(flushEpoch, attackNumPerBlock, accNumToInsert, doRealComputation=False):
+    # initialize
+    reset()
+    updateCount = 0
+    randomInsertNum = 0
+    heuristicInsertNum = 0
+    prefixLenSum = 0
+    startTime = datetime.now()
+
+    # set log file name
+    logFileName = "strategy_heuristic_splitShortNodes_" + str(flushEpoch) + "_" + str(attackNumPerBlock) + "_" + str(accNumToInsert) + ".txt"
+
+    # insert random accounts, then insert heuristically seleted accounts
+    if attackNumPerBlock > flushEpoch:
+        print("attack num per block cannot be larger than flush epoch, just return")
+        return
+    
+    while updateCount < accNumToInsert:
+        # insert random accounts
+        for i in range(flushEpoch-attackNumPerBlock):
+            updateTrie(makeRandHashLengthHexString())
+        randomInsertNum += flushEpoch-attackNumPerBlock
+        
+        # insert heuristic accounts
+        shortestPrefixes = findShortestPrefixAmongShortNodes(attackNumPerBlock)
+        possibleAttackNum = len(shortestPrefixes)
+        for i in range(possibleAttackNum):
+            prefix = shortestPrefixes[i]
+            prefixLenSum += len(prefix)
+            if doRealComputation:
+                # real computation: find proper address whose hash value has certain prefix
+                addr, addrHash = findAddrHashWithPrefix(prefix)
+            else:
+                # sudo computation: just generate random string with certain prefix
+                addrHash = prefix + makeRandHashLengthHexString()[len(prefix):]
+            # print("prefixes:", shortestPrefixes, "/ addrHash:", addrHash)
+            updateTrie(addrHash)
+        heuristicInsertNum += possibleAttackNum
+
+        # insert random accounts (when there is not enough attack space)
+        for i in range(attackNumPerBlock - possibleAttackNum):
+            updateTrie(makeRandHashLengthHexString())
+        randomInsertNum += attackNumPerBlock - possibleAttackNum
+        
+        # flush
+        updateCount += flushEpoch
+        print("flush! inserted", '{:,}'.format(updateCount), "accounts / elapsed time:", datetime.now()-startTime)
+        flush()
+
+    # final flush
+    flush()
+
+    # show final result
+    print("strategy_heuristic_splitShortNodes() finished")
+    print("total elapsed time:", datetime.now()-startTime)
+    print("total inserts:", accNumToInsert, "-> random inserts:", randomInsertNum, " / heuristic inserts:", heuristicInsertNum)
+    print("average prefix len:", prefixLenSum/heuristicInsertNum)
+    inspectTrie()
+    inspectDB()
+    printAllStats(logFileName)
+    print("create log file:", logFileName)
+    # printCurrentTrie()
+    # trieToGraph()
+
+
+
+
+
 # just insert random keys
 def strategy_random(flushEpoch, totalAccNumToInsert):
     # initialize
@@ -256,8 +357,9 @@ if __name__ == "__main__":
     # call APIs to simulate MPT
     #
 
-    # for test, run this function
-    generateSampleTrie()
-    # sys.exit()
+    # ex1. strategy: random
+    # strategy_random(400, 100000)
+    # ex2. strategy: split short nodes
+    # strategy_heuristic_splitShortNodes(400, 40, 100000, False)
 
     print("end")
