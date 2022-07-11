@@ -561,7 +561,7 @@ func ConnHandler(conn net.Conn) {
 				fmt.Println("print inspectTrie result")
 				nodeInfo.SubTrieNodeStat.Print()
 
-				response = []byte("success")
+				response = []byte(rootHash.Hex() + "," + nodeInfo.SubTrieNodeStat.ToString(","))
 
 			case "inspectSubTrie":
 				inspectDB(diskdb)
@@ -576,7 +576,7 @@ func ConnHandler(conn net.Conn) {
 				fmt.Println("print inspectSubTrie result")
 				nodeInfo.SubTrieNodeStat.Print()
 
-				response = []byte("success")
+				response = []byte(rootHash.Hex() + "," + nodeInfo.SubTrieNodeStat.ToString(","))
 
 			case "flush":
 				fmt.Println("execute flushTrieNodes()")

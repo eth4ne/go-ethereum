@@ -8,6 +8,9 @@ from datetime import datetime
 SERVER_IP = "localhost"
 SERVER_PORT = 8999
 
+# maximum byte length of response from the simulator
+maxResponseLen = 4096
+
 # open socket
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 # connect to the server
@@ -31,6 +34,15 @@ def getTrieRootHash():
     print("root hash:", rootHash)
     return rootHash
 
+# print current trie (trie.Print())
+def printCurrentTrie():
+    cmd = str("printCurrentTrie")
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    printResult = data.decode()
+    print("print result:", printResult)
+    return printResult
+
 # get number and size of all trie nodes in db
 def inspectDB():
     cmd = str("inspectDB")
@@ -43,15 +55,37 @@ def inspectDB():
     return inspectResult
 
 # get number and size of trie nodes in current state trie
+# inspectResult: total nodes num/size, fullNode num/size, shortNode num/size, leafNode num/size
 def inspectTrie():
     cmd = str("inspectTrie")
     client_socket.send(cmd.encode())
     data = client_socket.recv(1024)
     inspectResult = data.decode().split(',')
-    currentTrieNodesNum = int(inspectResult[0])
-    currentTrieNodesSize = int(inspectResult[1])
-    print("inspectTrie result -> # of current trie nodes:", '{:,}'.format(currentTrieNodesNum), "/ current trie size:", '{:,}'.format(currentTrieNodesSize), "B")
+    print("inspectTrie result ->", inspectResult)
     return inspectResult
+
+# get number and size of trie nodes in certain state sub trie
+# inspectResult: total nodes num/size, fullNode num/size, shortNode num/size, leafNode num/size
+def inspectSubTrie(subTrieRoot):
+    cmd = str("inspectSubTrie")
+    cmd += str(",")
+    cmd += subTrieRoot
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    inspectResult = data.decode().split(',')
+    print("inspectTrie result ->", inspectResult)
+    return inspectResult
+
+# print and save all db stats and current trie stats
+def printAllStats(logFileName):
+    cmd = str("printAllStats")
+    cmd += str(",")
+    cmd += logFileName
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    printResult = data.decode().split(',')
+    # print("print result ->", printResult)
+    return printResult
 
 def estimateFlushResult():
     cmd = str("estimateFlushResult")
@@ -113,11 +147,26 @@ def rollbackToBlock(targetBlockNum):
     print("rollbackToBlock result:", rollbackToBlockResult)
     return rollbackToBlockResult
 
+# generate json file representing current trie
+def trieToGraph():
+    cmd = str("trieToGraph")
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    rootHash = data.decode()
+    print("trieToGraph result -> root hash:", rootHash)
+    return rootHash
+
 # generate random address
 def makeRandAddr():
     randHex = binascii.b2a_hex(os.urandom(20))
     # print("randHex:", randHex, "/ len:", len(randHex), "/ type:", type(randHex))
     return Web3.toChecksumAddress("0x" + randHex.decode('utf-8'))
+
+# generate hash of random address
+def makeRandAddrHash():
+    randAddr = str(makeRandAddr())
+    addrHash = Web3.toHex(Web3.keccak(hexstr=randAddr))
+    return randAddr, addrHash[2:] # delete "0x"
 
 # convert int to address
 def intToAddr(num):
@@ -163,6 +212,42 @@ def generateSampleTrie():
     print("\nupdate", '{:,}'.format(accNumToInsert), "accounts / flush epoch:", flushEpoch, "/ elapsed time:", endTime - startTime)
     inspectTrie()
     inspectDB()
+
+
+# just insert random keys
+def strategy_random(flushEpoch, totalAccNumToInsert):
+    # initialize
+    reset()
+    updateCount = 0
+    startTime = datetime.now()
+
+    # set log file name
+    logFileName = "strategy_random_" + str(flushEpoch) + "_" + str(totalAccNumToInsert) + ".txt"
+
+    # insert random accounts
+    for i in range(totalAccNumToInsert):
+        key = makeRandHashLengthHexString()
+        updateTrie(key)
+        updateCount += 1
+        if updateCount % flushEpoch == 0:
+            print("flush! inserted", '{:,}'.format(i+1), "accounts / elapsed time:", datetime.now()-startTime)
+            flush()
+    flush()
+
+    # show final result
+    print("strategy_random() finished")
+    print("total elapsed time:", datetime.now()-startTime)
+    print("random inserts:", totalAccNumToInsert)
+    inspectTrie()
+    inspectDB()
+    printAllStats(logFileName)
+    print("create log file:", logFileName)
+    # printCurrentTrie()
+    # trieToGraph()
+
+
+
+
 
 if __name__ == "__main__":
     print("start")
