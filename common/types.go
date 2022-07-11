@@ -112,6 +112,19 @@ type BlockInfo struct {
 	Root              Hash   // root hash of trie
 	FlushedNodeHashes []Hash // hashes of flushed nodes
 	MaxAccountNonce   uint64 // biggest nonce amoung accounts (just to regenerate same state root, not essential field)
+
+}
+
+// TrieGraphInfo has edges and features representing trie
+type TrieGraphInfo struct {
+	// Edges: [[hash1, hash2], [hash1, hash3], ...]
+	Edges [][]string
+
+	// Features: map[hash] = feature
+	// "0": leaf node
+	// "1": short node
+	// "2": full node
+	Features map[string]string
 }
 
 // Hash represents the 32 byte Keccak256 hash of arbitrary data.
