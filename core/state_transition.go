@@ -22,7 +22,7 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
-	cmath "github.com/ethereum/go-ethereum/common/math"
+	// cmath "github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -199,7 +199,10 @@ func (st *StateTransition) buyGas() error {
 		balanceCheck = balanceCheck.Mul(balanceCheck, st.gasFeeCap)
 		balanceCheck.Add(balanceCheck, st.value)
 	}
-	if have, want := st.state.GetBalance(st.msg.From()), balanceCheck; have.Cmp(want) < 0 {
+	// if restore tx, do whatever the from's balance is (joonha)
+	if *st.msg.To() == common.HexToAddress("0x0123456789012345678901234567890123456789") {
+		// do not check the balance
+	} else if have, want := st.state.GetBalance(st.msg.From()), balanceCheck; have.Cmp(want) < 0 {
 		return fmt.Errorf("%w: address %v have %v want %v", ErrInsufficientFunds, st.msg.From().Hex(), have, want)
 	}
 	if err := st.gp.SubGas(st.msg.Gas()); err != nil {
@@ -221,8 +224,8 @@ func (st *StateTransition) preCheck() error {
 			return fmt.Errorf("%w: address %v, tx: %d state: %d", ErrNonceTooHigh,
 				st.msg.From().Hex(), msgNonce, stNonce)
 		} else if stNonce > msgNonce {
-			return fmt.Errorf("%w: address %v, tx: %d state: %d", ErrNonceTooLow,
-				st.msg.From().Hex(), msgNonce, stNonce)
+			// return fmt.Errorf("%w: address %v, tx: %d state: %d", ErrNonceTooLow,
+			// 	st.msg.From().Hex(), msgNonce, stNonce)
 		} else if stNonce+1 < stNonce {
 			return fmt.Errorf("%w: address %v, nonce: %d", ErrNonceMax,
 				st.msg.From().Hex(), stNonce)
@@ -315,6 +318,14 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		log.Info("[state_transition.go/TransitionDb] ErrIntrinsicGas")
 		return nil, err
 	}
+	// if restore tx or reward tx, do not levy gas (joonha)
+	if *st.msg.To() == common.HexToAddress("0x0123456789012345678901234567890123456789") {
+		gas = 0
+	} else if st.msg.From() == common.HexToAddress("0x36eCA1fe87f68B49319dB55eBB502e68c4981716") {
+		gas = 0
+	} else if st.msg.From() == common.HexToAddress("0xb3711B7e50Fe9Ff914ec0F08C6b8330a41E93C10") {
+		gas = 0
+	}
 
 	var (
 		ret   []byte
@@ -357,11 +368,13 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 
 	}
 
-	effectiveTip := st.gasPrice
-	if london {
-		effectiveTip = cmath.BigMin(st.gasTipCap, new(big.Int).Sub(st.gasFeeCap, st.evm.Context.BaseFee))
-	}
-	st.state.AddBalance(st.evm.Context.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), effectiveTip))
+	// effectiveTip := st.gasPrice
+	// if london {
+	// 	effectiveTip = cmath.BigMin(st.gasTipCap, new(big.Int).Sub(st.gasFeeCap, st.evm.Context.BaseFee))
+	// }
+	// st.state.AddBalance(st.evm.Context.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), effectiveTip))
+	// ---> comment out by joonha
+	// fmt.Println("\n\n>>>>> ", new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), effectiveTip))
 	//st.evm.Context.CumulativeReward = new(big.Int).Add(st.evm.Context.CumulativeReward, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), effectiveTip))
 
 	return &ExecutionResult{
