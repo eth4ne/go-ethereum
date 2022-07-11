@@ -595,6 +595,10 @@ func (t *Trie) TrieDB() *Database {
 
 // Print shows trie nodes details in human readable form (jmlee)
 func (t *Trie) Print() {
+	if t.Hash() == emptyRoot {
+		fmt.Println("cannot print empty trie")
+		return
+	}
 	fmt.Println(t.root.toString("", t.db))
 }
 

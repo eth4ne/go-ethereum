@@ -149,6 +149,10 @@ func WriteTrieNode(db ethdb.KeyValueWriter, hash common.Hash, node []byte) {
 
 	if err := db.Put(hash.Bytes(), node); err != nil {
 		log.Crit("Failed to store trie node", "err", err)
+		fmt.Println("WriteTrieNode() error:", err)
+		fmt.Println("  node hash:", hash.Hex())
+		fmt.Println("  rlped node:", node)
+		os.Exit(1)
 	}
 }
 

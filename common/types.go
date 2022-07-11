@@ -26,6 +26,7 @@ import (
 	"math/big"
 	"math/rand"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -68,7 +69,7 @@ var (
 	// current block number (which will be increased after flushing trie nodes)
 	CurrentBlockNum = uint64(0)
 	// max number of blocks to store in "Blocks" (i.e., rollback limit)
-	MaxBlocksToStore = uint64(10000)
+	MaxBlocksToStore = uint64(1000000)
 )
 
 // NodeInfo stores trie node related information
