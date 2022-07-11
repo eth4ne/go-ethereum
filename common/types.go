@@ -70,6 +70,9 @@ var (
 	CurrentBlockNum = uint64(0)
 	// max number of blocks to store in "Blocks" (i.e., rollback limit)
 	MaxBlocksToStore = uint64(1000000)
+
+	// to convert trie to graph representation
+	TrieGraph TrieGraphInfo
 )
 
 // NodeInfo stores trie node related information
