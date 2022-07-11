@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/fdlimit"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -30,15 +31,17 @@ const (
 	useLeveldb = true
 	// leveldb path
 	leveldbPath = "/home/jmlee/ssd/mptSimulator/trieNodes"
-	// leveldb cache size (MB)
-	leveldbCache = 10240
+	// leveldb cache size (MB) (Geth default: 512) (memory leak might occur when calling reset() frequently with too big cache size)
+	leveldbCache = 1024
 	// leveldb options
-	leveldbHandles   = 524288
 	leveldbNamespace = "eth/db/chaindata/"
 	leveldbReadonly  = false
 )
 
 var (
+	// # of max open files for leveldb (Geth default: 524288)
+	leveldbHandles = 524288
+
 	// empty account
 	emptyAccount types.StateAccount
 	// emptyCodeHash for EoA accounts
@@ -58,6 +61,25 @@ var (
 )
 
 func reset() {
+
+	// set maximum number of open files
+	limit, err := fdlimit.Maximum()
+	if err != nil {
+		// Fatalf("Failed to retrieve file descriptor allowance: %v", err)
+		fmt.Println("Failed to retrieve file descriptor allowance:", err)
+	}
+	raised, err := fdlimit.Raise(uint64(limit))
+	if err != nil {
+		// Fatalf("Failed to raise file descriptor allowance: %v", err)
+		fmt.Println("Failed to raise file descriptor allowance:", err)
+	}
+	if raised <= 1000 {
+		fmt.Println("max open file num is too low")
+		os.Exit(1)
+	}
+	leveldbHandles = int(raised / 2)
+	fmt.Println("open file limit:", limit, "/ raised:", raised, "/ leveldbHandles:", leveldbHandles)
+
 	// reset normal trie
 	if diskdb != nil {
 		diskdb.Close()
@@ -238,6 +260,15 @@ func flushTrieNodes() {
 	// show db stat
 	fmt.Println("  new trie nodes:", common.NewTrieNodesNum, "/ increased db size:", common.NewTrieNodesSize)
 	fmt.Println("  total trie nodes:", common.TotalTrieNodesNum, "/ db size:", common.TotalTrieNodesSize)
+}
+
+func countOpenFiles() int64 {
+	out, err := exec.Command("/bin/sh", "-c", fmt.Sprintf("lsof -p %v", os.Getpid())).Output()
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+	lines := strings.Split(string(out), "\n")
+	return int64(len(lines) - 1)
 }
 
 func randomHex(n int) string {
