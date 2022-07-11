@@ -29,6 +29,10 @@ const (
 
 	// simulation result log file path
 	logFilePath = "./logFiles/"
+
+	// trie graph json file path
+	trieGraphPath = "./trieGraphs/"
+
 	// choose leveldb vs memorydb
 	useLeveldb = true
 	// leveldb path
@@ -418,7 +422,54 @@ func inspectTrie(hash common.Hash) {
 	}
 }
 
-	return subTrieNodeNum + 1, uint64(nodeInfo.Size) + subTrieSize
+// trieToGraph converts trie to graph (edges & features)
+func trieToGraph(hash common.Hash) {
+
+	// find this node's info
+	nodeInfo, isFlushedNode := common.TrieNodeInfos[hash]
+	if !isFlushedNode {
+		var exist bool
+		nodeInfo, exist = common.TrieNodeInfosDirty[hash]
+		if !exist {
+			// this node is unknown, just return
+			// fmt.Println("insepctTrieDP() unknown node")
+			return
+		}
+	}
+
+	// set features
+	if nodeInfo.IsLeafNode {
+		common.TrieGraph.Features[hash.Hex()] = "0"
+	} else if nodeInfo.IsShortNode {
+		common.TrieGraph.Features[hash.Hex()] = "1"
+	} else {
+		common.TrieGraph.Features[hash.Hex()] = "2"
+	}
+
+	// set edges
+	for i, childHash := range nodeInfo.ChildHashes {
+		_ = i
+		// fmt.Println("  inspect children -> i:", i, "/ childHash:", childHash.Hex())
+
+		// get child node info (just for debugging)
+		_, exist := common.TrieNodeInfos[childHash]
+		if !exist {
+			_, exist = common.TrieNodeInfosDirty[childHash]
+			if !exist {
+				fmt.Println("error: inspectTrie() -> child node do not exist")
+				os.Exit(1)
+			}
+		}
+
+		// add edges
+		common.TrieGraph.Edges = append(common.TrieGraph.Edges, []string{hash.Hex(), childHash.Hex()})
+
+		// recursive call
+		trieToGraph(childHash)
+	}
+
+}
+
 }
 
 func updateTrie(key []byte) error {
@@ -572,6 +623,41 @@ func ConnHandler(conn net.Conn) {
 					"," + strconv.FormatUint(incTotalNodesNum, 10) +
 					"," + strconv.FormatUint(incTotalNodesSize, 10))
 
+			case "trieToGraph":
+				fmt.Println("execute trieToGraph()")
+
+				// reset trie graph
+				common.TrieGraph = common.TrieGraphInfo{}
+				common.TrieGraph.Features = make(map[string]string)
+
+				// convert trie to graph
+				root := normTrie.Hash()
+				trieToGraph(root)
+
+				// create log file directory if not exist
+				if _, err := os.Stat(trieGraphPath); errors.Is(err, os.ErrNotExist) {
+					err := os.Mkdir(trieGraphPath, os.ModePerm)
+					if err != nil {
+						log.Println(err)
+					}
+				}
+
+				// write graph as a json file
+				graph, err := json.MarshalIndent(common.TrieGraph, "", " ")
+				if err != nil {
+					fmt.Println("json.MarshalIndent() error:", err)
+					os.Exit(1)
+				}
+
+				// save log to the file
+				err = ioutil.WriteFile(trieGraphPath+root.Hex()+".json", graph, 0644)
+				if err != nil {
+					fmt.Println("WriteFile() error:", err)
+					os.Exit(1)
+				}
+
+				// return json file name (at trieGraphPath/hash.json)
+				response = []byte(root.Hex())
 
 			case "printAllStats":
 				// save this as a file (param: file name)
