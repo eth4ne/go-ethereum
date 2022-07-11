@@ -377,7 +377,7 @@ func inspectTrie(hash common.Hash) {
 	subTrieShortNodesSize := uint64(0)
 	subTrieLeafNodesSize := uint64(0)
 
-	for i, childHash := range nodeInfo.ChildHashes {
+	for _, childHash := range nodeInfo.ChildHashes {
 		// inspect child node
 		inspectTrie(childHash)
 
