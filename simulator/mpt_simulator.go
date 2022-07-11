@@ -3,12 +3,16 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"math/big"
 	"net"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 
