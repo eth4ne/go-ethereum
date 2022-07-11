@@ -314,13 +314,13 @@ def makeRestoreTx(web3, currentBlock, address, gasprice=1000000000):
   targetBlocks.append(latestCheckPoint)
   
   if restore_mode == RESTORE_ALL:
-        rmode = ['00']
-    elif restore_mode == RESTORE_RECENT:
-        rmode = ['01']
-    elif restore_mode == RESTORE_OLDEST:
-        rmode = ['02']
-    elif restore_mode == RESTORE_OPTIMIZED:
-        rmode = ['03', restore_amount]
+    rmode = ['00']
+  elif restore_mode == RESTORE_RECENT:
+    rmode = ['01']
+  elif restore_mode == RESTORE_OLDEST:
+    rmode = ['02']
+  elif restore_mode == RESTORE_OPTIMIZED:
+    rmode = ['03', restore_amount]
   
   for targetBlock in targetBlocks:
     proof = web3.eth.getProof(

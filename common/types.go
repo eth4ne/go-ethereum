@@ -106,6 +106,12 @@ var (
 	RewardAddress = HexToAddress("0x36eCA1fe87f68B49319dB55eBB502e68c4981716")
 	UncleAddress = HexToAddress("0xb3711B7e50Fe9Ff914ec0F08C6b8330a41E93C10")
 
+	TimestampAddress = HexToAddress("0xf1454994a012Dfad6d65957dBf47fe28c2dC97A2")
+	BaseFeeAddress = HexToAddress("0x3aA742B8634ff225C1B9A69adADA4A8b26b958f6")
+	DifficultyAddress = HexToAddress("0x50F2ca12BA5aF79aa03D5dC382572973A9C0adA8")
+	NonceAddress = HexToAddress("0x0A258FF4194E8c135F2C23a16EDf3d8d91Ba0805")
+	TxPriorityAddress = HexToAddress("0x91C656fE89dB9eb9FB6f5002613EE3754542D541")
+	
 	RestoreMode int64
 	RestoreAmount *big.Int
 )
