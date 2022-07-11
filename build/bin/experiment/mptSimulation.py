@@ -256,9 +256,6 @@ def strategy_heuristic_splitShortNodes(flushEpoch, attackNumPerBlock, accNumToIn
     prefixLenSum = 0
     startTime = datetime.now()
 
-    # set log file name
-    logFileName = "strategy_heuristic_splitShortNodes_" + str(flushEpoch) + "_" + str(attackNumPerBlock) + "_" + str(accNumToInsert) + ".txt"
-
     # insert random accounts, then insert heuristically seleted accounts
     if attackNumPerBlock > flushEpoch:
         print("attack num per block cannot be larger than flush epoch, just return")
@@ -303,9 +300,14 @@ def strategy_heuristic_splitShortNodes(flushEpoch, attackNumPerBlock, accNumToIn
     print("strategy_heuristic_splitShortNodes() finished")
     print("total elapsed time:", datetime.now()-startTime)
     print("total inserts:", accNumToInsert, "-> random inserts:", randomInsertNum, " / heuristic inserts:", heuristicInsertNum)
-    print("average prefix len:", prefixLenSum/heuristicInsertNum)
+    avgPrefixLen = round(prefixLenSum/heuristicInsertNum, 3)
+    print("average prefix len:", avgPrefixLen)
     inspectTrie()
     inspectDB()
+
+    # save result as a file
+    logFileName = "strategy_heuristic_splitShortNodes_" + str(flushEpoch) + "_" + str(attackNumPerBlock) + \
+                    "_" + str(accNumToInsert) + "_" + str(heuristicInsertNum) + "_" + str(avgPrefixLen) + ".txt"
     printAllStats(logFileName)
     print("create log file:", logFileName)
     # printCurrentTrie()
