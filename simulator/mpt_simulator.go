@@ -31,6 +31,9 @@ const (
 	// port for requests
 	serverPort = "8999"
 
+	// maximum byte length of response
+	maxResponseLen = 4096
+
 	// simulation result log file path
 	logFilePath = "./logFiles/"
 
@@ -511,7 +514,7 @@ func ConnHandler(conn net.Conn) {
 			//
 			// do something with the request
 			//
-			response := make([]byte, 4096)
+			response := make([]byte, maxResponseLen)
 			params := strings.Split(request, ",")
 			// fmt.Println("params:", params)
 			switch params[0] {
@@ -530,6 +533,12 @@ func ConnHandler(conn net.Conn) {
 				rootHash := normTrie.Hash().Hex()
 				fmt.Println("current trie root hash:", rootHash)
 				response = []byte(rootHash)
+
+			case "printCurrentTrie":
+				fmt.Println("execute printCurrentTrie()")
+				normTrie.Hash()
+				normTrie.Print()
+				response = []byte("success")
 
 			case "inspectDB":
 				fmt.Println("execute inspectDB()")
@@ -554,6 +563,21 @@ func ConnHandler(conn net.Conn) {
 
 				response = []byte("success")
 
+			case "inspectSubTrie":
+				inspectDB(diskdb)
+				fmt.Println("execute inspectSubTrie()")
+				rootHash := common.HexToHash(params[1])
+				fmt.Println("rootHash:", rootHash.Hex())
+				inspectTrie(rootHash)
+				nodeInfo, exist := common.TrieNodeInfos[rootHash]
+				if !exist {
+					nodeInfo, exist = common.TrieNodeInfosDirty[rootHash]
+				}
+				fmt.Println("print inspectSubTrie result")
+				nodeInfo.SubTrieNodeStat.Print()
+
+				response = []byte("success")
+
 			case "flush":
 				fmt.Println("execute flushTrieNodes()")
 				flushTrieNodes()
@@ -572,10 +596,14 @@ func ConnHandler(conn net.Conn) {
 						// fmt.Println("success updateTrie -> new root hash:", normTrie.Hash().Hex())
 						response = []byte("success updateTrie")
 					} else {
-						fmt.Println("ERROR: fail updateTrie")
-						response = []byte("ERROR: fail updateTrie")
+						// this is not normal case, need to fix certain error
+						fmt.Println("ERROR: fail updateTrie:", err, "/ key:", params[1])
+						os.Exit(1)
 					}
 				}
+				normTrie.Hash()
+				// normTrie.Print()
+				// fmt.Println("\n\n")
 
 			case "rollbackUncommittedUpdates":
 				fmt.Println("execute rollbackUncommittedUpdates()")
@@ -755,7 +783,6 @@ func makeTestTrie() {
 		}
 		// fmt.Println("state", i+1)
 		// normTrie.Print()
-		// fmt.Println("  total trie nodes:", common.TotalTrieNodesNum, "/ db size:", common.TotalTrieNodesSize)
 		// fmt.Println("\n\n")
 	}
 
@@ -787,7 +814,9 @@ func main() {
 			continue
 		}
 		defer conn.Close()
-		go ConnHandler(conn)
+
+		// go ConnHandler(conn) // asynchronous
+		ConnHandler(conn) // synchronous
 	}
 
 }
