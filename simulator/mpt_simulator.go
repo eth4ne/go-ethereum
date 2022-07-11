@@ -27,6 +27,8 @@ const (
 	// port for requests
 	serverPort = "8999"
 
+	// simulation result log file path
+	logFilePath = "./logFiles/"
 	// choose leveldb vs memorydb
 	useLeveldb = true
 	// leveldb path
@@ -107,10 +109,9 @@ func reset() {
 	secureTrie, _ = trie.NewSecure(common.Hash{}, trie.NewDatabase(memorydb.New()))
 
 	// reset db stats
-	common.NewTrieNodesNum = 0
-	common.NewTrieNodesSize = 0
-	common.TotalTrieNodesNum = 0
-	common.TotalTrieNodesSize = 0
+	common.TotalNodeStat.Reset()
+	common.NewNodeStat.Reset()
+
 	common.TrieNodeInfos = make(map[common.Hash]common.NodeInfo)
 	common.TrieNodeInfosDirty = make(map[common.Hash]common.NodeInfo)
 
@@ -181,9 +182,21 @@ func rollbackToBlock(targetBlockNum uint64) bool {
 				fmt.Println("diskdb.Delete error:", err)
 			}
 
+			// get node info
+			nodeInfo, _ := common.TrieNodeInfos[nodeHash]
+			nodeSize := uint64(nodeInfo.Size)
+
 			// update db stats
-			common.TotalTrieNodesNum--
-			common.TotalTrieNodesSize -= uint64(common.TrieNodeInfos[nodeHash].Size)
+			if nodeInfo.IsLeafNode {
+				common.TotalNodeStat.LeafNodesNum--
+				common.TotalNodeStat.LeafNodesSize -= nodeSize
+			} else if nodeInfo.IsShortNode {
+				common.TotalNodeStat.ShortNodesNum--
+				common.TotalNodeStat.ShortNodesSize -= nodeSize
+			} else {
+				common.TotalNodeStat.FullNodesNum--
+				common.TotalNodeStat.FullNodesSize -= nodeSize
+			}
 
 			// delete from TrieNodeInfos
 			delete(common.TrieNodeInfos, nodeHash)
@@ -201,11 +214,11 @@ func rollbackToBlock(targetBlockNum uint64) bool {
 	emptyAccount.Nonce = common.Blocks[targetBlockNum].MaxAccountNonce
 
 	// reset new trie nodes info
-	common.NewTrieNodesNum = uint64(0)
-	common.NewTrieNodesSize = uint64(0)
+	common.NewNodeStat.Reset()
 
 	// print db stats
-	fmt.Println("  rollback finished -> total trie nodes:", common.TotalTrieNodesNum, "/ db size:", common.TotalTrieNodesSize)
+	totalNodesNum, totalNodesSize := common.TotalNodeStat.GetSum()
+	fmt.Println("  rollback finished -> total trie nodes:", totalNodesNum, "/ db size:", totalNodesSize)
 
 	return true
 }
@@ -234,8 +247,7 @@ func flushTrieNodes() {
 	common.CurrentBlockNum++
 
 	// reset db stats before flush
-	common.NewTrieNodesNum = 0
-	common.NewTrieNodesSize = 0
+	common.NewNodeStat.Reset()
 
 	// flush trie nodes
 	normTrie.Commit(nil)
@@ -258,8 +270,11 @@ func flushTrieNodes() {
 	common.TrieNodeInfosDirty = make(map[common.Hash]common.NodeInfo)
 
 	// show db stat
-	fmt.Println("  new trie nodes:", common.NewTrieNodesNum, "/ increased db size:", common.NewTrieNodesSize)
-	fmt.Println("  total trie nodes:", common.TotalTrieNodesNum, "/ db size:", common.TotalTrieNodesSize)
+	totalNodesNum, totalNodesSize := common.TotalNodeStat.GetSum()
+	newNodesNum, newNodesSize := common.NewNodeStat.GetSum()
+	common.NewNodeStat.Print()
+	fmt.Println("  new trie nodes:", newNodesNum, "/ increased db size:", newNodesSize)
+	fmt.Println("  total trie nodes:", totalNodesNum, "/ db size:", totalNodesSize)
 }
 
 func countOpenFiles() int64 {
@@ -319,7 +334,8 @@ func inspectDB(diskdb ethdb.KeyValueStore) (uint64, uint64) {
 
 // inspectTrie measures number and size of trie nodes in the trie
 // (count duplicated nodes)
-func inspectTrie(hash common.Hash) (uint64, uint64) {
+func inspectTrie(hash common.Hash) {
+	// fmt.Println("insepctTrie() node hash:", hash.Hex())
 
 	// find this node's info
 	nodeInfo, isFlushedNode := common.TrieNodeInfos[hash]
@@ -327,33 +343,80 @@ func inspectTrie(hash common.Hash) (uint64, uint64) {
 		var exist bool
 		nodeInfo, exist = common.TrieNodeInfosDirty[hash]
 		if !exist {
-			// this node is unknown, just return 0s
-			return 0, 0
+			// this node is unknown, just return
+			// fmt.Println("insepctTrie() unknown node")
+			return
 		}
 	}
 
 	// dynamic programming approach
-	if nodeInfo.SubTrieNodesNum != 0 {
-		return nodeInfo.SubTrieNodesNum + 1, uint64(nodeInfo.Size) + nodeInfo.SubTrieSize
+	totalNum, _ := nodeInfo.SubTrieNodeStat.GetSum()
+	if totalNum != 0 {
+		// stop measuring
+		// fmt.Println("insepctTrie() stop measuring")
+		return
 	}
 
 	// measure trie node num & size
-	subTrieNodeNum := uint64(0)
-	subTrieSize := uint64(0)
-	for _, childHash := range nodeInfo.ChildHashes {
-		num, size := inspectTrie(childHash)
-		subTrieNodeNum += num
-		subTrieSize += size
+	subTrieFullNodesNum := uint64(0)
+	subTrieShortNodesNum := uint64(0)
+	subTrieLeafNodesNum := uint64(0)
+
+	subTrieFullNodesSize := uint64(0)
+	subTrieShortNodesSize := uint64(0)
+	subTrieLeafNodesSize := uint64(0)
+
+	for i, childHash := range nodeInfo.ChildHashes {
+		// inspect child node
+		inspectTrie(childHash)
+
+		// get child node info
+		childNodeInfo, exist := common.TrieNodeInfos[childHash]
+		if !exist {
+			childNodeInfo, exist = common.TrieNodeInfosDirty[childHash]
+			if !exist {
+				fmt.Println("error: inspectTrie() -> child node do not exist")
+				os.Exit(1)
+			}
+		}
+
+		// collect nums
+		subTrieFullNodesNum += childNodeInfo.SubTrieNodeStat.FullNodesNum
+		subTrieShortNodesNum += childNodeInfo.SubTrieNodeStat.ShortNodesNum
+		subTrieLeafNodesNum += childNodeInfo.SubTrieNodeStat.LeafNodesNum
+
+		// collect sizes
+		subTrieFullNodesSize += childNodeInfo.SubTrieNodeStat.FullNodesSize
+		subTrieShortNodesSize += childNodeInfo.SubTrieNodeStat.ShortNodesSize
+		subTrieLeafNodesSize += childNodeInfo.SubTrieNodeStat.LeafNodesSize
 	}
 
-	// memorize trie node num & size
-	nodeInfo.SubTrieNodesNum = subTrieNodeNum
-	nodeInfo.SubTrieSize = subTrieSize
+	// measure itself
+	nodeSize := uint64(nodeInfo.Size)
+	if nodeInfo.IsLeafNode {
+		subTrieLeafNodesNum++
+		subTrieLeafNodesSize += nodeSize
+	} else if nodeInfo.IsShortNode {
+		subTrieShortNodesNum++
+		subTrieShortNodesSize += nodeSize
+	} else {
+		subTrieFullNodesNum++
+		subTrieFullNodesSize += nodeSize
+	}
+
+	// memorize node stat
+	nodeInfo.SubTrieNodeStat.FullNodesNum = subTrieFullNodesNum
+	nodeInfo.SubTrieNodeStat.ShortNodesNum = subTrieShortNodesNum
+	nodeInfo.SubTrieNodeStat.LeafNodesNum = subTrieLeafNodesNum
+	nodeInfo.SubTrieNodeStat.FullNodesSize = subTrieFullNodesSize
+	nodeInfo.SubTrieNodeStat.ShortNodesSize = subTrieShortNodesSize
+	nodeInfo.SubTrieNodeStat.LeafNodesSize = subTrieLeafNodesSize
 	if isFlushedNode {
 		common.TrieNodeInfos[hash] = nodeInfo
 	} else {
 		common.TrieNodeInfosDirty[hash] = nodeInfo
 	}
+}
 
 	return subTrieNodeNum + 1, uint64(nodeInfo.Size) + subTrieSize
 }
@@ -415,18 +478,32 @@ func ConnHandler(conn net.Conn) {
 
 			case "inspectDB":
 				fmt.Println("execute inspectDB()")
-				response = []byte(strconv.FormatUint(common.TotalTrieNodesNum, 10) + "," + strconv.FormatUint(common.TotalTrieNodesSize, 10))
+				totalNodesNum, totalNodesSize := common.TotalNodeStat.GetSum()
+				fmt.Println("print inspectDB result")
+				common.TotalNodeStat.Print()
+
+				response = []byte(strconv.FormatUint(totalNodesNum, 10) + "," + strconv.FormatUint(totalNodesSize, 10))
 
 			case "inspectTrie":
+				inspectDB(diskdb)
 				fmt.Println("execute inspectTrie()")
-				currentTrieNodeNum, currentTrieSize := inspectTrie(normTrie.Hash())
-				fmt.Println("trie node num:", currentTrieNodeNum, "/ trie size:", currentTrieSize, "B")
-				response = []byte(strconv.FormatUint(currentTrieNodeNum, 10) + "," + strconv.FormatUint(currentTrieSize, 10))
+				rootHash := normTrie.Hash()
+				fmt.Println("root hash:", rootHash.Hex())
+				inspectTrie(rootHash)
+				nodeInfo, exist := common.TrieNodeInfos[rootHash]
+				if !exist {
+					nodeInfo, exist = common.TrieNodeInfosDirty[rootHash]
+				}
+				fmt.Println("print inspectTrie result")
+				nodeInfo.SubTrieNodeStat.Print()
+
+				response = []byte("success")
 
 			case "flush":
 				fmt.Println("execute flushTrieNodes()")
 				flushTrieNodes()
-				response = []byte(strconv.FormatUint(common.NewTrieNodesNum, 10) + "," + strconv.FormatUint(common.NewTrieNodesSize, 10))
+				newNodesNum, newNodesSize := common.NewNodeStat.GetSum()
+				response = []byte(strconv.FormatUint(newNodesNum, 10) + "," + strconv.FormatUint(newNodesSize, 10))
 
 			case "updateTrie":
 				key, err := hex.DecodeString(params[1]) // convert hex string to bytes
@@ -466,17 +543,75 @@ func ConnHandler(conn net.Conn) {
 
 			case "estimateFlushResult":
 				fmt.Println("execute estimateFlushResult()")
-				currentTrieNum, currentTrieSize := inspectTrie(common.Blocks[common.CurrentBlockNum].Root)
-				newTrieNum, newTrieSize := inspectTrie(normTrie.Hash())
-				incTrieNum := newTrieNum - currentTrieNum
-				incTrieSize := newTrieSize - currentTrieSize
 
-				incTotalNodesNum, incTotalNodesSize := estimateIncrement(normTrie.Hash())
+				// inspect latest flushed trie
+				flushedRoot := common.Blocks[common.CurrentBlockNum].Root
+				inspectTrie(flushedRoot)
+				flushedRootInfo, existF := common.TrieNodeInfos[flushedRoot]
+				if !existF {
+					flushedRootInfo, existF = common.TrieNodeInfosDirty[flushedRoot]
+				}
+				flushedNodesNum, flushedNodesSize := flushedRootInfo.SubTrieNodeStat.GetSum()
+
+				// inspect current trie
+				currentRoot := normTrie.Hash()
+				inspectTrie(currentRoot)
+				currentRootInfo, existC := common.TrieNodeInfos[currentRoot]
+				if !existC {
+					currentRootInfo, existC = common.TrieNodeInfosDirty[currentRoot]
+				}
+				currentNodesNum, currentNodesSize := currentRootInfo.SubTrieNodeStat.GetSum()
+
+				// estimate flush result
+				incTrieNum := currentNodesNum - flushedNodesNum
+				incTrieSize := currentNodesSize - flushedNodesSize
+				incTotalNodesNum, incTotalNodesSize := estimateIncrement(currentRoot)
 
 				response = []byte(strconv.FormatUint(incTrieNum, 10) +
 					"," + strconv.FormatUint(incTrieSize, 10) +
 					"," + strconv.FormatUint(incTotalNodesNum, 10) +
 					"," + strconv.FormatUint(incTotalNodesSize, 10))
+
+
+			case "printAllStats":
+				// save this as a file (param: file name)
+				logFileName := params[1]
+				_ = logFileName
+				fmt.Println("execute printAllStats()")
+
+				delimiter := " "
+
+				rootHash := normTrie.Hash()
+				inspectTrie(rootHash)
+				nodeInfo, exist := common.TrieNodeInfos[rootHash]
+				if !exist {
+					nodeInfo, exist = common.TrieNodeInfosDirty[rootHash]
+				}
+
+				totalResult := common.TotalNodeStat.ToString(delimiter)
+				subTrieResult := nodeInfo.SubTrieNodeStat.ToString(delimiter)
+
+				fmt.Print(totalResult)
+				fmt.Print(subTrieResult)
+
+				// create log file directory if not exist
+				if _, err := os.Stat(logFilePath); errors.Is(err, os.ErrNotExist) {
+					err := os.Mkdir(logFilePath, os.ModePerm)
+					if err != nil {
+						log.Println(err)
+					}
+				}
+
+				// save log to the file
+				logFile, err := os.OpenFile(logFilePath+logFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+				if err != nil {
+					fmt.Println("ERR", "err", err)
+				}
+				logData := totalResult + subTrieResult
+				fmt.Fprintln(logFile, logData)
+				logFile.Close()
+
+				response = []byte("success")
 
 			default:
 				fmt.Println("ERROR: there is no matching request")
