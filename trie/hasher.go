@@ -17,9 +17,10 @@
 package trie
 
 import (
-	"sync"
+	"bytes"
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -103,30 +104,50 @@ func (h *hasher) hash(n node, force bool) (hashed node, cached node) {
 			common.ChildHashesMutex.Lock()
 			if nodeInfo, exist := common.TrieNodeInfosDirty[myHash]; !exist {
 				nodeInfo.IsShortNode = true
-				nodeInfo.Key = common.Bytes2Hex(n.Key)
 				nodeInfo.Size = 32 + uint(size)
+				if n.Key[len(n.Key)-1] == 16 {
+					nodeInfo.IsLeafNode = true
+				}
 
+				// set nodeInfo.Key
+				var buffer bytes.Buffer
+				for i := 0; i < len(n.Key); i++ {
+					buffer.WriteString(Indices[n.Key[i]]) // faster than string += operation
+				}
+				nodeInfo.Key = buffer.String()
+				// fmt.Println("nodeInfo.Key:", nodeInfo.Key, "/ len:", len(nodeInfo.Key))
+				// fmt.Println("n.Key:", n.Key, "/ len:", len(n.Key))
+
+				// set child node hashes
 				switch v := cached.Val.(type) {
-				// case *hashNode:
-				//	shortNode's child cannot be shortNode
+				case hashNode:
+					childHash := common.BytesToHash(v)
+					nodeInfo.ChildHashes = append(nodeInfo.ChildHashes, childHash)
+					// fmt.Println("  hasher.go case hashNode")
+					// fmt.Println("    short node hash:", myHash.Hex(), " / child fullNode hash:", childHash.Hex())
 				case *fullNode:
 					childHashNode, _ := v.cache()
 					childHash := common.BytesToHash(childHashNode)
-					// fmt.Println("short node hash:", myHash.Hex(), " / child fullNode hash:", childHash.Hex())
 					nodeInfo.ChildHashes = append(nodeInfo.ChildHashes, childHash)
+					// fmt.Println("  hasher.go case *fullNode")
+					// fmt.Println("    short node hash:", myHash.Hex(), " / child fullNode hash:", childHash.Hex())
+				case valueNode:
+					// this short node is leaf node, so do not have child node
+				case *shortNode:
+					// short node's child cannot be short node
 				default:
-					// child node might be valueNode (i.e., no child)
-					// and also, child node cannot be hashNode when this function is executed
-					// fmt.Println("short node hash:", myHash.Hex(), " / no child hash")
+					fmt.Println("  hasher.go case default")
+					fmt.Println("this should not happen")
+					os.Exit(1)
 				}
 
 				common.TrieNodeInfosDirty[myHash] = nodeInfo
 			} else {
 				// error: this cannot be happen
-				fmt.Println("can this happen?")
+				fmt.Println("can this happen? short node")
 				os.Exit(1)
 			}
-			common.ChildHashesMutex.Unlock()			
+			common.ChildHashesMutex.Unlock()
 		} else {
 			cached.flags.hash = nil
 		}
@@ -149,10 +170,10 @@ func (h *hasher) hash(n node, force bool) (hashed node, cached node) {
 						childHashNode, _ := child.cache()
 						var childHash common.Hash
 						if childHashNode == nil {
-							// child is hashNode
+							// child is hashNode (full node's child cannot be value node in Ethereum)
 							childHash = common.BytesToHash([]byte(child.(hashNode)))
 						} else {
-							// child is not hashNode
+							// child is full node or short node
 							childHash = common.BytesToHash(childHashNode)
 						}
 						// fmt.Println("full node hash:", myHash.Hex(), " / child hash:", childHash.Hex())
@@ -160,11 +181,11 @@ func (h *hasher) hash(n node, force bool) (hashed node, cached node) {
 						nodeInfo.Indices = append(nodeInfo.Indices, Indices[i])
 					}
 				}
-				
+
 				common.TrieNodeInfosDirty[myHash] = nodeInfo
 			} else {
 				// error: this cannot be happen
-				fmt.Println("can this happen?")
+				fmt.Println("can this happen? full node")
 				os.Exit(1)
 			}
 			common.ChildHashesMutex.Unlock()
