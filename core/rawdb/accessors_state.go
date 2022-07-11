@@ -103,28 +103,43 @@ func WriteTrieNode(db ethdb.KeyValueWriter, hash common.Hash, node []byte) {
 	// measuring db stat: # of trie nodes & db size for trie nodes (jmlee)
 	// fmt.Println("WriteTrieNode() -> node hash:", hash.Hex())
 	if _, exist := common.TrieNodeInfos[hash]; !exist {
-		// this new node will be flushed
-		if _, exist := common.TrieNodeInfosDirty[hash]; !exist {
+		// this new dirty node will be flushed
+		nodeInfoDirty, existDirty := common.TrieNodeInfosDirty[hash]
+		if !existDirty {
 			fmt.Println("error !!! this should not happen")
 			os.Exit(1)
 		}
 
-		nodeSize := 32 + len(node) // size: 32 bytes hash + rlped node
+		nodeSize := uint64(nodeInfoDirty.Size) // size: 32 bytes hash + rlped node
 
 		// update total db stat
-		common.TotalTrieNodesNum++
-		common.TotalTrieNodesSize += uint64(nodeSize)
+		if nodeInfoDirty.IsLeafNode {
+			common.NewNodeStat.LeafNodesNum++
+			common.NewNodeStat.LeafNodesSize += nodeSize
+
+			common.TotalNodeStat.LeafNodesNum++
+			common.TotalNodeStat.LeafNodesSize += nodeSize
+		} else if nodeInfoDirty.IsShortNode {
+			common.NewNodeStat.ShortNodesNum++
+			common.NewNodeStat.ShortNodesSize += nodeSize
+
+			common.TotalNodeStat.ShortNodesNum++
+			common.TotalNodeStat.ShortNodesSize += nodeSize
+		} else {
+			common.NewNodeStat.FullNodesNum++
+			common.NewNodeStat.FullNodesSize += nodeSize
+
+			common.TotalNodeStat.FullNodesNum++
+			common.TotalNodeStat.FullNodesSize += nodeSize
+		}
 
 		// update current block's stat
-		common.NewTrieNodesNum++
-		common.NewTrieNodesSize += uint64(nodeSize)
 		blockInfo, _ := common.Blocks[common.CurrentBlockNum]
 		blockInfo.FlushedNodeHashes = append(blockInfo.FlushedNodeHashes, hash)
 		common.Blocks[common.CurrentBlockNum] = blockInfo
 
 		// confirm dirty node
-		nodeInfoDirty := common.TrieNodeInfosDirty[hash]
-		if nodeInfoDirty.Size != uint(nodeSize) {
+		if nodeInfoDirty.Size != uint(32+len(node)) {
 			fmt.Println("error! different size, this should not happen")
 			fmt.Println(nodeInfoDirty.Size, uint(nodeSize))
 			os.Exit(1)

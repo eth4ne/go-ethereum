@@ -54,15 +54,11 @@ var (
 	// infos for dirty trie nodes, that will be flushed or discarded
 	TrieNodeInfosDirty = make(map[Hash]NodeInfo)
 
-	// # of trie nodes in db
-	TotalTrieNodesNum = uint64(0)
-	// db size (bytes)
-	TotalTrieNodesSize = uint64(0)
+	// stats for all trie nodes in db (archive data)
+	TotalNodeStat NodeStat
 
-	// # of new nodes for latest flush
-	NewTrieNodesNum = uint64(0)
-	// increased db size for latest flush (bytes)
-	NewTrieNodesSize = uint64(0)
+	// stats for newly flushed trie nodes in latest block
+	NewNodeStat NodeStat
 
 	// mutex to avoid fatal error: "concurrent map read and map write"
 	ChildHashesMutex = sync.RWMutex{}
@@ -77,19 +73,37 @@ var (
 
 // NodeInfo stores trie node related information
 type NodeInfo struct {
-	Size        uint   // size of node (i.e., len of rlp-encoded node)
+	Size uint // size of node (i.e., len of rlp-encoded node)
+
 	ChildHashes []Hash // hashes of child nodes
 	IsShortNode bool   // type of node (short node vs full node)
+	IsLeafNode  bool
+	Indices     []string // full node's indices for child nodes
+	Key         string   // short node's key
 
-	Prefix          string   // root node has no prefix (causion: same nodes can have different Prefixes, in single state trie, with little probability)
-	Indices         []string // full node's indices for child nodes
-	Key             string   // short node's key
-	Depth           uint     // depth of this node in state trie (root node: 0 depth)
-	LeafNodesNum    uint     // # of leaf nodes under this node
-	SubTrieNodesNum uint64   // # of trie nodes of this node's sub tries (to efficiently measure the size of trie, dynamic programming)
-	SubTrieSize     uint64   // size of this node's sub tries (to efficiently measure the size of trie, dynamic programming)
+	Prefix string // root node has no prefix (causion: same nodes can have different Prefixes, in single state trie, with little probability)
+
+	// stats for sub trie (whose root is this node)
+	// so total nodes num of this sub trie is always >= 1
+	// to efficiently measure trie node num, dynamic programming
+	SubTrieNodeStat NodeStat //
+
+	Depth uint // depth of this node in state trie (root node: 0 depth)
 
 	// ParentShortNodeNum uint   // how many parent short nodes above this node
+}
+
+// NodeStat stores 3 types of nodes' num & size
+type NodeStat struct {
+	// total nodes num = FullNodesNum + ShortNodesNum + LeafNodesNum
+	FullNodesNum  uint64
+	ShortNodesNum uint64 // short node which is not leaf node
+	LeafNodesNum  uint64 // short node which is leaf node
+
+	// total nodes size = FullNodesSize + ShortNodesSize + LeafNodesSize
+	FullNodesSize  uint64
+	ShortNodesSize uint64 // short node which is not leaf node
+	LeafNodesSize  uint64 // short node which is leaf node
 }
 
 // BlockInfo stores block related information
@@ -101,6 +115,59 @@ type BlockInfo struct {
 
 // Hash represents the 32 byte Keccak256 hash of arbitrary data.
 type Hash [HashLength]byte
+
+// Reset sets all NodeStat fields to 0
+func (ns *NodeStat) Reset() {
+	ns.FullNodesNum = 0
+	ns.ShortNodesNum = 0
+	ns.LeafNodesNum = 0
+
+	ns.FullNodesSize = 0
+	ns.ShortNodesSize = 0
+	ns.LeafNodesSize = 0
+}
+
+// GetSum returns sum of num & size
+func (ns NodeStat) GetSum() (uint64, uint64) {
+	return ns.FullNodesNum + ns.ShortNodesNum + ns.LeafNodesNum,
+		ns.FullNodesSize + ns.ShortNodesSize + ns.LeafNodesSize
+}
+
+// Print shows all nums & sizes
+func (ns NodeStat) Print() {
+	totalNum, totalSize := ns.GetSum()
+	fmt.Println("  total node num:\t", totalNum)
+	fmt.Println("    full node num:\t", ns.FullNodesNum)
+	fmt.Println("    short node num:\t", ns.ShortNodesNum)
+	fmt.Println("    leaf node num:\t", ns.LeafNodesNum)
+
+	fmt.Println("  total node size:\t", totalSize)
+	fmt.Println("    full node size:\t", ns.FullNodesSize)
+	fmt.Println("    short node size:\t", ns.ShortNodesSize)
+	fmt.Println("    leaf node size:\t", ns.LeafNodesSize)
+}
+
+// ToString collects values and converts them to string
+func (ns NodeStat) ToString(delimiter string) string {
+
+	totalNum, totalSize := ns.GetSum()
+	values := make([]uint64, 8)
+	values[0] = totalNum
+	values[1] = totalSize
+	values[2] = ns.FullNodesNum
+	values[3] = ns.FullNodesSize
+	values[4] = ns.ShortNodesNum
+	values[5] = ns.ShortNodesSize
+	values[6] = ns.LeafNodesNum
+	values[7] = ns.LeafNodesSize
+
+	str := ""
+	for _, value := range values {
+		str += strconv.FormatUint(value, 10)
+		str += delimiter
+	}
+	return str
+}
 
 // BytesToHash sets b to hash.
 // If b is larger than len(h), b will be cropped from the left.
