@@ -297,6 +297,16 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		//}, nil
 	} else if st.msg.From() == common.UncleAddress {
 		log.Info("[state_transition.go/TransitionDb] Processing uncle transaction", "to", st.msg.To(), "height", st.msg.Value())
+	} else if st.msg.From() == common.TimestampAddress {
+		log.Info("[state_transition.go/TransitionDb] Processing timestamp transaction", "value", st.msg.Value())
+	} else if st.msg.From() == common.BaseFeeAddress {
+		log.Info("[state_transition.go/TransitionDb] Processing basefee transaction", "value", st.msg.Value())
+	} else if st.msg.From() == common.DifficultyAddress {
+		log.Info("[state_transition.go/TransitionDb] Processing difficulty transaction", "value", st.msg.Value())
+	} else if st.msg.From() == common.NonceAddress {
+		log.Info("[state_transition.go/TransitionDb] Processing nonce transaction", "value", st.msg.Value())
+	} else if st.msg.From() == common.TxPriorityAddress {
+		log.Info("[state_transition.go/TransitionDb] Processing txpriority transaction", "value", st.msg.Value())
 	} else {
 		if err := st.preCheck(); err != nil {
 			return nil, err
