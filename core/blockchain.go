@@ -1423,6 +1423,9 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		// }
 	}
 
+	// fmt.Println("\n\n>>> InactiveBoundaryKey: ", common.InactiveBoundaryKey)
+	// fmt.Println("len(AddrToKey_inactive['0xA1E4380A3B1f749673E270229993eE55F35663b4']):", len(common.AddrToKey_inactive[common.HexToAddress("0xA1E4380A3B1f749673E270229993eE55F35663b4")]), "\n\n")
+
 	// // set common.DoDeleteLeafNode (jmlee)
 	// if (block.Header().Number.Int64()+1) % common.DeleteLeafNodeEpoch == 0 {
 	// 	common.DoDeleteLeafNode = true
@@ -1443,7 +1446,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	// }
 
 	// common.IsFirst = true
-	common.IsSecond = true // false // true when joonha_simulation, maybe false when simulation
+	common.IsSecond = false // set false (2207061736) (joonha)
 
 	// /*********************************/
 	// // PRINTINNG COMPACTTRIE
