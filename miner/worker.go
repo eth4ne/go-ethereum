@@ -869,6 +869,7 @@ func (w *worker) updateSnapshot(env *environment) {
 func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*types.Log, error) {
 	snap := env.state.Snapshot()
 
+	log.Trace("[worker.go/commitTransaction] Applying transaction", "to", tx.To())
 	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &w.blockMiner, env.gasPool, env.state, env.header, tx, &env.header.GasUsed, *w.chain.GetVMConfig())
 	if err != nil {
 		log.Info("[worker.go/commitTransaction] ApplyTransaction error", "to", tx.To())
@@ -1175,6 +1176,7 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 	}
 	if len(localTxs) > 0 {
 		// fmt.Println("commit local transactions") // call IntermediateRoot() after applying a transaction // (jmlee)
+		log.Trace("[worker.go/fillTransactions] fill local tx")
 		txs := types.NewTransactionsByPriceAndNonce(env.signer, localTxs, env.header.BaseFee)
 		if w.commitTransactions(env, txs, interrupt) {
 			return
@@ -1182,6 +1184,7 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 	}
 	if len(remoteTxs) > 0 {
 		// fmt.Println("commit remote transactions") // call IntermediateRoot() after applying a transaction // (jmlee)
+		log.Trace("[worker.go/fillTransactions] fill remote tx")
 		txs := types.NewTransactionsByPriceAndNonce(env.signer, remoteTxs, env.header.BaseFee)
 		if w.commitTransactions(env, txs, interrupt) {
 			return

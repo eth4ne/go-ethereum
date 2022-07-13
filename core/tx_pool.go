@@ -386,12 +386,14 @@ func (pool *TxPool) loop() {
 			for addr := range pool.queue {
 				// Skip local transactions from the eviction mechanism
 				if pool.locals.contains(addr) {
+					log.Trace("[tx_pool.go/loop] skipping addr", "addr", addr)
 					continue
 				}
 				// Any non-locals old enough should be removed
 				if time.Since(pool.beats[addr]) > pool.config.Lifetime {
 					list := pool.queue[addr].Flatten()
 					for _, tx := range list {
+						log.Trace("[tx_pool.go/loop] remove Tx", "to", tx.To())
 						pool.removeTx(tx.Hash(), true)
 					}
 					queuedEvictionMeter.Mark(int64(len(list)))
@@ -454,6 +456,7 @@ func (pool *TxPool) SetGasPrice(price *big.Int) {
 		// pool.priced is sorted by GasFeeCap, so we have to iterate through pool.all instead
 		drop := pool.all.RemotesBelowTip(price)
 		for _, tx := range drop {
+			log.Trace("[tx_pool.go/SetGasPrice] Remove underpriced tx", "to", tx.To())
 			pool.removeTx(tx.Hash(), false)
 		}
 		pool.priced.Removed(len(drop))
@@ -689,6 +692,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 		// replacements to 25% of the slots
 		if pool.changesSinceReorg > int(pool.config.GlobalSlots/4) {
 			throttleTxMeter.Mark(1)
+			log.Trace("[tx_pool.go/add] Tx pool overflow")
 			return false, ErrTxPoolOverflow
 		}
 
@@ -731,6 +735,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 		}
 		// New transaction is better, replace old one
 		if old != nil {
+			log.Trace("[tx_pool.go/add] replacing old tx")
 			pool.all.Remove(old.Hash())
 			pool.priced.Removed(1)
 			pendingReplaceMeter.Mark(1)
@@ -777,11 +782,13 @@ func (pool *TxPool) enqueueTx(hash common.Hash, tx *types.Transaction, local boo
 	inserted, old := pool.queue[from].Add(tx, pool.config.PriceBump)
 	if !inserted {
 		// An older transaction was better, discard this
+		log.Trace("[tx_pool.go/enqueueTx] Discard newer Tx")
 		queuedDiscardMeter.Mark(1)
 		return false, ErrReplaceUnderpriced
 	}
 	// Discard any previous transaction and mark this
 	if old != nil {
+		log.Trace("[tx_pool.go/enqueueTx] Discarding previous tx")
 		pool.all.Remove(old.Hash())
 		pool.priced.Removed(1)
 		queuedReplaceMeter.Mark(1)
@@ -810,6 +817,7 @@ func (pool *TxPool) enqueueTx(hash common.Hash, tx *types.Transaction, local boo
 func (pool *TxPool) journalTx(from common.Address, tx *types.Transaction) {
 	// Only journal if it's enabled and the transaction is local
 	if pool.journal == nil || !pool.locals.contains(from) {
+		log.Trace("[tx_pool.go/journalTx] skipping non-local addr")
 		return
 	}
 	if err := pool.journal.insert(tx); err != nil {
@@ -960,7 +968,10 @@ func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool) ([]error,
 		replaced, err := pool.add(tx, local)
 		errs[i] = err
 		if err == nil && !replaced {
+			log.Trace("[tx_pool.go/addTxsLocked] add Tx: success")
 			dirty.addTx(tx)
+		} else {
+			log.Trace("[tx_pool.go/addTxsLocked] add Tx: error")
 		}
 	}
 	validTxMeter.Mark(int64(len(dirty.accounts)))
