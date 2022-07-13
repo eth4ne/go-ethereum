@@ -322,19 +322,18 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	london := st.evm.ChainConfig().IsLondon(st.evm.Context.BlockNumber)
 	contractCreation := msg.To() == nil
 
-	// Check clauses 4-5, subtract intrinsic gas if everything is correct
-	gas, err := IntrinsicGas(st.data, st.msg.AccessList(), contractCreation, homestead, istanbul)
+	// if restore tx or reward tx, do not levy gas (joonha)
+	gas, err := uint64(0), error(nil)
+	if *st.msg.To() == common.HexToAddress("0x0123456789012345678901234567890123456789") {
+	} else if st.msg.From() == common.RewardAddress || st.msg.From() == common.UncleAddress || st.msg.From() == common.TimestampAddress || st.msg.From() == common.BaseFeeAddress || st.msg.From() == common.DifficultyAddress || st.msg.From() == common.NonceAddress || st.msg.From() == common.TxPriorityAddress {
+	} else {
+		// Check clauses 4-5, subtract intrinsic gas if everything is correct
+		gas, err = IntrinsicGas(st.data, st.msg.AccessList(), contractCreation, homestead, istanbul)
+	}
+
 	if err != nil {
 		log.Info("[state_transition.go/TransitionDb] ErrIntrinsicGas")
 		return nil, err
-	}
-	// if restore tx or reward tx, do not levy gas (joonha)
-	if *st.msg.To() == common.HexToAddress("0x0123456789012345678901234567890123456789") {
-		gas = 0
-	} else if st.msg.From() == common.HexToAddress("0x36eCA1fe87f68B49319dB55eBB502e68c4981716") {
-		gas = 0
-	} else if st.msg.From() == common.HexToAddress("0xb3711B7e50Fe9Ff914ec0F08C6b8330a41E93C10") {
-		gas = 0
 	}
 
 	var (
