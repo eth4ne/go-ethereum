@@ -22,7 +22,7 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
-	// cmath "github.com/ethereum/go-ethereum/common/math"
+	cmath "github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -377,12 +377,11 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 
 	}
 
-	// effectiveTip := st.gasPrice
-	// if london {
-	// 	effectiveTip = cmath.BigMin(st.gasTipCap, new(big.Int).Sub(st.gasFeeCap, st.evm.Context.BaseFee))
-	// }
-	// st.state.AddBalance(st.evm.Context.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), effectiveTip))
-	// ---> comment out by joonha
+	effectiveTip := st.gasPrice
+	if london {
+		effectiveTip = cmath.BigMin(st.gasTipCap, new(big.Int).Sub(st.gasFeeCap, st.evm.Context.BaseFee))
+	}
+	st.state.AddBalance(st.evm.Context.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), effectiveTip))
 	// fmt.Println("\n\n>>>>> ", new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), effectiveTip))
 	//st.evm.Context.CumulativeReward = new(big.Int).Add(st.evm.Context.CumulativeReward, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), effectiveTip))
 

@@ -661,10 +661,10 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 		r.Sub(r, header.Number)
 		r.Mul(r, blockReward)
 		r.Div(r, big8)
-		// state.AddBalance(uncle.Coinbase, r) // --> commented-out by (joonha) to enable original rewarding logic
+		state.AddBalance(uncle.Coinbase, r) // --> commented-out by (joonha) to enable original rewarding logic
 
 		r.Div(blockReward, big32)
 		reward.Add(reward, r)
 	}
-	// state.AddBalance(header.Coinbase, reward) // --> commented-out by (joonha) to enable original rewarding logic
+	state.AddBalance(header.Coinbase, reward) // --> commented-out by (joonha) to enable original rewarding logic
 }
