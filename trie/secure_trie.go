@@ -92,8 +92,8 @@ func (t *SecureTrie) TryGet_SetKey(key []byte) ([]byte, error) {
 }
 
 // DFS the range (from inactiveBoundaryKey to lastKeyToCheck) and return the found accounts (joonha)
-func (t *SecureTrie) TryGetAll_SetKey(firstKey, lastKey []byte) ([][]byte, []common.Hash, error) {
-	return t.trie.TryGetAll(firstKey, lastKey)
+func (t *SecureTrie) GetAllLeafNodes(firstKey, lastKey []byte) ([][]byte, []common.Hash, error) {
+	return t.trie.GetAllLeafNodes(firstKey, lastKey)
 }
 
 // TryGetAllSlots return all the found slots while traversing storage trie (joonha)
