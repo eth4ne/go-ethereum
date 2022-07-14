@@ -198,6 +198,10 @@ func (t *Trie) getAllLeafNodes(currNode node, parentKey, firstKey, lastKey []byt
 	// [n] encountered node
 	/****************************************************************************/
 
+	// TODO (joonha): https://www.geeksforgeeks.org/how-to-compare-two-slices-of-bytes-in-golang/
+	// refer above site and try to use bytes.Compare() function.
+	// it surely will increase the code readability
+
 	switch n := (currNode).(type) {
 	case nil:
 		// fmt.Println("NODE IS NIL\n\n")
