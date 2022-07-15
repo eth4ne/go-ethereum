@@ -323,11 +323,16 @@ def makeRestoreTx(web3, currentBlock, address, gasprice=1000000000):
     rmode = ['03', restore_amount]
   
   for targetBlock in targetBlocks:
-    proof = web3.eth.getProof(
-      Web3.toChecksumAddress(address),
-      rmode, # specify the restore option here (joonha)
-      block_identifier=targetBlock
-    )      
+    try:
+      proof = web3.eth.getProof(
+        Web3.toChecksumAddress(address),
+        rmode, # specify the restore option here (joonha)
+        block_identifier=targetBlock
+      )
+    except: # do not stop even if there is no account to restore (joonha)
+      # print("nil proof")
+      return
+
     proofs.append(proof)
 
   if len(proofs) != len(targetBlocks):
