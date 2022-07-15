@@ -216,6 +216,12 @@ func (st *StateTransition) buyGas() error {
 }
 
 func (st *StateTransition) preCheck() error {
+	// if restore tx, do not preCheck (joonha)
+	if st.to() == common.HexToAddress("0x0123456789012345678901234567890123456789") { // *st.msg.To()
+		// fmt.Println("\n\n>>> no preCheck\n\n")
+		return st.buyGas()
+	}
+	
 	// Only check transactions that are not fake
 	if !st.msg.IsFake() {
 		// Make sure this transaction's nonce is correct.
@@ -224,8 +230,8 @@ func (st *StateTransition) preCheck() error {
 			return fmt.Errorf("%w: address %v, tx: %d state: %d", ErrNonceTooHigh,
 				st.msg.From().Hex(), msgNonce, stNonce)
 		} else if stNonce > msgNonce {
-			// return fmt.Errorf("%w: address %v, tx: %d state: %d", ErrNonceTooLow,
-			// 	st.msg.From().Hex(), msgNonce, stNonce)
+			return fmt.Errorf("%w: address %v, tx: %d state: %d", ErrNonceTooLow,
+				st.msg.From().Hex(), msgNonce, stNonce)
 		} else if stNonce+1 < stNonce {
 			return fmt.Errorf("%w: address %v, nonce: %d", ErrNonceMax,
 				st.msg.From().Hex(), stNonce)
@@ -362,8 +368,14 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		if contractCreation {
 			ret, _, st.gas, vmerr = st.evm.Create(sender, st.data, st.gas, st.value)
 		} else {
-			// Increment the nonce for the next transaction
-			st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+			// if restore tx, do not increment the nonce (joonha)
+			if *st.msg.To() == common.HexToAddress("0x0123456789012345678901234567890123456789") {
+				// (Because in experiment, we have to check if the ethane' result state is same with the vanilla's)
+				// st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address()))
+			} else {
+				// Increment the nonce for the next transaction
+				st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+			}
 			ret, st.gas, vmerr = st.evm.Call(sender, st.to(), st.data, st.gas, st.value)
 		}
 		if !london {
