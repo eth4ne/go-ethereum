@@ -200,7 +200,7 @@ func (st *StateTransition) buyGas() error {
 		balanceCheck.Add(balanceCheck, st.value)
 	}
 	// if restore tx, do whatever the from's balance is (joonha)
-	if *st.msg.To() == common.HexToAddress("0x0123456789012345678901234567890123456789") {
+	if st.msg.To() != nil && *st.msg.To() == common.HexToAddress("0x0123456789012345678901234567890123456789") {
 		// do not check the balance
 	} else if have, want := st.state.GetBalance(st.msg.From()), balanceCheck; have.Cmp(want) < 0 {
 		return fmt.Errorf("%w: address %v have %v want %v", ErrInsufficientFunds, st.msg.From().Hex(), have, want)
@@ -216,11 +216,11 @@ func (st *StateTransition) buyGas() error {
 }
 
 func (st *StateTransition) preCheck() error {
-	// if restore tx, do not preCheck (joonha)
-	if st.to() == common.HexToAddress("0x0123456789012345678901234567890123456789") { // *st.msg.To()
-		// fmt.Println("\n\n>>> no preCheck\n\n")
-		return st.buyGas()
-	}
+	// // if restore tx, do not preCheck (joonha)
+	// if st.to() == common.HexToAddress("0x0123456789012345678901234567890123456789") { // *st.msg.To()
+	// 	// fmt.Println("\n\n>>> no preCheck\n\n")
+	// 	return st.buyGas()
+	// }
 	
 	// Only check transactions that are not fake
 	if !st.msg.IsFake() {
@@ -229,9 +229,9 @@ func (st *StateTransition) preCheck() error {
 		if msgNonce := st.msg.Nonce(); stNonce < msgNonce {
 			return fmt.Errorf("%w: address %v, tx: %d state: %d", ErrNonceTooHigh,
 				st.msg.From().Hex(), msgNonce, stNonce)
-		} else if stNonce > msgNonce {
-			return fmt.Errorf("%w: address %v, tx: %d state: %d", ErrNonceTooLow,
-				st.msg.From().Hex(), msgNonce, stNonce)
+		} else if stNonce > msgNonce { // temporarilty commented-out by joonha to implement restore tx
+			// return fmt.Errorf("%w: address %v, tx: %d state: %d", ErrNonceTooLow,
+			// 	st.msg.From().Hex(), msgNonce, stNonce)
 		} else if stNonce+1 < stNonce {
 			return fmt.Errorf("%w: address %v, nonce: %d", ErrNonceMax,
 				st.msg.From().Hex(), stNonce)
@@ -330,7 +330,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 
 	// if restore tx or reward tx, do not levy gas (joonha)
 	gas, err := uint64(0), error(nil)
-	if *st.msg.To() == common.HexToAddress("0x0123456789012345678901234567890123456789") {
+	if st.msg.To() != nil && *st.msg.To() == common.HexToAddress("0x0123456789012345678901234567890123456789") {
 	} else if st.msg.From() == common.RewardAddress || st.msg.From() == common.UncleAddress || st.msg.From() == common.TimestampAddress || st.msg.From() == common.BaseFeeAddress || st.msg.From() == common.DifficultyAddress || st.msg.From() == common.NonceAddress || st.msg.From() == common.TxPriorityAddress {
 	} else {
 		// Check clauses 4-5, subtract intrinsic gas if everything is correct
@@ -368,14 +368,18 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		if contractCreation {
 			ret, _, st.gas, vmerr = st.evm.Create(sender, st.data, st.gas, st.value)
 		} else {
-			// if restore tx, do not increment the nonce (joonha)
-			if *st.msg.To() == common.HexToAddress("0x0123456789012345678901234567890123456789") {
-				// (Because in experiment, we have to check if the ethane' result state is same with the vanilla's)
-				// st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address()))
-			} else {
-				// Increment the nonce for the next transaction
-				st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-			}
+
+			// // if restore tx, do not increment the nonce (joonha) --> commented-out because this occurs unexplained err (joonha)
+			// if *st.msg.To() == common.HexToAddress("0x0123456789012345678901234567890123456789") {
+			// 	// (Because in experiment, we have to check if the ethane' result state is same with the vanilla's)
+			// 	// st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address()))
+			// } else {
+			// 	// Increment the nonce for the next transaction
+			// 	st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+			// }
+			
+			// Increment the nonce for the next transaction --> original code
+			st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 			ret, st.gas, vmerr = st.evm.Call(sender, st.to(), st.data, st.gas, st.value)
 		}
 		if !london {
