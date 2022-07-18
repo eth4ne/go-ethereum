@@ -138,12 +138,27 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	receipt.BlockNumber = blockNumber
 	receipt.TransactionIndex = uint(statedb.TxIndex())
 
-	if msg.From() == common.RewardAddress {
+	if *msg.To() == common.RewardAddress {
 		log.Info("[state_processor.go/applyTransaction] Processing a reward transaction", "to", msg.To())
 		receipt.TransactionIndex = uint(1048576)
-	} else if msg.From() == common.UncleAddress {
+	} else if *msg.To() == common.UncleAddress {
 		log.Info("[state_processor.go/applyTransaction] Processing an uncle transaction", "to", msg.To())
 		receipt.TransactionIndex = uint(1048577)
+	} else if *msg.To() == common.TimestampAddress {
+		log.Info("[state_processor.go/applyTransaction] Processing a timestamp transaction", "value", msg.Value())
+		receipt.TransactionIndex = uint(1048578)
+	} else if *msg.To() == common.BaseFeeAddress {
+		log.Info("[state_processor.go/applyTransaction] Processing a basefee transaction", "value", msg.Value())
+		receipt.TransactionIndex = uint(1048579)
+	} else if *msg.To() == common.DifficultyAddress {
+		log.Info("[state_processor.go/applyTransaction] Processing a difficulty transaction", "value", msg.Value())
+		receipt.TransactionIndex = uint(1048580)
+	} else if *msg.To() == common.NonceAddress {
+		log.Info("[state_processor.go/applyTransaction] Processing a nonce transaction", "value", msg.Data())
+		receipt.TransactionIndex = uint(1048581)
+	} else if *msg.To() == common.TxPriorityAddress {
+		log.Info("[state_processor.go/applyTransaction] Processing a tx priority transaction", "value", msg.Value())
+		receipt.TransactionIndex = uint(1048582)
 	}
 	return receipt, err
 }

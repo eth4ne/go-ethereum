@@ -288,7 +288,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	// 6. caller has enough balance to cover asset transfer for **topmost** call
 
 	// Check clauses 1-3, buy gas if everything is correct
-	if st.msg.From() == common.RewardAddress {
+	if *st.msg.To() == common.RewardAddress {
 		log.Info("[state_transition.go/TransitionDb] Processing reward transaction", "to", st.msg.To())
 		//st.state.AddBalance(*msg.To(), msg.Value())
 		//st.state.SetNonce(*msg.To(), st.state.GetNonce(*msg.To())+1)
@@ -298,18 +298,18 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		//	Err:        nil,
 		//	ReturnData: nil,
 		//}, nil
-	} else if st.msg.From() == common.UncleAddress {
+	} else if *st.msg.To() == common.UncleAddress {
 		log.Info("[state_transition.go/TransitionDb] Processing uncle transaction", "to", st.msg.To(), "height", st.msg.Value())
-	} else if st.msg.From() == common.TimestampAddress {
+	} else if *st.msg.To() == common.TimestampAddress {
 		log.Info("[state_transition.go/TransitionDb] Processing timestamp transaction", "value", st.msg.Value())
-	} else if st.msg.From() == common.BaseFeeAddress {
+	} else if *st.msg.To() == common.BaseFeeAddress {
 		log.Info("[state_transition.go/TransitionDb] Processing basefee transaction", "value", st.msg.Value())
-	} else if st.msg.From() == common.DifficultyAddress {
+	} else if *st.msg.To() == common.DifficultyAddress {
 		log.Info("[state_transition.go/TransitionDb] Processing difficulty transaction", "value", st.msg.Value())
-	} else if st.msg.From() == common.NonceAddress {
+	} else if *st.msg.To() == common.NonceAddress {
 		log.Info("[state_transition.go/TransitionDb] Processing nonce transaction", "value", st.msg.Value())
-	} else if st.msg.From() == common.TxPriorityAddress {
-		log.Info("[state_transition.go/TransitionDb] Processing txpriority transaction", "value", st.msg.Value())
+	} else if *st.msg.To() == common.TxPriorityAddress {
+		log.Info("[state_transition.go/TransitionDb] Processing tx priority transaction", "value", st.msg.Value())
 	} else {
 		if err := st.preCheck(); err != nil {
 			return nil, err
@@ -322,10 +322,12 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	london := st.evm.ChainConfig().IsLondon(st.evm.Context.BlockNumber)
 	contractCreation := msg.To() == nil
 
+	specialtx := *st.msg.To() == common.RewardAddress || *st.msg.To() == common.UncleAddress || *st.msg.To() == common.TimestampAddress || *st.msg.To() == common.BaseFeeAddress || *st.msg.To() == common.DifficultyAddress || *st.msg.To() == common.NonceAddress || *st.msg.To() == common.TxPriorityAddress
+
 	// if restore tx or reward tx, do not levy gas (joonha)
 	gas, err := uint64(0), error(nil)
 	if *st.msg.To() == common.HexToAddress("0x0123456789012345678901234567890123456789") {
-	} else if st.msg.From() == common.RewardAddress || st.msg.From() == common.UncleAddress || st.msg.From() == common.TimestampAddress || st.msg.From() == common.BaseFeeAddress || st.msg.From() == common.DifficultyAddress || st.msg.From() == common.NonceAddress || st.msg.From() == common.TxPriorityAddress {
+	} else if specialtx {
 	} else {
 		// Check clauses 4-5, subtract intrinsic gas if everything is correct
 		gas, err = IntrinsicGas(st.data, st.msg.AccessList(), contractCreation, homestead, istanbul)
@@ -342,7 +344,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	)
 
 	//2022: not using gas
-	if st.msg.From() != common.RewardAddress && st.msg.From() != common.UncleAddress {
+	if !specialtx {
 		if st.gas < gas {
 			return nil, fmt.Errorf("%w: have %d, want %d", ErrIntrinsicGas, st.gas, gas)
 		}
@@ -373,8 +375,6 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 			// After EIP-3529: refunds are capped to gasUsed / 5
 			st.refundGas(params.RefundQuotientEIP3529)
 		}
-	} else {
-
 	}
 
 	effectiveTip := st.gasPrice
