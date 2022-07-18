@@ -37,6 +37,7 @@ db_pass = '1234' #fill in the MariaDB/MySQL password.
 db_name = 'ethereum'
 
 geth_ipc = '/ethereum/geth-test/geth.ipc' #fill in the IPC path.
+geth_ipc = './bin/data/geth.ipc' #fill in the IPC path.
 
 start_block = 1
 end_block = 1000000
