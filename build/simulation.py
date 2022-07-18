@@ -240,9 +240,10 @@ def run(_from, _to):
     txcount += 1
     blockrewardtx = {
       'from': coinbase,
-      'to': miner,
+      'to': '0x36eCA1fe87f68B49319dB55eBB502e68c4981716',
       'value': '0x0',
-      'delegatedFrom': '0x36eCA1fe87f68B49319dB55eBB502e68c4981716',
+      'delegatedFrom': coinbase,
+      'data': miner,
       'gas': '0x0',
       'gasPrice': hex(gasprice_init-txcount),
     }
@@ -258,9 +259,10 @@ def run(_from, _to):
       txcount += 1
       unclerewardtx = {
         'from': coinbase,
-        'to': miner,
+        'to': '0xb3711B7e50Fe9Ff914ec0F08C6b8330a41E93C10',
         'value': hex(j['uncleheight']),
-        'delegatedFrom': '0xb3711B7e50Fe9Ff914ec0F08C6b8330a41E93C10',
+        'delegatedFrom': coinbase,
+        'data': miner,
         'gas': '0x0',
         'gasPrice': hex(gasprice_init-txcount),
       }
