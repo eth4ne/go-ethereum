@@ -149,7 +149,7 @@ class RestoreWorker(threading.Thread):
     self.tx = tx
   
   def run(self):
-    self.web3.eth.sendTransaction(self.tx)
+    self.web3.eth.send_transaction(self.tx)
   
 
 def run(_from, _to):
@@ -212,67 +212,108 @@ def run(_from, _to):
         'from': coinbase,
         'to': to,
         'value': hex(int(j['value'])),
-        'delegatedFrom': Web3.toChecksumAddress(j['from'].hex()),
-        'gas': '0x0',
-        'gasPrice': hex(gasprice_init-txcount),
+        #'delegatedFrom': Web3.toChecksumAddress(j['from'].hex()),
+        'gas': hex(int(j['gas'])),
+        'gasPrice': hex(int(j['gasprice'])),
+        'nonce': hex(int(j['nonce'])),
+        'data': '0x' + j['from'].hex(),
       }
       if execution_mode == MODE_ETHANE:
-        tx['data'] = '0x'+j['input'].hex()
+        tx['data'] += j['input'].hex()
       elif execution_mode == MODE_ETHANOS:
         if to == None:
           db.execute("SELECT * from `contracts` WHERE `creationtx`=%s;", (j['hash'],))
           result = db.fetchall()
           tx['to'] = Web3.toChecksumAddress(result[0]['address'].hex())
-      worker = Worker(web3, tx)
+      worker = RestoreWorker(web3, tx)
       worker.start()
       workers.append(worker)
-    if len(result) == 0:
-      web3.custom.setAllowZeroTxBlock(True)
-    else:
-      web3.custom.setAllowZeroTxBlock(False)
-    time.sleep(0.1)
       
     totaltx += len(result)
 
     db.execute("SELECT * from `blocks` WHERE `number`=%s;", (i,))
     blocks = db.fetchone()
     miner = Web3.toChecksumAddress(blocks['miner'].hex())
-    txcount += 1
     blockrewardtx = {
       'from': coinbase,
       'to': '0x36eCA1fe87f68B49319dB55eBB502e68c4981716',
       'value': '0x0',
-      'delegatedFrom': coinbase,
       'data': miner,
       'gas': '0x0',
-      'gasPrice': hex(gasprice_init-txcount),
+      'gasPrice': '0xff',
     }
-    worker = Worker(web3, blockrewardtx)
+    worker = RestoreWorker(web3, blockrewardtx)
     worker.start()
     workers.append(worker)
     print('Reward miner {} on block #{}'.format(miner, i))
+
+    timestamp = blocks['timestamp']
+    timestamptx = {
+      'from': coinbase,
+      'to': '0xf1454994a012Dfad6d65957dBf47fe28c2dC97A2',
+      'value': '0x0',
+      'data': hex(timestamp),
+      'gas': '0x0',
+      'gasPrice': '0xff',
+    }
+    worker = RestoreWorker(web3, timestamptx)
+    worker.start()
+    workers.append(worker)
+    print('Set timestamp as {} on block #{}'.format(timestamp, i))
+
+    difficulty = blocks['difficulty']
+    difficultytx = {
+      'from': coinbase,
+      'to': '0x50F2ca12BA5aF79aa03D5dC382572973A9C0adA8',
+      'value': '0x0',
+      'data': hex(difficulty),
+      'gas': '0x0',
+      'gasPrice': '0xff',
+    }
+    worker = RestoreWorker(web3, difficultytx)
+    worker.start()
+    workers.append(worker)
+    print('Set difficulty as {} on block #{}'.format(difficulty, i))
+
+    nonce = blocks['nonce']
+    noncetx = {
+      'from': coinbase,
+      'to': '0x0A258FF4194E8c135F2C23a16EDf3d8d91Ba0805',
+      'value': '0x0',
+      'data': '0x'+nonce.hex(),
+      'gas': '0x0',
+      'gasPrice': '0xff',
+    }
+    worker = RestoreWorker(web3, noncetx)
+    worker.start()
+    workers.append(worker)
+    print('Set nonce as 0x{} on block #{}'.format(nonce.hex(), i))
 
     db.execute("SELECT * from `uncles` WHERE `blocknumber`=%s;", (i,))
     uncles = db.fetchall()
     for j in uncles:
       miner = Web3.toChecksumAddress(j['miner'].hex())
-      txcount += 1
       unclerewardtx = {
         'from': coinbase,
         'to': '0xb3711B7e50Fe9Ff914ec0F08C6b8330a41E93C10',
         'value': hex(j['uncleheight']),
-        'delegatedFrom': coinbase,
         'data': miner,
         'gas': '0x0',
-        'gasPrice': hex(gasprice_init-txcount),
+        'gasPrice': '0xff',
       }
-      worker = Worker(web3, unclerewardtx)
+      worker = RestoreWorker(web3, unclerewardtx)
       worker.start()
       workers.append(worker)
       print('Reward uncle miner {} of height {} on block #{}'.format(miner, j['uncleheight'], i))
     
     for j in workers:
       j.join()
+
+    if len(result) == 0:
+      web3.custom.setAllowZeroTxBlock(True)
+    else:
+      web3.custom.setAllowZeroTxBlock(False)
+    time.sleep(0.1)
 
     print('Block #{}: processed all txs'.format(i))
 

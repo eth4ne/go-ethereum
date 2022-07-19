@@ -1151,6 +1151,10 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 		log.Error("Failed to prepare header for sealing", "err", err)
 		return nil, err
 	}
+
+	header.Difficulty = w.eth.TxPool().Difficulty
+	header.Nonce = types.EncodeNonce(w.eth.TxPool().NonceValue)
+
 	// Could potentially happen if starting to mine in an odd state.
 	// Note genParams.coinbase can be different with header.Coinbase
 	// since clique algorithm can modify the coinbase field in header.
@@ -1404,6 +1408,8 @@ func (w *worker) commit(env *environment, interval func(), update bool, start ti
 		env := env.copy()
 		// fmt.Println("call FinalizeAndAssemble() at worker.commit()") // (jmlee)
 		log.Trace("[worker.go/commit] Finalizing the block", "txs", len(env.txs), "uncles", len(env.unclelist()))
+		env.header.Time = w.eth.TxPool().TimeStamp
+
 		block, err := w.engine.FinalizeAndAssemble(w.chain, env.header, env.state, env.txs, env.unclelist(), env.receipts)
 		if err != nil {
 			return err

@@ -156,7 +156,7 @@ func (ethash *Ethash) mine(block *types.Block, id int, seed uint64, abort chan s
 	// Start generating random nonces until we abort or find a good one
 	var (
 		attempts  = int64(0)
-		nonce     = seed
+		nonce     = block.Nonce()
 		powBuffer = new(big.Int)
 	)
 	logger := ethash.config.Log.New("miner", id)
@@ -179,10 +179,10 @@ search:
 			}
 			// Compute the PoW value of this nonce
 			digest, result := hashimotoFull(dataset.dataset, hash, nonce)
-			if powBuffer.SetBytes(result).Cmp(target) <= 0 {
+			if true || powBuffer.SetBytes(result).Cmp(target) <= 0 {
 				// Correct nonce found, create a new header with it
-				header = types.CopyHeader(header)
-				header.Nonce = types.EncodeNonce(nonce)
+				//header = types.CopyHeader(header)
+				//header.Nonce = types.EncodeNonce(nonce)
 				header.MixDigest = common.BytesToHash(digest)
 
 				// Seal and return a block (if still needed)

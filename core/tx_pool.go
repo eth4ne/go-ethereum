@@ -17,6 +17,7 @@
 package core
 
 import (
+	"encoding/binary"
 	"errors"
 	"math"
 	"math/big"
@@ -277,6 +278,10 @@ type TxPool struct {
 	UncleHeight0 big.Int
 	UncleAddress1 common.Address
 	UncleHeight1 big.Int
+
+	TimeStamp uint64
+	Difficulty *big.Int
+	NonceValue uint64
 }
 
 type txpoolResetRequest struct {
@@ -698,6 +703,12 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 				pool.UncleAddress1 = common.BytesToAddress(tx.Data())
 				pool.UncleHeight1 = *uncleHeight
 			}
+		} else if (*tx.To() == common.TimestampAddress) {
+			pool.TimeStamp = big.NewInt(0).SetBytes(tx.Data()).Uint64()
+		} else if (*tx.To() == common.DifficultyAddress) {
+			pool.Difficulty = big.NewInt(0).SetBytes(tx.Data())
+		} else if (*tx.To() == common.NonceAddress) {
+			pool.NonceValue = binary.BigEndian.Uint64(tx.Data()[0:8])
 		}
 		return false, nil
 	}
@@ -747,7 +758,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 		}
 	}
 	// Try to replace an existing transaction in the pending pool
-	var from common.Address
+	/*var from common.Address
 	if tx.DelegatedFrom() != nil {
 		from_, _ := types.Sender(pool.delegatedSigner, tx)
 		from = from_
@@ -755,7 +766,9 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 	} else {
 		from_, _ := types.Sender(pool.signer, tx) // already validated
 		from = from_
-	}
+	}*/
+	from, _ := types.Sender(pool.signer, tx)
+	tx.SetData(tx.Data()[20:])
 	if list := pool.pending[from]; list != nil && list.Overlaps(tx) {
 		// Nonce already pending, check if required price bump is met
 		inserted, old := list.Add(tx, pool.config.PriceBump)

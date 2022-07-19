@@ -26681,17 +26681,15 @@
     }
   },
   "nonce": "0x0000000000000042",
-  "difficulty": "0x0000000001",
+  "difficulty": "0x0400000000",
   "mixhash": "0x0000000000000000000000000000000000000000000000000000000000000000",
   "coinbase": "0x0000000000000000000000000000000000000000", 
   "timestamp": "0x00",
   "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
   "extraData": "0x00",
-  "gasLimit": "0xffffffff",
+  "gasLimit": "0x1388",
   "config": {
     "chainId": 1,
-    "homesteadBlock": 0,
-    "eip150Block": 0,
-    "eip155Block": 0
+    "homesteadBlock": 0
   }
 }

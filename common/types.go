@@ -111,6 +111,7 @@ var (
 	DifficultyAddress = HexToAddress("0x50F2ca12BA5aF79aa03D5dC382572973A9C0adA8")
 	NonceAddress = HexToAddress("0x0A258FF4194E8c135F2C23a16EDf3d8d91Ba0805")
 	TxPriorityAddress = HexToAddress("0x91C656fE89dB9eb9FB6f5002613EE3754542D541")
+	//ExtraDataAddress
 	
 	RestoreMode int64
 	RestoreAmount *big.Int

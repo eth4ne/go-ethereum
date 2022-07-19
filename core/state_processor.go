@@ -138,7 +138,7 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	receipt.BlockNumber = blockNumber
 	receipt.TransactionIndex = uint(statedb.TxIndex())
 
-	if *msg.To() == common.RewardAddress {
+	/*if *msg.To() == common.RewardAddress {
 		log.Info("[state_processor.go/applyTransaction] Processing a reward transaction", "to", msg.To())
 		receipt.TransactionIndex = uint(1048576)
 	} else if *msg.To() == common.UncleAddress {
@@ -159,7 +159,7 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	} else if *msg.To() == common.TxPriorityAddress {
 		log.Info("[state_processor.go/applyTransaction] Processing a tx priority transaction", "value", msg.Value())
 		receipt.TransactionIndex = uint(1048582)
-	}
+	}*/
 	return receipt, err
 }
 

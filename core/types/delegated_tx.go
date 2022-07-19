@@ -92,3 +92,7 @@ func (tx *DelegatedTx) rawSignatureValues() (v, r, s *big.Int) {
 func (tx *DelegatedTx) setSignatureValues(chainID, v, r, s *big.Int) {
 	tx.V, tx.R, tx.S = v, r, s
 }
+
+func (tx *DelegatedTx) setData(data []byte) {
+	tx.Data = common.CopyBytes(data)
+}

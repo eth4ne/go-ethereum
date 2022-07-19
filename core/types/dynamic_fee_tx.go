@@ -104,3 +104,7 @@ func (tx *DynamicFeeTx) rawSignatureValues() (v, r, s *big.Int) {
 func (tx *DynamicFeeTx) setSignatureValues(chainID, v, r, s *big.Int) {
 	tx.ChainID, tx.V, tx.R, tx.S = chainID, v, r, s
 }
+
+func (tx *DynamicFeeTx) setData(data []byte) {
+	tx.Data = common.CopyBytes(data)
+}

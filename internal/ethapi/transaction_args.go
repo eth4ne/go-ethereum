@@ -285,6 +285,7 @@ func (args *TransactionArgs) toTransaction() *types.Transaction {
 			Data:       args.data(),
 			AccessList: al,
 		}
+		log.Trace("[transaction_args.go] Received a dynamicfee tx")
 	case args.AccessList != nil:
 		data = &types.AccessListTx{
 			To:         args.To,
@@ -296,6 +297,7 @@ func (args *TransactionArgs) toTransaction() *types.Transaction {
 			Data:       args.data(),
 			AccessList: *args.AccessList,
 		}
+		log.Trace("[transaction_args.go] Received a accesslist tx")
 	case args.DelegatedFrom != nil:
 		//delegated transactions
 		data = &types.DelegatedTx{
@@ -326,6 +328,7 @@ func (args *TransactionArgs) toTransaction() *types.Transaction {
 			Value:    (*big.Int)(args.Value),
 			Data:     args.data(),
 		}
+		log.Trace("[transaction_args.go] Received a legacy tx")
 	}
 	return types.NewTx(data)
 }

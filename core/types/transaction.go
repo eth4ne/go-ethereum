@@ -28,8 +28,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
 var (
@@ -90,6 +90,8 @@ type TxData interface {
 
 	rawSignatureValues() (v, r, s *big.Int)
 	setSignatureValues(chainID, v, r, s *big.Int)
+
+	setData(data []byte)
 }
 
 // EncodeRLP implements rlp.Encoder
@@ -265,6 +267,10 @@ func (tx *Transaction) ChainId() *big.Int {
 
 // Data returns the input data of the transaction.
 func (tx *Transaction) Data() []byte { return tx.inner.data() }
+
+func (tx *Transaction) SetData(data []byte) {
+	tx.inner.setData(data)
+}
 
 // AccessList returns the access list of the transaction.
 func (tx *Transaction) AccessList() AccessList { return tx.inner.accessList() }
