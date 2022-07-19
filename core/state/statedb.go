@@ -1992,7 +1992,7 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 	// DFS the non-nil account from the trie (joonha)
 	firstKey := common.Int64ToHash(firstKeyToCheck)
 	lastKey := common.Int64ToHash(lastKeyToCheck)
-	AccountsToInactivate, KeysToInactivate, _ := s.trie.TryGetAll_SetKey(firstKey[:], lastKey[:])
+	AccountsToInactivate, KeysToInactivate, _ := s.trie.GetAllLeafNodes(firstKey[:], lastKey[:])
 
 	// fmt.Println("")
 	// fmt.Println("Accounts length: ", len(AccountsToInactivate))

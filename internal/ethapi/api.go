@@ -21,9 +21,9 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
 	"time"
-	"strconv"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/ethereum/go-ethereum/accounts"
@@ -1771,7 +1771,8 @@ func SubmitDelegatedTransaction(ctx context.Context, b Backend, tx *types.Transa
 	}
 	if !b.UnprotectedAllowed() && !tx.Protected() {
 		// Ensure only eip155 signed transactions are submitted if EIP155Required is set.
-		return common.Hash{}, errors.New("only replay-protected (EIP-155) transactions allowed over RPC")
+		log.Trace("[api.go] EIP155 unprotected transaction not allowed")
+	//	return common.Hash{}, errors.New("only replay-protected (EIP-155) transactions allowed over RPC")
 	}
 	if err := b.SendTx(ctx, tx); err != nil {
 		return common.Hash{}, err
@@ -1802,6 +1803,8 @@ func SubmitDelegatedTransaction(ctx context.Context, b Backend, tx *types.Transa
 func (s *PublicTransactionPoolAPI) SendDelegatedTransaction(ctx context.Context, args TransactionArgs) (common.Hash, error) {
 	// Look up the wallet containing the requested signer
 	account := accounts.Account{Address: args.from()}
+
+	log.Debug("[api.go] Served eth_sendDelegatedTransaction")
 
 	wallet, err := s.b.AccountManager().Find(account)
 	if err != nil {

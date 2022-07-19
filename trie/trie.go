@@ -21,9 +21,9 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"sync"
-	"math/big"
 	"math"
+	"math/big"
+	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -169,20 +169,22 @@ func (t *Trie) tryGet(origNode node, key []byte, pos int) (value []byte, newnode
 	}
 }
 
-// TryGetAll returns all found accounts and the keys of that accounts (joonha)
-func (t *Trie) TryGetAll(firstKey, lastKey []byte) ([][]byte, []common.Hash, error) {
+// GetAllLeafNodes returns all found accounts and the keys of that accounts (joonha)
+func (t *Trie) GetAllLeafNodes(firstKey, lastKey []byte) ([][]byte, []common.Hash, error) {
 	// init
 	Accounts = make([][]byte, 0)
-	Keys = make([]common.Hash, 0)	
+	Keys = make([]common.Hash, 0)
 
-	t.tryGetAll(t.root, keybytesToHex(firstKey), keybytesToHex(lastKey), 0)
+	leftIsSafe := false // true means 'bigger than the firstKey'
+	rightIsSafe := false // true means 'smaller than the lastKey'
+
+	t.getAllLeafNodes(t.root, keybytesToHex(firstKey), keybytesToHex(firstKey), keybytesToHex(lastKey), leftIsSafe, rightIsSafe, 0)
 	return Accounts, Keys, nil
 }
 
-// RE (220128)
-// TODO(joonha): rename this function. tryGetAll is too vague.
+// RE (220714)
 // DFS by recursion and find all the existing value nodes (joonha)
-func (t *Trie) tryGetAll(currNode node, parentKey, lastKey []byte, pos int) {
+func (t *Trie) getAllLeafNodes(currNode node, parentKey, firstKey, lastKey []byte, leftIsSafe, rightIsSafe bool, pos int) {
 
 	/****************************************************************************/ 
 	// this function does:
@@ -190,18 +192,23 @@ func (t *Trie) tryGetAll(currNode node, parentKey, lastKey []byte, pos int) {
 	// [FIND] non-nil valueNodes to delete
 	// [SAVE] the found account info to the Accounts array and the Keys array
 	//
-	// pos: pointer pointing each digit of the key (related to the trie depth)
-	// n.Key : n's key -> 전체가 아님. 특히 숏노드의 경우, 그 짧은 공통 부분만을 키로 가지고 있음.
-	// n : encountered node
+	// notations:
+	// [pos] pointer pointing each digit of the key (related to the trie depth)
+	// [n.Key] n's key (short node's key is just the common part)
+	// [n] encountered node
 	/****************************************************************************/
+
+	// TODO (joonha): https://www.geeksforgeeks.org/how-to-compare-two-slices-of-bytes-in-golang/
+	// refer above site and try to use bytes.Compare() function.
+	// it surely will increase the code readability
 
 	switch n := (currNode).(type) {
 	case nil:
-		// fmt.Println("NODE IS NIL")
+		// fmt.Println("NODE IS NIL\n\n")
 		return 
 
 	case valueNode: // in this case, should archive the node into the result array
-		// fmt.Println("VALUENODE")
+		// fmt.Println("\nVALUENODE\n\n")
 		if n != nil {
 			// key of that account
 			k := big.NewInt(0)
@@ -210,46 +217,95 @@ func (t *Trie) tryGetAll(currNode node, parentKey, lastKey []byte, pos int) {
 			}
 			hk := common.BigToHash(k)
 
-			// boundary check
-			if common.HashToInt64(hk) < common.InactiveBoundaryKey {
-				// fmt.Println("[out of range] key < common.InactiveBoundaryKey\n\n")
-				return 
-			}
-			if bytes.Compare(parentKey, lastKey) >= 0 { // key >= lastKey
-				// fmt.Println("[out of range] key >= lastKey")
-				return 
-			}
-
 			// found non-nil account
 			Accounts = append(Accounts, n)
 			// fmt.Println("detected account: ", common.BytesToAddress(n))
 			Keys = append(Keys, hk)
-
-			// // delete the account
-			// t.TryUpdate(hk[:], nil)
 		}
 		return 
 
 	case *shortNode:
-		// fmt.Println("SHORTNODE")
+		// fmt.Println("\nSHORTNODE")
 
 		// shortNode Key copy from n.Key to key (direct key edit affects other nodes, so use tempKey)
 		tempKey := make([]byte, len(parentKey))
 		copy(tempKey, parentKey)
+		// fmt.Println("(SN)n.Key: ", n.Key)
+		// fmt.Println("len(n.Key): ", len(n.Key))
+		
 		for i := 0; i < len(n.Key); i++ {
-			tempKey[pos+i] = n.Key[i] 
+			tempKey[pos+i] = n.Key[i]
+			// fmt.Println("n.Key[",i,"]: ", n.Key[i] )
+			
+			// if left is not safe, should compare with the firstKey
+			if !leftIsSafe && firstKey[pos+i] < n.Key[i] {
+				// in the range
+				leftIsSafe = true
+			} else if (!leftIsSafe && firstKey[pos+i] > n.Key[i]) {
+				// out of range
+				// fmt.Println("left: out of range\n")
+				return
+			}
+
+			// if right is not safe, should compare with the lastKey
+			if !rightIsSafe && lastKey[pos+i] > n.Key[i] {
+				// in the range
+				rightIsSafe = true
+			} else if (!rightIsSafe && lastKey[pos+i] < n.Key[i]) {
+				// out of range
+				// fmt.Println("right: out of range\n")
+				return 
+		return 
+				return 
+			}
 		}
-		t.tryGetAll(n.Val, tempKey, lastKey, pos+len(n.Key))
+		// this node is in the range, so move on to the child
+		t.getAllLeafNodes(n.Val, tempKey, firstKey, lastKey, leftIsSafe, rightIsSafe, pos+len(n.Key))
 		return 
 
 	case *fullNode:
-		// fmt.Println("FULLNODE")	
+		// fmt.Println("\nFULLNODE")	
 		for i := 0; i < 16; i++ {
 			tempKey := make([]byte, len(parentKey))
 			copy(tempKey, parentKey)
 			tempKey[pos] = byte(i)
 			// fmt.Println("tempKey: ", tempKey)
-			t.tryGetAll(n.Children[i], tempKey, lastKey, pos+1)
+
+			leftIsSafe = false 
+			rightIsSafe = false
+			leftOut := false // true means 'smaller than the firstKey' (out of range)
+			rightOut := false // true means 'bigger than the lastKey' (out of range)
+			
+			// check if THIS child is between the firstKey and the lastKey
+			for j := 0; j <= pos; j++ { 
+				// fmt.Println("firstKey[",j,"]: ", firstKey[j], " / tempKey[",j,"]:", tempKey[j], " / lastKey[",j,"]:", lastKey[j])
+				if (!leftIsSafe && firstKey[j] < tempKey[j]) {
+					// in the range
+					leftIsSafe = true
+				} else if (!leftIsSafe && firstKey[j] > tempKey[j]) {
+					// out of range
+					leftOut = true
+				}
+	
+				if (!rightIsSafe && lastKey[j] > tempKey[j]) {
+					// in the range
+					rightIsSafe = true
+				} else if (!rightIsSafe && lastKey[j] < tempKey[j]) {
+					// out of range
+					rightOut = true
+					break // no need to go more because it already surpassed the lastKey
+				}
+			}
+			// fmt.Println("pos:", pos, " / leftIsSafe:", leftIsSafe, " / rightIsSafe:", rightIsSafe, " / leftOut:", leftOut, " / rightOut:", rightOut)
+			if leftOut == true || rightOut == true { // out of range
+				// fmt.Println("X ------> (FN) i:", i, "(out of range)")
+				if rightOut == true {
+					break // no need to go more because it already surpassed the lastKey
+				} // When just the leftOut is true, should go more because we've not reached the range yet!
+			} else { // this node is in the range, so move on to the child
+				// fmt.Println("O ------> (FN) pos:",pos," / i: ", i)
+				t.getAllLeafNodes(n.Children[i], tempKey, firstKey, lastKey, leftIsSafe, rightIsSafe, pos+1)
+			}
 		}
 		return 
 
@@ -259,7 +315,7 @@ func (t *Trie) tryGetAll(currNode node, parentKey, lastKey []byte, pos int) {
 		if err != nil {
 			return 
 		}
-		t.tryGetAll(child, parentKey, lastKey, pos)
+		t.getAllLeafNodes(child, parentKey, firstKey, lastKey, leftIsSafe, rightIsSafe, pos)
 		return 
 
 	default:

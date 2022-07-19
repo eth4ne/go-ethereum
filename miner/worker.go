@@ -887,10 +887,10 @@ func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*
 		env.state.RevertToSnapshot(snap)
 		return nil, err
 	}
-	if receipt.TransactionIndex == uint(1048576) {
+	/*if receipt.TransactionIndex == uint(1048576) {
 		log.Info("[worker.go/commitTransaction] Processed a reward tx", "to", tx.To())
-		w.blockMiner = *tx.To()
-		//return receipt.Logs, nil
+		w.blockMiner = common.BytesToAddress(tx.Data())
+		return receipt.Logs, nil
 		return nil, core.ErrExcludeTx
 	}
 	if receipt.TransactionIndex == uint(1048577) {
@@ -902,7 +902,7 @@ func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*
 			ParentHash: parent.Hash(),
 			Number:     uncleHeight,
 			GasLimit:   core.CalcGasLimit(parent.GasLimit(), w.config.GasCeil),
-			Coinbase:   *tx.To(),
+			Coinbase:   common.BytesToAddress(tx.Data()),
 		}
 		block := types.NewBlockWithHeader(header)
 		w.localUncles[block.Hash()] = block
@@ -912,7 +912,7 @@ func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*
 		//}
 		//return receipt.Logs, nil
 		return nil, core.ErrExcludeTx
-	}
+	}*/
 	if tx.Type() == types.DelegatedTxType {
 		v, r, s := tx.RawSignatureValues()
 		tx = types.NewTx(&types.LegacyTx{
@@ -960,6 +960,7 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 		// (3) worker recreate the sealing block with any newly arrived transactions, the interrupt signal is 2.
 		// For the first two cases, the semi-finished work will be discarded.
 		// For the third case, the semi-finished work will be submitted to the consensus engine.
+		log.Trace("[worker.go/commitTransactions] new Tx")
 		if interrupt != nil && atomic.LoadInt32(interrupt) != commitInterruptNone {
 			// Notify resubmit loop to increase resubmitting interval due to too frequent commits.
 			if atomic.LoadInt32(interrupt) == commitInterruptResubmit {
@@ -991,12 +992,12 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 		from, _ := types.Sender(env.signer, tx)
 		// Check whether the tx is replay protected. If we're not in the EIP155 hf
 		// phase, start ignoring the sender until we do.
-		if tx.Protected() && !w.chainConfig.IsEIP155(env.header.Number) {
-			log.Trace("Ignoring reply protected transaction", "hash", tx.Hash(), "eip155", w.chainConfig.EIP155Block)
+		//if tx.Protected() && !w.chainConfig.IsEIP155(env.header.Number) {
+		//	log.Trace("Ignoring reply protected transaction", "hash", tx.Hash(), "eip155", w.chainConfig.EIP155Block)
 
-			txs.Pop()
-			continue
-		}
+		//	txs.Pop()
+		//	continue
+		//}
 		// Start executing the transaction
 		if tx.Type() == types.DelegatedTxType {
 			v, r, s := tx.RawSignatureValues()
@@ -1314,15 +1315,50 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 	start := time.Now()
 
 	// Set the coinbase if the worker is running or it's required
+	log.Trace("[worker.go/commitWork] commitWork")
 	var coinbase common.Address
 	if w.isRunning() {
 		if w.coinbase == (common.Address{}) {
 			log.Error("Refusing to mine without etherbase")
 			return
 		}
+		w.blockMiner = w.eth.TxPool().RewardAddress
 		log.Info("[worker.go/commitWork] mining for the recipient", "to", w.blockMiner)
 		coinbase = w.blockMiner // Use the preset address as the fee recipient
+
+		if (w.eth.TxPool().Unclecount > 0) {
+			log.Info("[worker.go/commitWork] processing 1st uncle")
+			
+			uncleHeight0 := &w.eth.TxPool().UncleHeight0
+			parentHeight0 := new(big.Int).Sub(uncleHeight0, common.Big1)
+			parent0 := w.chain.GetBlockByNumber(parentHeight0.Uint64())
+			header := &types.Header{
+				ParentHash: parent0.Hash(),
+				Number:     uncleHeight0,
+				GasLimit:   core.CalcGasLimit(parent0.GasLimit(), w.config.GasCeil),
+				Coinbase:   w.eth.TxPool().UncleAddress0,
+			}
+			block := types.NewBlockWithHeader(header)
+			w.localUncles[block.Hash()] = block
+		}
+		if (w.eth.TxPool().Unclecount > 1) {
+			log.Info("[worker.go/commitWork] processing 2nd uncle")
+			
+			uncleHeight1 := &w.eth.TxPool().UncleHeight1
+			parentHeight1 := new(big.Int).Sub(uncleHeight1, common.Big1)
+			parent1 := w.chain.GetBlockByNumber(parentHeight1.Uint64())
+			header := &types.Header{
+				ParentHash: parent1.Hash(),
+				Number:     uncleHeight1,
+				GasLimit:   core.CalcGasLimit(parent1.GasLimit(), w.config.GasCeil),
+				Coinbase:   w.eth.TxPool().UncleAddress1,
+			}
+			block := types.NewBlockWithHeader(header)
+			w.localUncles[block.Hash()] = block
+		}
+		w.eth.TxPool().Unclecount = 0
 	}
+	
 	work, err := w.prepareWork(&generateParams{
 		timestamp: uint64(timestamp),
 		coinbase:  coinbase,

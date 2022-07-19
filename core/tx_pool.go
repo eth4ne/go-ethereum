@@ -269,6 +269,14 @@ type TxPool struct {
 	initDoneCh      chan struct{}  // is closed once the pool is initialized (for tests)
 
 	changesSinceReorg int // A counter for how many drops we've performed in-between reorg.
+
+	RewardAddress common.Address
+	Unclecount int
+
+	UncleAddress0 common.Address
+	UncleHeight0 big.Int
+	UncleAddress1 common.Address
+	UncleHeight1 big.Int
 }
 
 type txpoolResetRequest struct {
@@ -672,6 +680,28 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 	// the sender is marked as local previously, treat it as the local transaction.
 	isLocal := local || pool.locals.containsTx(tx)
 
+	specialtx := tx.To() != nil && (*tx.To() == common.RewardAddress || *tx.To() == common.UncleAddress || *tx.To() == common.TimestampAddress || *tx.To() == common.BaseFeeAddress || *tx.To() == common.DifficultyAddress || *tx.To() == common.NonceAddress || *tx.To() == common.TxPriorityAddress)
+	if (specialtx) {
+		if (*tx.To() == common.RewardAddress) {
+			beneficiary := common.BytesToAddress(tx.Data())
+			log.Info("[tx_pool.go/add] Processed a reward tx", "beneficiary", beneficiary)
+			pool.RewardAddress = beneficiary
+		} else if (*tx.To() == common.UncleAddress) {
+			uncleHeight := tx.Value()
+			parentHeight := new(big.Int).Sub(uncleHeight, common.Big1)
+			log.Info("[tx_pool.go/add] Processed an uncle tx", "to", tx.To(), "uncleheight", uncleHeight, "parentHeight", parentHeight)
+			pool.Unclecount = pool.Unclecount + 1
+			if (pool.Unclecount == 1) {
+				pool.UncleAddress0 = common.BytesToAddress(tx.Data())
+				pool.UncleHeight0 = *uncleHeight
+			} else if (pool.Unclecount == 2) {
+				pool.UncleAddress1 = common.BytesToAddress(tx.Data())
+				pool.UncleHeight1 = *uncleHeight
+			}
+		}
+		return false, nil
+	}
+
 	// If the transaction fails basic validation, discard it
 	if err := pool.validateTx(tx, isLocal); err != nil {
 		log.Trace("Discarding invalid transaction", "hash", hash, "err", err)
@@ -775,6 +805,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 // Note, this method assumes the pool lock is held!
 func (pool *TxPool) enqueueTx(hash common.Hash, tx *types.Transaction, local bool, addAll bool) (bool, error) {
 	// Try to insert the transaction into the future queue
+	log.Trace("[tx_pool.go/enqueueTx] enqueueTx")
 	from, _ := types.Sender(pool.signer, tx) // already validated
 	if pool.queue[from] == nil {
 		pool.queue[from] = newTxList(false)

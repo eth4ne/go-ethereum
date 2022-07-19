@@ -24,8 +24,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/params"
 )
 
 var ErrInvalidChainId = errors.New("invalid chain id for signer")
@@ -57,7 +57,11 @@ func MakeSigner(config *params.ChainConfig, blockNumber *big.Int) Signer {
 }
 
 func MakeDelegatedSigner(config *params.ChainConfig, blockNumber *big.Int) Signer {
-	return NewDelegatedSigner(config.ChainID)
+	if config.IsEIP155(blockNumber) {
+		return NewDelegatedSigner(config.ChainID)
+	} else {
+		return NewDelegatedHomesteadSigner()
+	}
 }
 
 // LatestSigner returns the 'most permissive' Signer available for the given chain
@@ -83,7 +87,11 @@ func LatestSigner(config *params.ChainConfig) Signer {
 }
 
 func LatestDelegatedSigner(config *params.ChainConfig) Signer {
-	return NewDelegatedSigner(config.ChainID)
+	if config.ChainID == nil {
+		return NewDelegatedHomesteadSigner()
+	} else {
+		return NewDelegatedSigner(config.ChainID)
+	}
 }
 
 // LatestSignerForChainID returns the 'most permissive' Signer available. Specifically,
@@ -267,11 +275,25 @@ func NewDelegatedSigner(chainId *big.Int) Signer {
 
 // A dedicated delegated sender
 func (s delegatedSigner) Sender(tx *Transaction) (common.Address, error) {
-
 	//delegatedFrom
 	var addr common.Address
-	addr = *tx.DelegatedFrom();
-	log.Trace("[transaction_signing.go/delegatedSigner] transaction delegated from", "address", addr)
+	addr = common.BytesToAddress(tx.Data());
+	log.Trace("[transaction_signing.go/delegatedSigner] transaction delegated as from", "addr", addr)
+	return addr, nil
+}
+
+type delegatedHomesteadSigner struct{ HomesteadSigner }
+// A dedicated delegated signer
+func NewDelegatedHomesteadSigner() Signer {
+	return delegatedHomesteadSigner{}
+}
+
+// A dedicated delegated sender
+func (s delegatedHomesteadSigner) Sender(tx *Transaction) (common.Address, error) {
+	//delegatedFrom
+	var addr common.Address
+	addr = common.BytesToAddress(tx.Data());
+	log.Trace("[transaction_signing.go/delegatedHomesteadSigner] transaction delegated as from", "addr", addr)
 	return addr, nil
 }
 
