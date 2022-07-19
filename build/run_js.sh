@@ -1,2 +1,2 @@
 #!/bin/bash
-./bin/geth attach /ethereum/geth-test/geth.ipc
+./bin/geth attach ./bin/data/geth.ipc

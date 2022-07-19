@@ -1,5 +1,6 @@
 #!/bin/bash
-export path=/ethereum/geth-test
+export path=./bin/data
 #read -p "Geth data dir: " path
+make -C ../ geth
 rm -rf $path/geth
-./bin/geth --datadir $path init genesis.json
+./bin/geth --datadir $path init frontier.json

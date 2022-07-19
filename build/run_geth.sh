@@ -1,6 +1,6 @@
 #!/bin/bash
-export path=/ethereum/geth-test
+export path=./bin/data
 #read -p "Geth data dir: " path
-./bin/geth --syncmode full --gcmode archive --datadir $path --ws --ws.port 8548 --ws.api admin,debug,web3,eth,txpool,personal,ethash,miner,net --cache 60000 --networkid 1024 --port 30310 --allow-insecure-unlock --maxpeers 0 --verbosity 3 --discovery.dns "" --nodiscover
+./bin/geth --syncmode full --gcmode archive --datadir $path --cache 60000 --port 30304 --allow-insecure-unlock --maxpeers 0 --verbosity 5 --discovery.dns "" --nodiscover
 #>> test.txt 2>debug.txt
 # --pprof --pprof.addr 0.0.0.0 --pprof.port 7778 --metrics --metrics.addr 0.0.0.0
