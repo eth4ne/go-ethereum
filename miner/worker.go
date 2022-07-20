@@ -1289,7 +1289,7 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 		if bn == common.InactivateLeafNodeEpoch-1 {
 			return 
 		}
-		lastKeyToCheck := common.CheckpointKeys[bn-(common.InactivateCriterion-1)] // [4] 2204014 (joonha
+		lastKeyToCheck := common.CheckpointKeys[bn-(common.InactivateCriterion-1)]-1 // [4] 2204014 (joonha
 		firstKeyToCheck := common.CheckpointKeys[bn-(2*common.InactivateCriterion-1)]
 		inactivatedAccountsNum := env.state.InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck) // [2] 220410 (joonha)
 		common.InactiveBoundaryKey += inactivatedAccountsNum
