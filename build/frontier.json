@@ -26689,7 +26689,6 @@
   "extraData": "0x00",
   "gasLimit": "0x1388",
   "config": {
-    "chainId": 1,
-    "homesteadBlock": 0
+    "chainId": 1
   }
 }
