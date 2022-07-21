@@ -92,7 +92,7 @@ var Defaults = Config{
 	RPCGasCap:     50000000,
 	RPCEVMTimeout: 5 * time.Second,
 	GPO:           FullNodeGPO,
-	RPCTxFeeCap:   1, // 1 ether
+	RPCTxFeeCap:   10000000, // 1 ether -> increased to 10000000 not to occur checkTxFee err (joonha)
 }
 
 func init() {
