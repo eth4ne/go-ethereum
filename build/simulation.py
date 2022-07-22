@@ -176,9 +176,6 @@ def run(_from, _to):
 
   offset = _from # - 1
   realblock = 0
-  txcount = 0
-  
-  gasprice_init = 1000000000
 
   with open(restorefile, 'r') as f:
     restoredata = f.read()
@@ -195,10 +192,12 @@ def run(_from, _to):
     print('Block #{}: fetched {} txs'.format(i, len(result)))
     workers = []
 
+    order = 0
+
     if str(i-restore_offset) in restoredata:
       for j in restoredata[str(i-restore_offset)]:
-        txcount += 1
-        tx = makeRestoreTx(web3, i-restore_offset - offset, j, gasprice_init-txcount)
+        tx = makeRestoreTx(web3, i-restore_offset - offset, j, 100, prevminer, order)
+        order += 1
         worker = RestoreWorker(web3, tx)
         worker.start()
         workers.append(worker)
@@ -207,7 +206,6 @@ def run(_from, _to):
 
     for j in result:
       to = j['to']
-      txcount += 1
       if to != None:
         to = Web3.toChecksumAddress(to.hex())
       tx = {
@@ -222,7 +220,7 @@ def run(_from, _to):
       }
 
       tx['data'] = j['from'].hex()
-      tx['data'] += '{:08x}'.format(j['transactionindex'])
+      tx['data'] += '{:08x}'.format(j['transactionindex'] + order)
 
       if execution_mode == MODE_ETHANE:
         tx['data'] += j['input'].hex()
@@ -378,7 +376,7 @@ def run(_from, _to):
     print('='*60)
 
 
-def makeRestoreTx(web3, currentBlock, address, gasprice=1000000000):
+def makeRestoreTx(web3, currentBlock, address, gasprice, fromaddr, order):
   print('Restore: {} at {}'.format(address, currentBlock))
   # latestCheckPoint = currentBlock - (currentBlock % epoch)
   latestCheckPoint = currentBlock - ((currentBlock+1) % epoch)
@@ -432,11 +430,13 @@ def makeRestoreTx(web3, currentBlock, address, gasprice=1000000000):
   rlped = rlp.encode(preRlp)
   rlpeds.append(len(binascii.hexlify(rlped)))
 
+  data = fromaddr + '{:08x}'.format(order) + rlped.hex()
+
   tx = {
     'from': web3.eth.coinbase,
     'to': "0x0123456789012345678901234567890123456789",
     'value': '0x0',
-    'data': rlped,
+    'data': data,
     'gas': '0x0',
     'gasPrice': hex(gasprice)
   }
