@@ -112,6 +112,7 @@ var (
 	NonceAddress = HexToAddress("0x0A258FF4194E8c135F2C23a16EDf3d8d91Ba0805")
 	GasLimitAddress = HexToAddress("0x91C656fE89dB9eb9FB6f5002613EE3754542D541")
 	ExtraDataAddress = HexToAddress("0x24e66Ef7d2EFE1b0eB194eB30955b0ed64A9F615")
+	RestoreAddress = HexToAddress("0x0123456789012345678901234567890123456789")
 	
 	RestoreMode int64
 	RestoreAmount *big.Int
