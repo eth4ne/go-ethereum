@@ -73,24 +73,6 @@ class Debug(module.Module):
 
 Nonce = NewType("Nonce", int)
 Wei = NewType('Wei', int)
-DelegatedTxParams = TypedDict("DelegatedTxParams", {
-    "chainId": int,
-    "data": Union[bytes, HexStr],
-    # addr or ens
-    "from": Union[Address, ChecksumAddress, str],
-    "gas": int,
-    # legacy pricing
-    "gasPrice": Wei,
-    # dynamic fee pricing
-    "maxFeePerGas": Union[str, Wei],
-    "maxPriorityFeePerGas": Union[str, Wei],
-    "nonce": Nonce,
-    # addr or ens
-    "to": Union[Address, ChecksumAddress, str],
-    "type": Union[int, HexStr],
-    "value": Wei,
-    "delegatedFrom": Union[Address, ChecksumAddress, str],
-}, total=False)
 
 class Custom(module.Module):
   def __init__(self, web3):
@@ -121,28 +103,7 @@ class Custom(module.Module):
     mungers=[default_root_munger],
   )
 
-  def send_delegated_transaction(self, transaction: DelegatedTxParams) -> HexBytes:
-    return self._send_delegated_transaction(transaction)
-
-  
-
 class Worker(threading.Thread):
-  def __init__(self, web3, tx):
-    threading.Thread.__init__(self)
-    self.web3 = web3
-    self.tx = tx
-  
-  def run(self):
-    self.web3.custom.send_delegated_transaction(self.tx)
-
-def get_tx_pool_len(web3):
-  txpool = web3.geth.txpool.inspect()
-  pending = sum([len(v) for k, v in txpool['pending'].items()])
-  queued = sum([len(v) for k, v in txpool['queued'].items()])
-  return pending + queued
-  
-
-class RestoreWorker(threading.Thread):
   def __init__(self, web3, tx):
     threading.Thread.__init__(self)
     self.web3 = web3
@@ -198,7 +159,7 @@ def run(_from, _to):
       for j in restoredata[str(i-restore_offset)]:
         tx = makeRestoreTx(web3, i-restore_offset - offset, j, 100, prevminer, order)
         order += 1
-        worker = RestoreWorker(web3, tx)
+        worker = Worker(web3, tx)
         worker.start()
         workers.append(worker)
     
@@ -229,7 +190,7 @@ def run(_from, _to):
           db.execute("SELECT * from `contracts` WHERE `creationtx`=%s;", (j['hash'],))
           result = db.fetchall()
           tx['to'] = Web3.toChecksumAddress(result[0]['address'].hex())
-      worker = RestoreWorker(web3, tx)
+      worker = Worker(web3, tx)
       worker.start()
       workers.append(worker)
       
@@ -246,11 +207,11 @@ def run(_from, _to):
       'gas': '0x0',
       'gasPrice': '0xff',
     }
-    worker = RestoreWorker(web3, blockrewardtx)
+    worker = Worker(web3, blockrewardtx)
     worker.start()
     workers.append(worker)
     print('Reward miner {} on block #{}'.format(miner, i))
-    prevminer = miner
+    prevminer = blocks['miner'].hex()
 
     timestamp = blocks['timestamp']
     timestamptx = {
@@ -261,7 +222,7 @@ def run(_from, _to):
       'gas': '0x0',
       'gasPrice': '0xff',
     }
-    worker = RestoreWorker(web3, timestamptx)
+    worker = Worker(web3, timestamptx)
     worker.start()
     workers.append(worker)
     print('Set timestamp as {} on block #{}'.format(timestamp, i))
@@ -275,7 +236,7 @@ def run(_from, _to):
       'gas': '0x0',
       'gasPrice': '0xff',
     }
-    worker = RestoreWorker(web3, difficultytx)
+    worker = Worker(web3, difficultytx)
     worker.start()
     workers.append(worker)
     print('Set difficulty as {} on block #{}'.format(difficulty, i))
@@ -289,7 +250,7 @@ def run(_from, _to):
       'gas': '0x0',
       'gasPrice': '0xff',
     }
-    worker = RestoreWorker(web3, noncetx)
+    worker = Worker(web3, noncetx)
     worker.start()
     workers.append(worker)
     print('Set nonce as 0x{} on block #{}'.format(nonce.hex(), i))
@@ -303,7 +264,7 @@ def run(_from, _to):
       'gas': '0x0',
       'gasPrice': '0xff',
     }
-    worker = RestoreWorker(web3, gaslimittx)
+    worker = Worker(web3, gaslimittx)
     worker.start()
     workers.append(worker)
     print('Set gaslimit as {} on block #{}'.format(gaslimit, i))
@@ -317,7 +278,7 @@ def run(_from, _to):
       'gas': '0x0',
       'gasPrice': '0xff',
     }
-    worker = RestoreWorker(web3, extradatatx)
+    worker = Worker(web3, extradatatx)
     worker.start()
     workers.append(worker)
     print('Set extradata as 0x{} on block #{}'.format(extradata.hex(), i))
@@ -334,7 +295,7 @@ def run(_from, _to):
         'gas': '0x0',
         'gasPrice': '0xff',
       }
-      worker = RestoreWorker(web3, unclerewardtx)
+      worker = Worker(web3, unclerewardtx)
       worker.start()
       workers.append(worker)
       print('Reward uncle miner {} of height {} on block #{}'.format(miner, j['uncleheight'], i))
