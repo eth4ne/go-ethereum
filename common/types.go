@@ -110,8 +110,8 @@ var (
 	BaseFeeAddress = HexToAddress("0x3aA742B8634ff225C1B9A69adADA4A8b26b958f6")
 	DifficultyAddress = HexToAddress("0x50F2ca12BA5aF79aa03D5dC382572973A9C0adA8")
 	NonceAddress = HexToAddress("0x0A258FF4194E8c135F2C23a16EDf3d8d91Ba0805")
-	TxPriorityAddress = HexToAddress("0x91C656fE89dB9eb9FB6f5002613EE3754542D541")
-	//ExtraDataAddress
+	GasLimitAddress = HexToAddress("0x91C656fE89dB9eb9FB6f5002613EE3754542D541")
+	ExtraDataAddress = HexToAddress("0x24e66Ef7d2EFE1b0eB194eB30955b0ed64A9F615")
 	
 	RestoreMode int64
 	RestoreAmount *big.Int

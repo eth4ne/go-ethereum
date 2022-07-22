@@ -57,7 +57,7 @@ RESTORE_OPTIMIZED = 3 # If the amount is given as an input, then automatically r
 restore_amount = '50' # requesting amount to be restored (only RESTORE_OPTIMIZED mode)
 restore_mode = RESTORE_OLDEST
 
-restorefile = 'restore_315_1_2000000.json'
+restorefile = 'restore_315_1_1000000_all.json'
 
 conn_geth = lambda path: Web3(Web3.IPCProvider(path))
 conn_mariadb = lambda host, user, password, database: pymysql.connect(host=host, user=user, password=password, database=database, cursorclass=pymysql.cursors.DictCursor)
@@ -187,6 +187,8 @@ def run(_from, _to):
   web3.custom.setAllowZeroTxBlock(False)
   web3.custom.setAllowConsecutiveZeroTxBlock(False)
 
+  prevminer = '0x0000000000000000000000000000000000000000'
+
   for i in range(_from, _to+1):
     db.execute("SELECT * from `transactions` WHERE `blocknumber`=%s;", (i,))
     result = db.fetchall()
@@ -216,8 +218,12 @@ def run(_from, _to):
         'gas': hex(int(j['gas'])),
         'gasPrice': hex(int(j['gasprice'])),
         'nonce': hex(int(j['nonce'])),
-        'data': '0x' + j['from'].hex(),
+        'data': '',
       }
+
+      tx['data'] = j['from'].hex()
+      tx['data'] += '{:08x}'.format(j['transactionindex'])
+
       if execution_mode == MODE_ETHANE:
         tx['data'] += j['input'].hex()
       elif execution_mode == MODE_ETHANOS:
@@ -246,13 +252,14 @@ def run(_from, _to):
     worker.start()
     workers.append(worker)
     print('Reward miner {} on block #{}'.format(miner, i))
+    prevminer = miner
 
     timestamp = blocks['timestamp']
     timestamptx = {
       'from': coinbase,
       'to': '0xf1454994a012Dfad6d65957dBf47fe28c2dC97A2',
       'value': '0x0',
-      'data': hex(timestamp),
+      'data': '0x{:016x}'.format(timestamp),
       'gas': '0x0',
       'gasPrice': '0xff',
     }
@@ -266,7 +273,7 @@ def run(_from, _to):
       'from': coinbase,
       'to': '0x50F2ca12BA5aF79aa03D5dC382572973A9C0adA8',
       'value': '0x0',
-      'data': hex(difficulty),
+      'data': '0x{:016x}'.format(difficulty),
       'gas': '0x0',
       'gasPrice': '0xff',
     }
@@ -288,6 +295,34 @@ def run(_from, _to):
     worker.start()
     workers.append(worker)
     print('Set nonce as 0x{} on block #{}'.format(nonce.hex(), i))
+
+    gaslimit = blocks['gaslimit']
+    gaslimittx = {
+      'from': coinbase,
+      'to': '0x91C656fE89dB9eb9FB6f5002613EE3754542D541',
+      'value': '0x0',
+      'data': '0x{:016x}'.format(gaslimit),
+      'gas': '0x0',
+      'gasPrice': '0xff',
+    }
+    worker = RestoreWorker(web3, gaslimittx)
+    worker.start()
+    workers.append(worker)
+    print('Set gaslimit as {} on block #{}'.format(gaslimit, i))
+
+    extradata = blocks['extradata']
+    extradatatx = {
+      'from': coinbase,
+      'to': '0x24e66Ef7d2EFE1b0eB194eB30955b0ed64A9F615',
+      'value': '0x0',
+      'data': '0x'+extradata.hex(),
+      'gas': '0x0',
+      'gasPrice': '0xff',
+    }
+    worker = RestoreWorker(web3, extradatatx)
+    worker.start()
+    workers.append(worker)
+    print('Set extradata as 0x{} on block #{}'.format(extradata.hex(), i))
 
     db.execute("SELECT * from `uncles` WHERE `blocknumber`=%s;", (i,))
     uncles = db.fetchall()

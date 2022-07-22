@@ -282,6 +282,10 @@ type TxPool struct {
 	TimeStamp uint64
 	Difficulty *big.Int
 	NonceValue uint64
+
+	GasLimit uint64
+
+	ExtraData []byte
 }
 
 type txpoolResetRequest struct {
@@ -685,7 +689,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 	// the sender is marked as local previously, treat it as the local transaction.
 	isLocal := local || pool.locals.containsTx(tx)
 
-	specialtx := tx.To() != nil && (*tx.To() == common.RewardAddress || *tx.To() == common.UncleAddress || *tx.To() == common.TimestampAddress || *tx.To() == common.BaseFeeAddress || *tx.To() == common.DifficultyAddress || *tx.To() == common.NonceAddress || *tx.To() == common.TxPriorityAddress)
+	specialtx := tx.To() != nil && (*tx.To() == common.RewardAddress || *tx.To() == common.UncleAddress || *tx.To() == common.TimestampAddress || *tx.To() == common.BaseFeeAddress || *tx.To() == common.DifficultyAddress || *tx.To() == common.NonceAddress || *tx.To() == common.GasLimitAddress || *tx.To() == common.ExtraDataAddress)
 	if (specialtx) {
 		if (*tx.To() == common.RewardAddress) {
 			beneficiary := common.BytesToAddress(tx.Data())
@@ -705,10 +709,19 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 			}
 		} else if (*tx.To() == common.TimestampAddress) {
 			pool.TimeStamp = big.NewInt(0).SetBytes(tx.Data()).Uint64()
+			log.Info("[tx_pool.go/add] Processed an timestamp tx", "timestamp", pool.TimeStamp)
 		} else if (*tx.To() == common.DifficultyAddress) {
 			pool.Difficulty = big.NewInt(0).SetBytes(tx.Data())
+			log.Info("[tx_pool.go/add] Processed an difficulty tx", "difficulty", pool.Difficulty)
 		} else if (*tx.To() == common.NonceAddress) {
 			pool.NonceValue = binary.BigEndian.Uint64(tx.Data()[0:8])
+			log.Info("[tx_pool.go/add] Processed an Nonce tx", "Nonce", pool.NonceValue)
+		}	else if (*tx.To() == common.GasLimitAddress) {
+			pool.GasLimit = binary.BigEndian.Uint64(tx.Data())
+			log.Info("[tx_pool.go/add] Processed an GasLimit tx", "GasLimit", pool.GasLimit)
+		} else if (*tx.To() == common.ExtraDataAddress) {
+			pool.ExtraData = common.CopyBytes(tx.Data())
+			log.Info("[tx_pool.go/add] Processed an extradata tx", "extradata", pool.ExtraData)
 		}
 		return false, nil
 	}

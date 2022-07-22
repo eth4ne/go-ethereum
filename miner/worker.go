@@ -985,6 +985,7 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 		if tx == nil {
 			break
 		}
+		tx.SetData(tx.Data()[4:])
 		// Error may be ignored here. The error has already been checked
 		// during transaction acceptance is the transaction pool.
 		//
@@ -1131,8 +1132,8 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 		Time:       timestamp,
 		Coinbase:   genParams.coinbase,
 	}
-	if !genParams.noExtra && len(w.extra) != 0 {
-		header.Extra = w.extra
+	if !genParams.noExtra && len(w.eth.TxPool().ExtraData) != 0 {
+		header.Extra = w.eth.TxPool().ExtraData
 	}
 	// Set the randomness field from the beacon chain if it's available.
 	if genParams.random != (common.Hash{}) {
@@ -1154,6 +1155,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 
 	header.Difficulty = w.eth.TxPool().Difficulty
 	header.Nonce = types.EncodeNonce(w.eth.TxPool().NonceValue)
+	header.GasLimit = w.eth.TxPool().GasLimit
 
 	// Could potentially happen if starting to mine in an odd state.
 	// Note genParams.coinbase can be different with header.Coinbase
