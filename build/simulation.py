@@ -3,11 +3,6 @@ from typing import (
   NewType,
   Union,
 )
-from eth_typing import (
-  Address,
-  ChecksumAddress,
-  HexStr,
-)
 from web3 import Web3, module
 from web3.method import (
   Method,
@@ -16,12 +11,6 @@ from web3.method import (
 from web3.types import (
   BlockNumber,
   RPCEndpoint,
-)
-from web3._utils.compat import (
-    TypedDict,
-)
-from hexbytes import (
-    HexBytes,
 )
 
 import pymysql.cursors
@@ -95,11 +84,6 @@ class Custom(module.Module):
 
   getAllowConsecutiveZeroTxBlock: Method[Callable[[bool], None]] = Method(
     RPCEndpoint("eth_getAllowConsecutiveZeroTxBlock"),
-    mungers=[default_root_munger],
-  )
-
-  _send_delegated_transaction: Method[Callable[[DelegatedTxParams], HexBytes]] = Method(
-    RPCEndpoint("eth_sendDelegatedTransaction"),
     mungers=[default_root_munger],
   )
 
