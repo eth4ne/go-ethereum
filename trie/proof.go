@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"strconv"
+	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -217,7 +219,8 @@ func GetKeyFromMerkleProof(rootHash common.Hash, proofDb common.ProofList) ([][]
 			start_idx = i
 
 			// convert to a key format (hash)
-			retrievedKey := common.BytesToHash(tKey)
+			tKey_i := tKey.Int64() // big.Int -> int64
+			retrievedKey := common.HexToHash(strconv.FormatInt(tKey_i, 16)) // int64 -> hex -> hash
 
 			// check if this is already restored
 			_, doExist := common.AlreadyRestored[retrievedKey]
@@ -241,7 +244,8 @@ func GetKeyFromMerkleProof(rootHash common.Hash, proofDb common.ProofList) ([][]
 	targetNode, tKey := getKeyFromMerkleProof(rootHash, nil, nil, proofDb[start_idx:])
 
 	// convert to a key format (hash)
-	retrievedKey := common.BytesToHash(tKey)
+	tKey_i := tKey.Int64() // big.Int -> int64
+	retrievedKey := common.HexToHash(strconv.FormatInt(tKey_i, 16)) // int64 -> hex -> hash
 
 	// check if already restored
 	_, doExist := common.AlreadyRestored[retrievedKey]
@@ -255,7 +259,7 @@ func GetKeyFromMerkleProof(rootHash common.Hash, proofDb common.ProofList) ([][]
 }
 
 // internal function of GetKeyFromMerkleProof (joonha)
-func getKeyFromMerkleProof(nodeHash common.Hash, origNode node, tKey []byte, proofDb common.ProofList) ([]byte, []byte) {
+func getKeyFromMerkleProof(nodeHash common.Hash, origNode node, tKey []byte, proofDb common.ProofList) ([]byte, *big.Int) {
 
 	/*************************************************************/
 	// README
@@ -314,7 +318,9 @@ func getKeyFromMerkleProof(nodeHash common.Hash, origNode node, tKey []byte, pro
 					copy(nodeHash[:], cld)
 				case valueNode:
 					// fmt.Println("valueNode")
-					return cld, tKey[:len(tKey)-1] // should cut out [16] at the end
+					hexToInt := new(big.Int)
+					hexToInt.SetString(common.BytesToHash(hexToKeybytes(tKey)).Hex()[2:], 16)
+					return cld, hexToInt
 				default:
 					// fmt.Println("default")
 				}
@@ -338,7 +344,7 @@ func getKeyFromMerkleProof(nodeHash common.Hash, origNode node, tKey []byte, pro
 	/*************************************************************/
 	// PREVIOUS NODE
 	/*************************************************************/
-	// if previous node(=origNode) is a fullNode and the current node is also a fullNode, 
+	// if previous node(=origNode) is a fullNode, 
 	// extract key digit and append it to tKey
 	switch n := (origNode).(type) {
 	case *fullNode:
@@ -349,6 +355,24 @@ func getKeyFromMerkleProof(nodeHash common.Hash, origNode node, tKey []byte, pro
 			hasher := newHasher(false)
 			defer returnHasherToPool(hasher)
 			nn := hasher.fullnodeToHash(cur, false)
+			// fmt.Println("selected branch: ", nn)
+
+			i := 0
+			for i < 16 {
+				if common.BytesToHash(nn.(hashNode)) == common.BytesToHash((n.Children[i]).(hashNode)) {
+					// key append
+					selectedByte := common.HexToHash("0x" + indices[i])
+					tKey = append(tKey, selectedByte[len(selectedByte)-1])
+					break
+				}
+				i++
+			}
+		case *shortNode:
+			hasher := newHasher(false)
+			defer returnHasherToPool(hasher)
+
+			collapsed, _ := hasher.hashShortNodeChildren(cur) // should hash the child valueNode first
+			nn := hasher.shortnodeToHash(collapsed, false) // nn: hashnode
 			// fmt.Println("selected branch: ", nn)
 
 			i := 0
