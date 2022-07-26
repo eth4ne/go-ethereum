@@ -527,6 +527,12 @@ type TransactionsByPriceAndNonce struct {
 	baseFee *big.Int                        // Current base fee
 }
 
+type TxWrapper struct {
+	index uint32
+	from common.Address
+	tx *Transaction
+}
+
 // NewTransactionsByPriceAndNonce creates a transaction set that can retrieve
 // price sorted transactions in a nonce-honouring way.
 //
@@ -535,6 +541,30 @@ type TransactionsByPriceAndNonce struct {
 func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transactions, baseFee *big.Int) *TransactionsByPriceAndNonce {
 	// Initialize a price and received time based heap with the head transactions
 	heads := make(TxByPriceAndTime, 0, len(txs))
+	/*var txs_sorted []TxWrapper
+	for from, accTxs := range txs {
+		for _, singleTx := range accTxs {
+			index := binary.LittleEndian.Uint32(singleTx.Data()[0:4])
+			txs_sorted = append(txs_sorted, TxWrapper{index, from, singleTx})
+		}
+	}
+	sort.Slice(txs_sorted[:], func(i, j int) bool {
+		return txs_sorted[i].index < txs_sorted[j].index
+	})
+
+	for _, singleTxWrapper := range txs_sorted {
+		acc, _ := Sender(signer, singleTxWrapper.tx)
+		from := singleTxWrapper.from
+		wrapped, err := NewTxWithMinerFee(singleTxWrapper.tx, baseFee)
+		// Remove transaction if sender doesn't match from, or if wrapping fails.
+		if acc != from || err != nil {
+			delete(txs, from)
+			continue
+		}
+		heads = append(heads, wrapped)
+		txs[from] = txs[from][1:]
+	}*/
+
 	for from, accTxs := range txs {
 		acc, _ := Sender(signer, accTxs[0])
 		wrapped, err := NewTxWithMinerFee(accTxs[0], baseFee)
