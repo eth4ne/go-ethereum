@@ -24,6 +24,7 @@ import (
 	"sort"
 	"strconv"
 	"time"
+	"os"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -48,6 +49,13 @@ var (
 
 // type proofList [][]byte // --> original code
 type ProofList common.ProofList // (joonha)
+
+func checkError(err error) {
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+}
 
 func (n *ProofList) Put(key []byte, value []byte) error {
 	*n = append(*n, value)
@@ -434,27 +442,6 @@ func (s *StateDB) GetState(addr common.Address, hash common.Hash) common.Hash {
 // 	return s.GetProofByHash(crypto.Keccak256Hash(addr.Bytes()))
 // }
 
-// // Just one recent node (joonha)
-// // GetProof returns the Merkle proof for a given account.
-// func (s *StateDB) GetProof(addr common.Address) ([][]byte, error) {
-// 	if len(common.AddrToKey_inactive[addr]) <= 0 {
-// 		return nil, errors.New("No Account to Restore (ethane) (1)") //////////// 여기에 걸리네
-// 	}
-// 	lastIndex := len(common.AddrToKey_inactive[addr]) - 1
-// 	// fmt.Println("lastIndex is ", lastIndex)
-// 	// fmt.Println("addrToKey_inactive is ", common.AddrToKey_inactive[addr])
-// 	if common.AddrToKey_inactive[addr][lastIndex] == common.ToBeDeletedKey {
-// 		return nil, errors.New("No Account to Restore (ethane) (2)")
-// 	}
-// 	_, ok := common.AddrToKey_inactive[addr];
-// 	if !ok { // empty map
-// 		// fmt.Println("AddrToKey_inactive mapped value does not exist")
-// 	}
-// 	key := common.AddrToKey_inactive[addr][lastIndex]
-// 	return s.GetProofByHash(key)
-// }
-
-// 2022-06-09 (joonha)
 // GetProof returns the Merkle proofs for *ALL KEYS* of the given account.
 func (s *StateDB) GetProof(addr common.Address) ([][]byte, error) {
 	
@@ -471,37 +458,29 @@ func (s *StateDB) GetProof(addr common.Address) ([][]byte, error) {
 		return nil, errors.New("No Account to Restore (ethane) (1)")
 	}
 
-	/***********************************/
-	// GET PROOFS
-	/***********************************/
+	// get proofs
 	// optimize opportunity: store balance of inactive accounts with AddrToKey_inactive from the first (TODO)
 	var mps [][]byte
 
 	if common.RestoreMode == 0 { // ALL
 		for i := 0; i < len(common.AddrToKey_inactive[addr]); i++ {
 			key := common.AddrToKey_inactive[addr][i]
-			if key != common.ToBeDeletedKey {
-				mp, _ := s.GetProofByHash(key)
-				mps = append(mps, mp...)
-			}
+			mp, _ := s.GetProofByHash(key)
+			mps = append(mps, mp...)
 		}
 	} else if common.RestoreMode == 1 { // RECENT
 		for i := len(common.AddrToKey_inactive[addr])-1; i >= 0; i-- {
 			key := common.AddrToKey_inactive[addr][i]
-			if key != common.ToBeDeletedKey { // found valid inactive account
-				mp, _ := s.GetProofByHash(key)
-				mps = append(mps, mp...)
-				break;
-			}
+			mp, _ := s.GetProofByHash(key)
+			mps = append(mps, mp...)
+			break;
 		}
 	} else if common.RestoreMode == 2 { // OLDEST
 		for i := 0; i < len(common.AddrToKey_inactive[addr]); i++ {
 			key := common.AddrToKey_inactive[addr][i]
-			if key != common.ToBeDeletedKey { // found valid inactive account
-				mp, _ := s.GetProofByHash(key)
-				mps = append(mps, mp...)
-				break;
-			}
+			mp, _ := s.GetProofByHash(key)
+			mps = append(mps, mp...)
+			break;
 		}
 	} else if common.RestoreMode == 3 { // OPTIMIZED
 		type myDataType struct {
@@ -512,25 +491,24 @@ func (s *StateDB) GetProof(addr common.Address) ([][]byte, error) {
 
 		for i := 0; i < len(common.AddrToKey_inactive[addr]); i++ {
 			key := common.AddrToKey_inactive[addr][i]
-			if key != common.ToBeDeletedKey { // found valid inactive account
-				// balance
-				enc, _ := s.trie.TryGet_SetKey(key[:])
-				// var data *types.StateAccount
-				data := new(types.StateAccount) //...?
-				rlp.DecodeBytes(enc, data)
-				// fmt.Println("Balance of ", i, " is ", data.Balance)
-				var myData myDataType
-				myData.index = i
-				myData.balance = data.Balance
-				mySlice = append(mySlice, myData)
-			}
+			// balance
+			enc, _ := s.trie.TryGet_SetKey(key[:])
+			// var data *types.StateAccount
+			data := new(types.StateAccount) //...?
+			rlp.DecodeBytes(enc, data)
+			// fmt.Println("Balance of ", i, " is ", data.Balance)
+			var myData myDataType
+			myData.index = i
+			myData.balance = data.Balance
+			mySlice = append(mySlice, myData)
 		}
 		// sort by balance (ascending order)
 		sort.Slice(mySlice, func(i, j int) bool {
 			return (mySlice[j].balance.Cmp(mySlice[i].balance) == 1)
 		})
-		// [2, 3, 3] 이고 request 5일 땐, 3 + 3을 restore 하도록 구현되어 있음.
-		// MP 크기가 작다면 2 + 3 을 restore 하는 것이 더 최적일 수 있으나, 이는 당장은 고려하지 않음. (과한 최적화 같아서.)
+		// When there are balances of 2, 3, 3 and the amount 5 is requested, 
+		// we restore 3 and 3.
+		// Restoring smaller MP might more efficient, but we don't consider that now.
 		sum := big.NewInt(0)
 		for i := len(mySlice)-1; i >= 0; i-- {
 			// fmt.Println("Restoring ", mySlice[i].index, "th inactive account (indiv balance:", mySlice[i].balance, ")")
@@ -547,7 +525,7 @@ func (s *StateDB) GetProof(addr common.Address) ([][]byte, error) {
 			log.Error("The requested balance is bigger than the total inactive balances - anyway, we will restore the total")
 		}
 	}
-	
+
 
 	/***********************************/
 	// REMOVE REDUNDANT NODES
@@ -692,22 +670,9 @@ func (s *StateDB) SetState(addr common.Address, key, value common.Hash) {
 
 // SetState_Restore set storage slot when restoring CA (joonha)
 func (s *StateDB) SetState_Restore(addr common.Address, key, value common.Hash) {
-	// get key
-	addrKey, doExist := s.AddrToKeyDirty[addr]
-	if !doExist {
-		addrKey = common.AddrToKey[addr]
-	}
-	addrKey_bigint := new(big.Int)
-	addrKey_bigint.SetString(addrKey.Hex()[2:], 16)
-
 	// get renewed account
 	var stateObject *stateObject
-	if addrKey_bigint.Int64() >= common.InactiveBoundaryKey { // restore by merge
-		// fmt.Println("RESTORING BY MERGE\n")
-	} else { // restore by create
-		// fmt.Println("RESTORING BY CREATE\n")
-	}
-	stateObject = s.getStateObject(addr) 
+	stateObject = s.getStateObject(addr)
 
 	if stateObject != nil {
 		stateObject.SetState_Restore(s.db, key, value)
@@ -757,18 +722,13 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 	// Encode the account and update the account trie
 	addr := obj.Address()
 
-
-	/**************************/
+	//
 	// ORIGINAL CODE
-	/**************************/
+	//
 	// if err := s.trie.TryUpdateAccount(addr[:], &obj.data); err != nil {
 	// 	s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
 	// }
-	
 
-	/**************************/
-	// v1.10.3
-	/**************************/
 	// to delete prev snapshot (joonha)
 	prevAddrHash := obj.addrHash
 
@@ -778,7 +738,7 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 	}
 
 	// codes for compact trie (jmlee)
-	// get addrKey of this address 
+	// get addrKey of this address
 	addrKey, doExist := s.AddrToKeyDirty[addr]
 	if !doExist {
 		addrKey = common.AddrToKey[addr]
@@ -794,61 +754,41 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 	// fmt.Println("Addr: ", obj.data.Addr)
 	// fmt.Println("")
 
-	if addrKey_bigint.Int64() >= s.CheckpointKey {
-		// fmt.Println("\n\nupdateStateObject ----------> first case\n\n")
-		/******************************************************/
-		// UPDATED AT THIS EPOCH
-		/******************************************************/
-		// this address is newly created address OR already moved address. so just update
+	if addrKey_bigint.Int64() >= s.CheckpointKey { // updated at this epoch
+		
+		/*
+		* This account is newly created or already moved at this epoch.
+		* So there is no move.
+		* Creating a crumb is this case.
+		*/
+
 		// fmt.Println("insert -> key:", addrKey.Hex(), "/ addr:", addr.Hex())
 		if err = s.trie.TryUpdate_SetKey(addrKey[:], data); err != nil {
 			s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
 		}
+	} else { // not updated yet at this epoch
 
-	} else if addrKey_bigint.Int64() >= common.InactiveBoundaryKey {
-		// fmt.Println("\n\nupdateStateObject ----------> second case\n\n")
-		/******************************************************/
-		// ACTIVE AT PREVIOUS EPOCH BUT NOT INACTIVATED YET
-		/******************************************************/
-		// This address is already in the trie, so move the previous leaf node to the right side (delete & insert)
-		// Do not delete this now, just append s.KeysToDeleteDirty to delete them at once later (periodical delete)
+		/* 
+		* This account was active at previous epoch and touched again at this epoch.
+		* So we have to delete previous leaf node whose key is addrKey
+		* and insert new leaf node to the right most of the active trie setting its key to newAddrKey.
+		* We will not delete previous leaf node now but just append it to s.KeysToDeleteDirty
+		* to delete multiple nodes at once later, periodically.
+		* (commenter: joonha)
+		*/
+
 		// fmt.Println("append this to KeysToDeleteDirty to delete later -> key:", addrKey.Hex(), "/ addr:", addr.Hex())
 		s.KeysToDeleteDirty = append(s.KeysToDeleteDirty, addrKey)
 
 		// insert new leaf node at right side
-		newAddrHash := common.HexToHash(strconv.FormatInt(s.NextKey, 16))
-		s.AddrToKeyDirty[addr] = newAddrHash
-		// fmt.Println("insert -> key:", newAddrHash.Hex(), "/ addr:", addr.Hex())
-		if err = s.trie.TryUpdate_SetKey(newAddrHash[:], data); err != nil {
+		newAddrKey := common.HexToHash(strconv.FormatInt(s.NextKey, 16))
+		s.AddrToKeyDirty[addr] = newAddrKey
+		// fmt.Println("insert -> key:", newAddrKey.Hex(), "/ addr:", addr.Hex())
+		if err = s.trie.TryUpdate_SetKey(newAddrKey[:], data); err != nil {
 			s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
 		}
-		// fmt.Println("move leaf node to right -> addr:", addr.Hex(), "/ keyHash:", newAddrHash)
-		obj.addrHash = newAddrHash
-		s.NextKey += 1
-
-	} else { // < InactiveBoundaryKey : creating a crumb or restoring by creating (joonha) 
-		// fmt.Println("\n\nupdateStateObject ----------> third case\n\n")
-		/***********************************************************/
-		// HAD BEEN INACTIVATED SO THIS SEEMS NEW TO ACTIVE TRIE
-		/***********************************************************/
-		// Adding a new account where inactive account might already exist(there CAN be an inactive account).
-		// If then, act like this account is a new account. 
-		// Also updating AddrToKey is needed.
-		// No deletion is needed.
-
-		// deleting prev(inactive)Account snapshot occurs in RebuildStorageTrieFromSnapshot
-		s.KeysToDeleteDirty = append(s.KeysToDeleteDirty, addrKey)
-
-		// insert new leaf node at right side
-		newAddrHash := common.HexToHash(strconv.FormatInt(s.NextKey, 16))
-		s.AddrToKeyDirty[addr] = newAddrHash
-		// fmt.Println("(updateStateObject)insert -> key:", newAddrHash.Hex(), "/ addr:", addr.Hex())
-
-		if err = s.trie.TryUpdate_SetKey(newAddrHash[:], data); err != nil {
-			s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
-		}
-		// fmt.Println("move leaf node to right -> addr:", addr.Hex(), "/ keyHash:", newAddrHash)
-		obj.addrHash = newAddrHash
+		// fmt.Println("move leaf node to right -> addr:", addr.Hex(), "/ keyHash:", newAddrKey)
+		obj.addrHash = newAddrKey // --> is this necessary? (joonha) (review)
 		s.NextKey += 1
 	}
 
@@ -905,15 +845,7 @@ func (s *StateDB) deleteStateObject(obj *stateObject) {
 // to differentiate between non-existent/just-deleted, use getDeletedStateObject.
 func (s *StateDB) getStateObject(addr common.Address) *stateObject {
 	// if obj := s.getDeletedStateObject(addr); obj != nil && !obj.deleted { // --> original code
-	if obj := s.getDeletedStateObject(addr, 0); obj != nil && !obj.deleted { // get obj from the active trie (joonha)
-		return obj
-	}
-	return nil
-}
-
-// getStateObject_FromInactiveTrie retrieves a state object from inactive trie given by the address (joonha)
-func (s *StateDB) getStateObject_FromInactiveTrie(addr common.Address) *stateObject {
-	if obj := s.getDeletedStateObject(addr, 1); obj != nil && !obj.deleted { // get obj from the active trie (joonha)
+	if obj := s.getDeletedStateObject(addr); obj != nil && !obj.deleted { // get obj from the active trie (joonha)
 		return obj
 	}
 	return nil
@@ -923,19 +855,13 @@ func (s *StateDB) getStateObject_FromInactiveTrie(addr common.Address) *stateObj
 // nil for a deleted state object, it returns the actual object with the deleted
 // flag set. This is needed by the state journal to revert to the correct s-
 // destructed object instead of wiping all knowledge about the state object.
-// func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject { // --> original code
-func (s *StateDB) getDeletedStateObject(addr common.Address, restoring int64) *stateObject { // restoring option (whether to get account from active or inactive trie) has been added (joonha)
-	// TODO(joonha) restoring 파라미터 이름을 active/inactive 로 바꾸는 것이 좋아보임.
-	
+func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
+
 	// Prefer live objects if any is available
 	if obj := s.stateObjects[addr]; obj != nil {
 		return obj
 	}
 
-	
-	/******************************/
-	// v1.10.3
-	/******************************/
 	// If no live objects are available, attempt to use snapshots
 	// here is where a snapshot works (jmlee)
 	var (
@@ -945,18 +871,11 @@ func (s *StateDB) getDeletedStateObject(addr common.Address, restoring int64) *s
 	)
 
 
-	/****************************************************/
-	// SNAPSHOT
-	/****************************************************/
+	// using snapshot
 	if s.snap != nil {
 		// start := time.Now()
 		// acc, err := s.snap.Account(crypto.HashData(s.hasher, addr.Bytes()))
 
-		// fmt.Println("\n<<<<<<<<<<<<<<<<<<< getDeletedStateObject >>>>>>>>>>>>>>>>>>>> snapshot ON")
-
-		/***********************************/
-		// PRINT TO DEBUG
-		/***********************************/
 		// // print some of snapshot info for debugging (jmlee)
 		// maxIndexToPrint := int64(15)
 		// if s.snap != nil {
@@ -990,142 +909,72 @@ func (s *StateDB) getDeletedStateObject(addr common.Address, restoring int64) *s
 		}
 		var acc *snapshot.Account
 
-		/************************************/
-		// GET KEY
-		/************************************/
+		// get key
 		// change key to make compactTrie (jmlee)
 		key, doExist := common.AddrToKey[addr]
-		// fmt.Println("original key is ", key) //
-		// fmt.Println("restoring: ", restoring) //
 		if !doExist {
 			key = common.NoExistKey
 		}
 
-		// get key from inactive trie (during restoring) (joonha) --> is this really the case? TODO (joonha)
-		if restoring == 1 {
-			lastIndex := len(common.AddrToKey_inactive[addr]) - 1
-			if lastIndex < 0 { // error handling
-				return nil
-			}
-			key = common.AddrToKey_inactive[addr][lastIndex]
-		}
-
 		// if cannot find the account, return nil (joonha)
-		if restoring == 0 && common.HashToInt64(key) < common.InactiveBoundaryKey {
-			// fmt.Println("cannot find the account in the active trie (it was inactivated)")
-			return nil
-		} else if restoring == 0 && key == common.NoExistKey {
+		if key == common.NoExistKey {
 			// fmt.Println("can't find the account")
 			return nil
-		} else if restoring == 0 && common.HashToInt64(key) >= common.InactiveBoundaryKey {
-			// fmt.Println("can find the account in the active trie")
 		} 
+		
 		// fmt.Println("Try to find account at the snapshot -> addr:", addr.Hex(), "/ key:", key.Hex())
 
-		/***********************************/
-		// GET KEY'S OBJECT
-		/***********************************/
-		if restoring == 0 {
-			// fmt.Println("getDeletedStateObject >> restoring = 0 >> get account from snap ")
-			if acc, err = s.snap.Account(key); err == nil {
-				// if acc, err = s.snap.Account(crypto.HashData(s.hasher, addr.Bytes())); err == nil { // -> original code
-				if acc == nil {
-					// fmt.Println("  cannot find the address at the snapshot")
-					return nil
-				}
-				// data = &Account{
-				data = &types.StateAccount { // v1.10.16
-					Nonce:    acc.Nonce,
-					Balance:  acc.Balance,
-					CodeHash: acc.CodeHash,
-					Root:     common.BytesToHash(acc.Root),
-					Addr:	  acc.Addr, // core/state/snapshot/account.go (joonha)
-				}
-				if len(data.CodeHash) == 0 {
-					data.CodeHash = emptyCodeHash
-				}
-				if data.Root == (common.Hash{}) {
-					data.Root = emptyRoot
-				}
-				// fmt.Println("\n(GDSO) Nonce: ", data.Nonce)
-				// fmt.Println("(GDSO) Balance: ", data.Balance)
-				// fmt.Println("(GDSO) CodeHash: ", data.CodeHash)
-				// fmt.Println("(GDSO) Root: ", data.Root)
-				// fmt.Println("(GDSO) Addr: ", data.Addr)
-			}
-		} else if restoring == 1 { // during restoring, should get the account from inactive trie database not using the snapshot
-			// fmt.Println("getDeletedStateObject >> restoring = 1 >> get account from trie ")
-			enc, err := s.trie.TryGet_SetKey(key[:])
-			if err != nil {
-				s.setError(fmt.Errorf("getDeleteStateObject (%x) error: %v", addr.Bytes(), err))
+		// get key's object
+		if acc, err = s.snap.Account(key); err == nil {
+			// if acc, err = s.snap.Account(crypto.HashData(s.hasher, addr.Bytes())); err == nil { // -> original code
+			if acc == nil {
+				// fmt.Println("cannot find the address at the snapshot")
 				return nil
 			}
-			if len(enc) == 0 {
-				// fmt.Println("cannot find the address outside of the snapshot (1)")
-				return nil
+			data = &types.StateAccount {
+				Nonce:    acc.Nonce,
+				Balance:  acc.Balance,
+				CodeHash: acc.CodeHash,
+				Root:     common.BytesToHash(acc.Root),
+				Addr:	  acc.Addr, // core/state/snapshot/account.go (joonha)
 			}
-			// data = new(Account)
-			data = new(types.StateAccount) // v1.10.16
-			if err := rlp.DecodeBytes(enc, data); err != nil {
-				log.Error("Failed to decode state object", "addr", addr, "err", err)
-				return nil
+			if len(data.CodeHash) == 0 {
+				data.CodeHash = emptyCodeHash
 			}
+			if data.Root == (common.Hash{}) {
+				data.Root = emptyRoot
+			}
+			// fmt.Println("\n(GDSO) Nonce: ", data.Nonce)
+			// fmt.Println("(GDSO) Balance: ", data.Balance)
+			// fmt.Println("(GDSO) CodeHash: ", data.CodeHash)
+			// fmt.Println("(GDSO) Root: ", data.Root)
+			// fmt.Println("(GDSO) Addr: ", data.Addr)
 		}
 	}
 
-	
 
-	/****************************************************/
-	// NO SNAPSHOT
-	/****************************************************/
+
+	// no snapshot
 	// If snapshot unavailable or reading from it failed, load from the database
-
 	if s.snap == nil || err != nil {
-		// fmt.Println("\n<<<<<<<<<<<<<<<<<<< getDeletedStateObject >>>>>>>>>>>>>>>>>>>> snapshot OFF")
 		// fmt.Println("Try to find account without snapshot -> addr:", addr.Hex())
 		if metrics.EnabledExpensive {
 			// defer func(start time.Time) { s.AccountReads += time.Since(start) }(time.Now()) // v1.10.3 (joonha)
 		}
 
-		/************************************/
-		// GET KEY
-		/************************************/
-		// key := common.AddrToKey[addr]
+		// get key
 		key, doExist := common.AddrToKey[addr]
-		// fmt.Println("original key is ", key)
-		// fmt.Println("restoring: ", restoring)
 		if !doExist {
 			key = common.NoExistKey
 		}
-		// during restoration, get an obj from the inactiveTrie
-		// if lightNode, key should be nil or something that cannot be retrieved from AddrToKey_inactive
-		if restoring == 1 {
-			lastIndex := len(common.AddrToKey_inactive[addr]) - 1
-			if lastIndex < 0 { // error handling
-				return nil
-			}
-			key = common.AddrToKey_inactive[addr][lastIndex]
-			// fmt.Println("inactive key is ", key)
-		}
-		// if the account has already been inactivated, return nil (crumb account) (joonha)
-		if restoring == 0 && common.HashToInt64(key) < common.InactiveBoundaryKey {
-			// fmt.Println("key is ", key)
-			// fmt.Println("can't get the account because it is inactivated")
-			return nil
-		} else if restoring == 0 && key == common.NoExistKey {
-			// fmt.Println("key is ", key)
+		
+		if key == common.NoExistKey {
 			// fmt.Println("there is no account (retrieved from AddrToKey)")
 			return nil
-		} else if restoring == 0 && common.HashToInt64(key) >= common.InactiveBoundaryKey {
-			// fmt.Println("key is ", key)
-			// fmt.Println("the account is in the active trie")
 		}
 
-		/***********************************/
-		// GET KEY'S OBJECT
-		/***********************************/
+		// get key's object
 		enc, err := s.trie.TryGet_SetKey(key[:])
-		// enc, err := s.trie.TryGet(addr.Bytes()) // get account from state trie // --> original code
 		if err != nil {
 			s.setError(fmt.Errorf("getDeleteStateObject (%x) error: %v", addr.Bytes(), err))
 			return nil
@@ -1134,7 +983,6 @@ func (s *StateDB) getDeletedStateObject(addr common.Address, restoring int64) *s
 			// fmt.Println("cannot find the address outside of the snapshot (2)")
 			return nil
 		}
-		// data = new(Account) // v1.10.3
 		data = new(types.StateAccount) // v1.10.16
 
 		if err := rlp.DecodeBytes(enc, data); err != nil {
@@ -1169,25 +1017,15 @@ func (s *StateDB) GetOrNewStateObject(addr common.Address) *stateObject {
 func (s *StateDB) createObject(addr common.Address, blockNum *big.Int) (newobj, prev *stateObject) { // (joonha)
 
 	// insert to map to make compactTrie (jmlee)
-	key, doExist := common.AddrToKey[addr]
+	_, doExist := common.AddrToKey[addr]
 	if !doExist && addr != common.ZeroAddress { // creating whole-new account
 		newAddrKey := common.HexToHash(strconv.FormatInt(s.NextKey, 16))
 		// fmt.Println("make new account -> addr:", addr.Hex(), "/ keyHash:", newAddrKey)
 		s.AddrToKeyDirty[addr] = newAddrKey
 		s.NextKey += 1
-	} else if doExist && common.HashToInt64(key) < s.CheckpointKey { // creating crumb account (joonha)
-		newAddrKey := common.HexToHash(strconv.FormatInt(s.NextKey, 16))
-		s.AddrToKeyDirty[addr] = newAddrKey
-		s.NextKey += 1
 	}
 
-	// (joonha)
-	// creating a crumb account, don't get the prev account
-	if doExist && common.HashToInt64(key) < s.CheckpointKey {
-		prev = nil
-	} else { // get the object from the active trie
-		prev = s.getDeletedStateObject(addr, 0) // Note, prev might have been deleted, we need that!
-	}
+	prev = s.getDeletedStateObject(addr) // Note, prev might have been deleted, we need that!
 
 	var prevdestruct bool
 	if s.snap != nil && prev != nil {
@@ -1211,13 +1049,11 @@ func (s *StateDB) createObject(addr common.Address, blockNum *big.Int) (newobj, 
 		s.journal.append(resetObjectChange{prev: prev, prevdestruct: prevdestruct})
 	}
 
-	// if creating a crumb account, set nonce to blockNum * 64 (joonha)
-	if doExist && common.HashToInt64(key) < s.CheckpointKey {
-		if blockNum != nil {
-			newNonce := big.NewInt(0)
-			newNonce.Mul(blockNum, big.NewInt(64))
-			newobj.setNonce(newNonce.Uint64())
-		}
+	// set nonce blocknum * 64 (joonha)
+	if blockNum != nil { // if called by CreateAccount_withBlockNum
+		newNonce := big.NewInt(0)
+		newNonce.Mul(blockNum, big.NewInt(64))
+		newobj.setNonce(newNonce.Uint64())
 	}
 
 	s.setStateObject(newobj)
@@ -1229,7 +1065,7 @@ func (s *StateDB) createObject(addr common.Address, blockNum *big.Int) (newobj, 
 
 // createObject_restoring creates an object restored from the inactive trie (joonha)
 func (s *StateDB) createObject_restoring(addr common.Address) (newobj, prev *stateObject) {
-
+	
 	// insert to map to make compactTrie (jmlee)
 	_, doExist := common.AddrToKey[addr]
 	if !doExist && addr != common.ZeroAddress {
@@ -1239,32 +1075,15 @@ func (s *StateDB) createObject_restoring(addr common.Address) (newobj, prev *sta
 		s.NextKey += 1
 	}
 
-	// (joonha)
-	// prev is the deleted object that would be converted into the active object
-	// get the object from the inactiveTrie
-	prev = s.getDeletedStateObject(addr, 1) // Note, prev might have been deleted, we need that!
-
-	var prevdestruct bool
-	if s.snap_inactive != nil && prev != nil {
-		if common.UsingInactiveStorageSnapshot {
-			_, prevdestruct = s.snapDestructs_inactive[prev.addrHash]
-			if !prevdestruct {
-				s.snapDestructs_inactive[prev.addrHash] = struct{}{}
-			}
-		}
-	}
-	// newobj = newObject(s, addr, Account{})
-	newobj = newObject(s, addr, types.StateAccount{}) // v1.10.16
-	newobj.setNonce(0) // sets the object to dirty
-	if prev == nil {
-		s.journal.append(createObjectChange{account: &addr})
-	} else {
-		s.journal.append(resetObjectChange{prev: prev, prevdestruct: prevdestruct})
-	}
+	newobj = newObject(s, addr, types.StateAccount{})
+	s.journal.append(createObjectChange{account: &addr})
 	s.setStateObject(newobj)
-	if prev != nil && !prev.deleted {
-		return newobj, prev
-	}
+
+	// // Create active account snapshot. // --> this occurs in updateStateObject (joonha)
+	// if common.UsingActiveSnapshot {
+	// 	s.snapAccounts[s.AddrToKeyDirty[addr]] = make([]byte, 0) // byte is a numeric type, actually an alias for uint8 (joonha)
+	// }
+
 	return newobj, nil
 }
 
@@ -1280,26 +1099,24 @@ func (s *StateDB) createObject_restoring(addr common.Address) (newobj, prev *sta
 // Carrying over the balance ensures that Ether doesn't disappear.
 func (s *StateDB) CreateAccount(addr common.Address) {
 	// newObj, prev := s.createObject(addr) // --> original code
-	newObj, prev := s.createObject(addr, nil) // (joonha)
+	newObj, prev := s.createObject(addr, nil) // setting blockNum to nil (joonha)
 	if prev != nil {
 		newObj.setBalance(prev.data.Balance)
 	}
 }
 
-// (joonha)
+// CreateAccount_withBlockNum creates a state object (joonha)
+// blocknum is needed to set nonce
 func (s *StateDB) CreateAccount_withBlockNum(addr common.Address, blockNum *big.Int) {
 	newObj, prev := s.createObject(addr, blockNum)
-	if prev != nil { // previous account in Active trie
+	if prev != nil { // ref: https://github.com/ethereum/go-ethereum/issues/25334
 		newObj.setBalance(prev.data.Balance)
 	}
 }
 
 // CreateAccount_restoring restores account by creation (joonha)
 func (s *StateDB) CreateAccount_restoring(addr common.Address) {
-	newObj, prev := s.createObject_restoring(addr)
-	if prev != nil {
-		newObj.setBalance(prev.data.Balance)
-	}
+	s.createObject_restoring(addr)
 }
 
 func (db *StateDB) ForEachStorage(addr common.Address, cb func(key, value common.Hash) bool) error {
@@ -1367,7 +1184,8 @@ func (s *StateDB) Copy() *StateDB {
 	for key, value := range s.AlreadyRestoredDirty {
 		state.AlreadyRestoredDirty[key] = value
 	}
-	// (joonha)
+	
+	// TODO simplify this code (joonha)
 	for key, _ := range s.AddrToKeyDirty_inactive {
 		// deep copy
 		for idx, value := range s.AddrToKeyDirty_inactive[key] {
@@ -1377,7 +1195,7 @@ func (s *StateDB) Copy() *StateDB {
 			}
 			state.AddrToKeyDirty_inactive[key][idx] = value
 		}
-		if len(s.AddrToKeyDirty_inactive[key]) > 0 { 
+		if len(s.AddrToKeyDirty_inactive[key]) > 0 {
 			state.AddrToKeyDirty_inactive[key] = state.AddrToKeyDirty_inactive[key][:len(s.AddrToKeyDirty_inactive[key])]
 		}
 
@@ -1386,6 +1204,7 @@ func (s *StateDB) Copy() *StateDB {
 			delete(state.AddrToKeyDirty_inactive, key);
 		}
 	}
+
 	for i := 0; i < len(s.KeysToDeleteDirty); i++ {
 		state.KeysToDeleteDirty[i] = s.KeysToDeleteDirty[i]
 	}
@@ -1479,7 +1298,7 @@ func (s *StateDB) Copy() *StateDB {
 		}
 		state.snapAccounts_inactive = make(map[common.Hash][]byte)
 		for k, v := range s.snapAccounts_inactive {
-			state.snapAccounts_inactive[k] = v 
+			state.snapAccounts_inactive[k] = v
 		}
 		state.snapStorage_inactive = make(map[common.Hash]map[common.Hash][]byte)
 		for k, v := range s.snapStorage_inactive {
@@ -1490,7 +1309,7 @@ func (s *StateDB) Copy() *StateDB {
 			state.snapStorage_inactive[k] = temp
 		}
 	}
-	
+
 	return state
 }
 
@@ -1698,7 +1517,7 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 		// 	trieSlotValue := obj.GetCommittedState_hashedKey(s.db, slotKey)
 		// 	fmt.Println("trieSlotValue: ", trieSlotValue)
 		// 	slotKeyList = append(slotKeyList, slotKey)
-		// } 
+		// }
 		// fmt.Println("[StorageTrie(addr)]: ", s.StorageTrie(addr))
 		// fmt.Println("[addr]: ", addr)
 		// fmt.Println("[slotKeyList]: ", slotKeyList)
@@ -1721,48 +1540,16 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 
 	// apply dirties to common.AddrToKey_inactive (joonha)
 	// fmt.Println("len(s.AddrToKeyDirty_inactive): ", len(s.AddrToKeyDirty_inactive))
-	for key, _ := range s.AddrToKeyDirty_inactive {
-		prevLen := 0
-		_, doExist_1 := common.AddrToKey_inactive[key]
-		if doExist_1 {
-			prevLen = len(common.AddrToKey_inactive[key])
-		} else {
-			prevLen = 1
-		}
-
-		for _, value := range s.AddrToKeyDirty_inactive[key] {
-			_, doExist := common.AddrToKey_inactive[key]
-			if !doExist {
-				common.AddrToKey_inactive[key] = make([]common.Hash, len(s.AddrToKeyDirty_inactive[key]))
-				// fmt.Println("addr: ", key)
-			}
-			// fmt.Println("length: ", len(common.AddrToKey_inactive[key]))
-			common.AddrToKey_inactive[key] = append(common.AddrToKey_inactive[key], value)
-		}
-		common.AddrToKey_inactive[key] = common.AddrToKey_inactive[key][prevLen:]
-
-		orig_len := len(s.AddrToKeyDirty_inactive[key])
-		if orig_len > 0 { 
-			for i := 0; i < orig_len; i++ {
-				for j := 0; j < len(s.AddrToKeyDirty_inactive[key]); j++ {
-					if s.AddrToKeyDirty_inactive[key][j] == common.ToBeDeletedKey {
-						s.AddrToKeyDirty_inactive[key] = append(s.AddrToKeyDirty_inactive[key][:j], s.AddrToKeyDirty_inactive[key][j+1:]...)
-						common.AddrToKey_inactive[key] = append(common.AddrToKey_inactive[key][:j], common.AddrToKey_inactive[key][j+1:]...)
-						break;
-					}
-				}
-			}
-		}
-
-		if len(s.AddrToKeyDirty_inactive[key]) == 0 {
-			delete(common.AddrToKey_inactive, key);
-		}
-
-		// fmt.Println("s.AddrToKeyDirty_inactive[",key,"]: ", s.AddrToKeyDirty_inactive[key])
-		// fmt.Println("common.AddrToKey_inactive[",key,"]: ", common.AddrToKey_inactive[key])
+	for key, value := range s.AddrToKeyDirty_inactive {		
+		// // (debugging) export log to file
+		// f1, err := os.OpenFile("joonha dirty addrtokey inactive.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		// // f1, err := os.Create("joonha dirty addrtokey inactive.txt")
+		// checkError(err)
+		// defer f1.Close()
+		// fmt.Fprintf(f1, "(before)addr: %s\nlen(common.AddrToKey_inactive[%s]): %d\n", key, key, len(common.AddrToKey_inactive[key]))
+		common.AddrToKey_inactive[key] = append(common.AddrToKey_inactive[key], value...)
+		// fmt.Fprintf(f1, "(after)addr: %s\nlen(common.AddrToKey_inactive[%s]): %d\n\n", key, key, len(common.AddrToKey_inactive[key]))
 	}
-	// fmt.Println("\nlen(common.AddrToKey_inactive): ", len(common.AddrToKey_inactive))
-
 
 
 
@@ -1789,20 +1576,15 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 		start = time.Now()
 	}
 
-	// // decide whether to delete leaf nodes or not (jmlee) --> commented-out by (joonha) cuz it occurs an err and it's already done in fillTransactions
+	// // decide whether to delete leaf nodes or not (jmlee) --> commented-out by (joonha) cuz it occurs an err and the check is already done in fillTransactions()
 	// // this might be needed for full sync
 	// if common.DoDeleteLeafNode {
 	// 	// delete previous leaf nodes from state trie
 	// 	s.DeletePreviousLeafNodes(common.KeysToDelete)
 
-	// 	// reset common.KeysToDelete --> commented-out by (joonha) cuz it occurs an err and it's already done in fillTransactions
+	// 	// reset common.KeysToDelete --> commented-out by (joonha) cuz it occurs an err and the check is already done in fillTransactions()
 	// 	common.KeysToDelete = make([]common.Hash, 0) // only works at the epoch
 	// }
-
-	// 여기서도 state trie에 delete와 inactivate가 적용되지 않은 상태인지 확인하기 위해 프린팅을 해보는 것임 (joonha)
-	// fmt.Println("\n\n(3) s.db.TrieDB(): ", s.db.TrieDB(), "\n\n")
-
-	// Here, writing to TrieDB is occurred (joonha) (이곳을 기준으로 (3)과 (4)의 프린팅에 차이가 있기 때문임.)
 
 	// The onleaf func is called _serially_, so we can reuse the same account
 	// for unmarshalling every time.
@@ -1819,9 +1601,6 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 	if err != nil {
 		return common.Hash{}, err
 	}
-
-	// 여기서도 state trie에 delete와 inactivate가 적용되지 않은 상태인지 확인하기 위해 프린팅을 해보는 것임 (joonha)
-	// fmt.Println("\n\n(4) s.db.TrieDB(): ", s.db.TrieDB(), "\n\n")
 
 	if metrics.EnabledExpensive {
 		s.AccountCommits += time.Since(start)
@@ -1849,7 +1628,7 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 			// 	// (joonha)
 			// 	for slotKey, slotValue := range s.snapStorage[k] {
 			// 		fmt.Println("\ts.snapStorage -> slotKey:", slotKey, "/ slotValue: ", slotValue)
-			// 	} 
+			// 	}
 			// }
 
 			if err := s.snaps.Update(root, parent, s.snapDestructs, s.snapAccounts, s.snapStorage); err != nil {
@@ -1869,8 +1648,8 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 	// update inactive storage snapshot (joonha)
 	if s.snap_inactive != nil {
 		if common.UsingInactiveStorageSnapshot {
-			// s.snap_inactive = s.snaps_inactive.Snapshot(root) 
-			if s.snap_inactive != nil { 
+			// s.snap_inactive = s.snaps_inactive.Snapshot(root)
+			if s.snap_inactive != nil {
 
 				// // code for debugging
 				// for k, v := range s.snapAccounts_inactive {
@@ -1879,11 +1658,11 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 				// for k, v := range s.snapStorage_inactive {
 				// 	for kk, vv := range v {
 				// 		fmt.Println("s.snapStorage_inactive[", k, "] -> kk:", kk, "/ vv:", vv)
-				// 	} 
+				// 	}
 				// }
 
 				if parent_inactive := s.snap_inactive.Root(); parent_inactive != root {
-					// TODO(joonha): snapAccount_inactive는 없을테니 추후 저장 효율을 위해 nil을 넘겨줄 것.
+					// here, snapAccounts_inactive might be nil (joonha)
 					if err := s.snaps_inactive.Update(root, parent_inactive, s.snapDestructs_inactive, s.snapAccounts_inactive, s.snapStorage_inactive); err != nil {
 						log.Warn("Failed to update snapshot tree", "from", parent_inactive, "to", root, "err", err)
 					}
@@ -1980,32 +1759,23 @@ func (s *StateDB) DeletePreviousLeafNodes(keysToDelete []common.Hash) {
 // InactivateLeafNodes inactivates inactive accounts (i.e., move old leaf nodes to left) (jmlee)
 func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int64 {
 
-	// fmt.Println("/******************************/")
-	// fmt.Println("InactivateLeafNodes")
-	// fmt.Println("/******************************/")
-
 	// fmt.Println("\ninspect trie to inactivate:", firstKeyToCheck, "~",lastKeyToCheck)
 	// fmt.Println("trie root before inactivate leaf nodes:", s.trie.Hash().Hex())
 
-	// normTrie := s.trie.GetTrie() // TODO: using this function, we can delete SecureTrie.***_SetKey functions
-
-	// DFS the non-nil account from the trie (joonha)
+	// DFS the non-nil leaf nodes from the trie (joonha)
 	firstKey := common.Int64ToHash(firstKeyToCheck)
 	lastKey := common.Int64ToHash(lastKeyToCheck)
 	AccountsToInactivate, KeysToInactivate, _ := s.trie.GetAllLeafNodes(firstKey[:], lastKey[:])
 
-	// fmt.Println("")
 	// fmt.Println("Accounts length: ", len(AccountsToInactivate))
 	// fmt.Println("Keys length: ", len(KeysToInactivate))
-	// // fmt.Println("AccountsToInactivate: ", AccountsToInactivate)
-	// // fmt.Println("KeysToInactivate: ", KeysToInactivate)
 
 	// move inactive leaf nodes to left
-	for index, key := range KeysToInactivate { 
-
-		// to delete storage trie from disk
+	for index, key := range KeysToInactivate {
 		addr := common.BytesToAddress(AccountsToInactivate[index])
-		common.AccountsToDeleteFromDisk = append(common.AccountsToDeleteFromDisk, addr)
+
+		// // to delete storage trie from disk // --> commented-out because we won't delete'em from disk due to overlapping issue (joonha)
+		// common.AccountsToDeleteFromDisk = append(common.AccountsToDeleteFromDisk, addr)
 
 		// insert inactive leaf node to left
 		keyToInsert := common.Int64ToHash(common.InactiveBoundaryKey + int64(index))
@@ -2014,44 +1784,36 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 			s.setError(fmt.Errorf("updateStateObject (%x) error: %v", keyToInsert[:], err))
 		} else {
 
-			// apply inactivation result to AddrToKey 
-			// Q. Should this be applied to AddrToKey_Dirty?
-			common.AddrToKey[common.BytesToAddress(AccountsToInactivate[index])] = keyToInsert
-			s.AddrToKeyDirty[common.BytesToAddress(AccountsToInactivate[index])] = keyToInsert
-
-			// save the inactive account key info for later restoration 
-			_, doExist := s.AddrToKeyDirty_inactive[common.BytesToAddress(AccountsToInactivate[index])]
-			if !doExist {
-				s.AddrToKeyDirty_inactive[common.BytesToAddress(AccountsToInactivate[index])] = common.AddrToKey_inactive[common.BytesToAddress(AccountsToInactivate[index])]
-			}
-			s.AddrToKeyDirty_inactive[common.BytesToAddress(AccountsToInactivate[index])] = append(s.AddrToKeyDirty_inactive[common.BytesToAddress(AccountsToInactivate[index])], keyToInsert)
-
-			// fmt.Println("s.AddrToKeyDirty_inactive is ", s.AddrToKeyDirty_inactive[common.BytesToAddress(AccountsToInactivate[index])])
-			// fmt.Println("acc: ", common.BytesToAddress(AccountsToInactivate[index]))
+			// delete from AddrToKey
+			delete(common.AddrToKey, common.BytesToAddress(AccountsToInactivate[index]))
+			delete(s.AddrToKeyDirty, common.BytesToAddress(AccountsToInactivate[index])) // maybe unnenecessary (joonha)
+			
+			// insert to AddrToKey_inactive
+			// applying to dirty doesn't make change so apply directly to common (joonha)
+			// s.AddrToKeyDirty_inactive[common.BytesToAddress(AccountsToInactivate[index])] = append(s.AddrToKeyDirty_inactive[common.BytesToAddress(AccountsToInactivate[index])], keyToInsert)
+			common.AddrToKey_inactive[common.BytesToAddress(AccountsToInactivate[index])] = append(common.AddrToKey_inactive[common.BytesToAddress(AccountsToInactivate[index])], keyToInsert)
 		}
 
 
-		/*****************************/
-		// SNAPSHOT
-		/*****************************/
-		// // ACCOUNT 
-		// // we don't need inactive account snapshot, but in case of storage depending on account, move accounts to inactive snapshot Tree
-		// // if commenting this part out doesn't occur err, comment out for memory optimization.
-		// // s.snapAccounts_inactive = make(map[common.Hash][]byte)
+		/*
+		* [Inactive Storage Snapshot]
+		* Storing inactive storage snapshot to use them to rebuild 
+		* storage trie when restoring CA. If active snapshot is on, 
+		* copy it. Else, traverse the storage trie and manually make 
+		* the snapshot.
+		*/
+	
+		// // [Inactive Account Snapshot]
+		// // We don't need inactive account snapshot, but in case of storage depending on the account, move accounts to inactive snapshot Tree.
+		// // If commenting this part out doesn't occur err, comment out for storage optimization.
 		// acc, _ := s.snap.AccountRLP(key)
-		// // fmt.Println("### acc: ", acc)
 		// s.snapAccounts_inactive[keyToInsert] = acc
-		// // fmt.Println("s.snapAccounts_inactive[keyToInsert]: ", s.snapAccounts_inactive[keyToInsert])
-		// // fmt.Println(">>> key is ", keyToInsert)
 
-		// STORAGE
 		if common.UsingInactiveStorageSnapshot {
-
 			// accountList := s.snaps.AccountList_ethane(snapRoot)
 			// fmt.Println("accountList: ", accountList) // key
 
 			if common.UsingActiveSnapshot { // when activeSnapshot is on, get slotKeyList from actvie snapshot
-
 				snapRoot := s.snap.Root()
 
 				// get slotKeyList from active snapshot
@@ -2060,25 +1822,25 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 				temp := make(map[common.Hash][]byte)
 				for _, slotKey := range slotKeyList {
 					// fmt.Println("slotKey is ", slotKey)
-					v, _ := s.snap.Storage(key, slotKey) 
+					v, _ := s.snap.Storage(key, slotKey)
 					// fmt.Println("v is", v)
 					temp[slotKey] = v
 				}
-				s.snapStorage_inactive[keyToInsert] = temp	
+				s.snapStorage_inactive[keyToInsert] = temp
 
-				// DELETE
+				// delete previous active snapshot 
 				s.snapDestructs[key] = struct{}{}
 				delete(s.snapAccounts, key)
 				delete(s.snapStorage, key)
 
-			} else if common.UsingActiveSnapshot == false { // get slotKeyList from object's storage trie			
+			} else if common.UsingActiveSnapshot == false { // get slotKeyList from object's storage trie
 				obj := s.getStateObject(addr)
 				slots := make(map[common.Hash][]byte)
 
 				if obj != nil {
 					storageTrie := obj.getTrie(s.db)
 					// fmt.Println("storageTrie: ", storageTrie)
-					obj.Print_storageTrie() // this printing should be after getTrie()
+					// obj.Print_storageTrie() // this printing should be after getTrie()
 
 					slots, _ = storageTrie.TryGetAllSlots()
 					s.snapStorage_inactive[keyToInsert] = slots
@@ -2088,14 +1850,8 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 					// fmt.Println("obj has been deleted.")
 				}
 			}
-
-			// // DELETE ACCOUNT FROM TRIE
-			// if err := s.trie.TryUpdate_SetKey(key[:], nil); err != nil {
-			// 	s.setError(fmt.Errorf("updateStateObject (%x) error: %v", key[:], err))
-			// }
 		}
-
-		// DELETE ACCOUNT FROM TRIE
+		// delete account from trie
 		if err := s.trie.TryUpdate_SetKey(key[:], nil); err != nil {
 			s.setError(fmt.Errorf("updateStateObject (%x) error: %v", key[:], err))
 		}
@@ -2104,18 +1860,6 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 	// // print result
 	// fmt.Println("inactivate", len(KeysToInactivate), "accounts")
 	// fmt.Println("trie root after inactivate leaf nodes:", s.trie.Hash().Hex())
-
-	// for index, account := range AccountsToInactivate {
-	// 	target := common.HexToAddress("0x2A3e8b070fB0691B090E9326AE95e029A4776ce4")
-	// 	if(target == common.BytesToAddress(account)){
-	// 		fmt.Println("the target account is inactivated.")
-	// 		fmt.Println("[0x2A3e8b070fB0691B090E9326AE95e029A4776ce4] is ", index, "-th elem of AccountsToInactivate")
-	// 	}
-	// 	// fmt.Println(common.BytesToAddress(account))
-	// 	// if(index >= 100){
-	// 	// 	break
-	// 	// }
-	// }
 
 	// return # of inactivated accounts
 	return int64(len(KeysToInactivate))
@@ -2126,47 +1870,37 @@ func (s *StateDB) GetAccount(addr common.Address) *types.StateAccount {
 	return &s.getStateObject(addr).data
 }
 
-// first time to be restored, Add it to s.AlreadyRestoredDirty (joonha)
+// first time to be restored, add it to s.AlreadyRestoredDirty (joonha)
 func (s *StateDB) UpdateAlreadyRestoredDirty(inactiveKey common.Hash) {
-	_, doExist := s.AlreadyRestoredDirty[inactiveKey]
-	if !doExist {
-		s.AlreadyRestoredDirty = map[common.Hash]common.Empty{}
-	}
 	s.AlreadyRestoredDirty[inactiveKey] = common.Empty{}
 	// fmt.Println("AlreadyRestoredDirty map length: ", len(s.AlreadyRestoredDirty))
 }
 
-// remove restored account from the list s.AddrToKeyDirty_inactive (joonha)
-func (s *StateDB) RemoveRestoredKeyFromAddrToKeyDirty_inactive(inactiveAddr common.Address, retrievedKeys []common.Hash) {
-	_, doExist := s.AddrToKeyDirty_inactive[inactiveAddr]
-	if !doExist {
-		s.AddrToKeyDirty_inactive[inactiveAddr] = common.AddrToKey_inactive[inactiveAddr]
-	}
-
+// remove restored account from the list common.AddrToKey_inactive (joonha)
+func (s *StateDB) RemoveRestoredKeyFromAddrToKey_inactive(inactiveAddr common.Address, retrievedKeys []common.Hash) {
 	temp := 0
-	for i := len(s.AddrToKeyDirty_inactive[inactiveAddr])-1; i >= 0; i-- {
+	for i := len(common.AddrToKey_inactive[inactiveAddr])-1; i >= 0; i-- {
 		for j := temp; j < len(retrievedKeys); j++ {
-			if s.AddrToKeyDirty_inactive[inactiveAddr][i] == retrievedKeys[j] {
+			if common.AddrToKey_inactive[inactiveAddr][i] == retrievedKeys[j] {
 				// fmt.Println("Remove", i, "th elem of AddrToKeyDirty_inactive[", inactiveAddr, "]")
 				// fmt.Println("retrievedKeys[",j,"]: ", retrievedKeys[j])
-				s.AddrToKeyDirty_inactive[inactiveAddr][i] = common.ToBeDeletedKey
+				common.AddrToKey_inactive[inactiveAddr] = append(common.AddrToKey_inactive[inactiveAddr][:i], common.AddrToKey_inactive[inactiveAddr][i+1:]...)
 				temp = j
 				break;
 			}
 		}
 	}
-
 	// fmt.Println("\n\nlen(s.AddrToKeyDirty_inactive[inactiveAddr]): ", len(s.AddrToKeyDirty_inactive[inactiveAddr]), "\n\n")
 }
 
 // rebuild a storage trie when restoring using snapshot (joonha)
 func (s *StateDB) RebuildStorageTrieFromSnapshot(snapRoot common.Hash, addr common.Address, accountHash common.Hash) {
 
-	// TODO: verify if the rebuilt trie root is equal to the account's storage root 
+	// TODO (joonha) verify if the rebuilt trie root is equal to the account's storage root
 
 	// retrieve storage slots from snapshot
 	slotKeyList := s.snaps_inactive.StorageList_ethane(snapRoot, accountHash)
-	// fmt.Println("RESTORING STORAGE LIST: ", slotKeyList)	
+	// fmt.Println("RESTORING STORAGE LIST: ", slotKeyList)
 
 	// rebuild storage trie
 	temp := make(map[common.Hash][]byte)
@@ -2178,9 +1912,20 @@ func (s *StateDB) RebuildStorageTrieFromSnapshot(snapRoot common.Hash, addr comm
 		s.SetState_Restore(addr, slotKey, common.BytesToHash(v))
 		temp[slotKey] = v
 	}
-	obj := s.getStateObject(addr) 
+
+	// commit changed storage trie
+	obj := s.getStateObject(addr)
 	if obj != nil {
 		obj.CommitTrie_hashedKey(s.db)
+	}
+
+	// create active storage snapshot
+	if common.UsingActiveSnapshot {
+		addrKey, doExist := s.AddrToKeyDirty[addr]
+		if !doExist {
+			addrKey = common.AddrToKey[addr]
+		}
+		s.snapStorage[addrKey] = temp
 	}
 
 	// delete inactive snapshot
@@ -2188,15 +1933,6 @@ func (s *StateDB) RebuildStorageTrieFromSnapshot(snapRoot common.Hash, addr comm
 	delete(s.snapAccounts_inactive, accountHash)
 	s.snapDestructs_inactive[accountHash] = struct{}{}
 }
-
-// (joonha)
-func (s *StateDB) GetTrie(addr common.Address) Trie {
-	obj := s.getStateObject_FromInactiveTrie(addr) 
-	if obj == nil {
-		return nil
-	}
-	return obj.getTrie(s.db)
-} 
 
 // (joonha)
 func (s *StateDB) PrintStateTrie() {
@@ -2210,4 +1946,4 @@ func (s *StateDB) TrieDB() *trie.Database {
 
 func (s *StateDB) Hash() common.Hash {
 	return s.trie.Hash()
-} 
+}

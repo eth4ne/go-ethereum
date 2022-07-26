@@ -64,7 +64,6 @@ type Empty struct{}
 
 var (
 	// to delete and inactivate the nodes just for the secode appearance (worker.go) (joonha)
-	// IsFirst bool
 	IsSecond bool
 
 	// inactive storage snapshot ON/OFF option (joonha)
@@ -86,7 +85,8 @@ var (
 	AddrToKey_inactive = make(map[Address][]Hash)
 
 	KeysToDelete = make([]Hash, 0) // store previous leaf nodes' keys to delete later
-	AccountsToDeleteFromDisk = make([]Address, 0) // store previous leaf nodes' keys to delete later (joonha)
+	KeysToDelete_restore = make([]Hash, 0) // previous leaf nodes' keys to delete after restoration
+	// AccountsToDeleteFromDisk = make([]Address, 0) // store previous leaf nodes' keys to delete later (joonha)
 	// AddrsToDeleteFromDisk = make(map[Hash][]byte) // store previous leaf nodes(addr) to delete later (joonha)
 	DeleteLeafNodeEpoch = int64(315) // block epoch to delete previous leaf nodes (from active area to temp area) (const)
 	// DeleteLeafNodeEpoch = big.NewInt(3) // block epoch to delete previous leaf nodes (& inactivate inactive leaf nodes) (const)
@@ -100,7 +100,6 @@ var (
 	InspectEpoch = int64(315)
 
 	NoExistKey = HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff") // very large key which will not be reached forever (const)
-	ToBeDeletedKey = HexToHash("0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe") // very large key which will not be reached forever (const)
 	ZeroAddress = HexToAddress("0x0") // (const)
 
 	RewardAddress = HexToAddress("0x36eCA1fe87f68B49319dB55eBB502e68c4981716")

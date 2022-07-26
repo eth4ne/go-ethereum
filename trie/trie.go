@@ -169,7 +169,7 @@ func (t *Trie) tryGet(origNode node, key []byte, pos int) (value []byte, newnode
 	}
 }
 
-// GetAllLeafNodes returns all found accounts and the keys of that accounts (joonha)
+// GetAllLeafNodes returns all non-nil leaf nodes' accounts and keys between the firstKey and the lastKey (joonha)
 func (t *Trie) GetAllLeafNodes(firstKey, lastKey []byte) ([][]byte, []common.Hash, error) {
 	// init
 	Accounts = make([][]byte, 0)
@@ -182,21 +182,18 @@ func (t *Trie) GetAllLeafNodes(firstKey, lastKey []byte) ([][]byte, []common.Has
 	return Accounts, Keys, nil
 }
 
-// RE (220714)
-// DFS by recursion and find all the existing value nodes (joonha)
+// internal function of GetAllLeafNodes (joonha)
 func (t *Trie) getAllLeafNodes(currNode node, parentKey, firstKey, lastKey []byte, leftIsSafe, rightIsSafe bool, pos int) {
 
-	/****************************************************************************/ 
-	// this function does:
-	// [TRAVERSE] from the firstKey to the lastKey
-	// [FIND] non-nil valueNodes to delete
-	// [SAVE] the found account info to the Accounts array and the Keys array
-	//
-	// notations:
-	// [pos] pointer pointing each digit of the key (related to the trie depth)
-	// [n.Key] n's key (short node's key is just the common part)
-	// [n] encountered node
-	/****************************************************************************/
+	/*
+	* Depth-Frist-Search by recursion and find all the non-nil leaf nodes.
+	* Range check occurs at shortNode and fullNode.
+	* 
+	* notation:
+	* pos - pointer that pointing each digit of the key
+	* n.Key - n's Key (shortNode's key is just the common part)
+	* n - encountered node
+	*/
 
 	// TODO (joonha): https://www.geeksforgeeks.org/how-to-compare-two-slices-of-bytes-in-golang/
 	// refer above site and try to use bytes.Compare() function.
@@ -818,7 +815,7 @@ func (t *Trie) Reset() {
 
 // print trie nodes details in human readable form (jmlee)
 func (t *Trie) Print() {
-	fmt.Println(t.root.toString("", t.db))
+	fmt.Println(t.root.toString("", t.db, 0))
 }
 
 // Print_storageTrie print storage trie node details in human readable form (joonha)

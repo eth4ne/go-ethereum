@@ -545,7 +545,6 @@ func (w *worker) mainLoop() {
 	for {
 		select {
 		case req := <-w.newWorkCh:
-			//fmt.Println("\n\n>>>>>>>>>>>>>>>>>>>>>>> mainLoop > req is w.newWorkch") // (joonha)
 			w.commitWork(req.interrupt, req.noempty, req.timestamp)
 
 		case req := <-w.getWorkCh:
@@ -872,7 +871,7 @@ func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*
 	log.Trace("[worker.go/commitTransaction] Applying transaction", "to", tx.To())
 	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &w.blockMiner, env.gasPool, env.state, env.header, tx, &env.header.GasUsed, *w.chain.GetVMConfig())
 	if err != nil {
-		log.Info("[worker.go/commitTransaction] ApplyTransaction error", "to", tx.To(), err) // err (joonha)
+		log.Info("[worker.go/commitTransaction] ApplyTransaction error", "to", tx.To(), err)
 		env.state.RevertToSnapshot(snap)
 		return nil, err
 	}
@@ -1167,9 +1166,6 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 // into the given sealing block. The transaction selection and ordering strategy can
 // be customized with the plugin in the future.
 func (w *worker) fillTransactions(interrupt *int32, env *environment) {
-	//fmt.Println("\n\n/************************************************************************************/")
-	//fmt.Println("// fillTransactions (block number: ", env.header.Number.Int64(), ")")
-	//fmt.Println("/************************************************************************************/\n")
 	// Split the pending transactions into locals and remotes
 	// fmt.Println("split the pending transactions into locals and remotes") // (jmlee)
 	// Fill the block with all available pending transactions.
@@ -1203,6 +1199,7 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 	* Delete and inactivate only for the second execution.
 	* Placed epoch check inside the IsSecond check because the
 	* delete epoch and the inactivate epoch might be different.
+	* (commenter: joonha)
 	*/
 
 	bn := env.header.Number.Int64()
@@ -1226,10 +1223,12 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 			}
 			
 			keysToDelete := append(common.KeysToDelete, env.state.KeysToDeleteDirty...) // to include current state's KeysToDeleteDirty
+			keysToDelete = append(keysToDelete, common.KeysToDelete_restore...) // to include previous keys of inactive trie after restoration
 			env.state.DeletePreviousLeafNodes(keysToDelete)
 
 			// reset common.KeysToDelete
 			common.KeysToDelete = make([]common.Hash, 0)
+			common.KeysToDelete_restore = make([]common.Hash, 0)
 
 		} else { // not a delete Epoch
 			// fmt.Println("return cuz it's not a deleting epoch")
@@ -1327,7 +1326,7 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 	// save this block's initial NextKey (joonha)
 	if work.header != nil && w.current != nil {
 		// common.CheckpointKeys[work.header.Number.Int64()+1] = w.current.state.NextKey
-		common.CheckpointKeys[work.header.Number.Int64()+1] = w.current.state.NextKey // 220415
+		common.CheckpointKeys[work.header.Number.Int64()+1] = w.current.state.NextKey
 	}
 
 	// Create an empty block based on temporary copied state for

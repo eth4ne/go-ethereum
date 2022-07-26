@@ -378,7 +378,6 @@ func (s *stateObject) SetState_Restore(db Database, key, value common.Hash) {
 	s.db.journal.append(storageChange{
 		account:  &s.address,
 		key:      key,
-		// prevalue: prev,
 	})
 	s.setState(key, value)
 }

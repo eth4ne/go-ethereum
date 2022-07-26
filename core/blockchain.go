@@ -26,6 +26,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"os"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/mclock"
@@ -210,6 +211,13 @@ type BlockChain struct {
 	processor  Processor // Block transaction processor interface
 	forker     *ForkChoice
 	vmConfig   vm.Config
+}
+
+func checkError(err error) {
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -1229,8 +1237,6 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	// Commit all cached state changes into underlying memory database.
 	root, err := state.Commit(bc.chainConfig.IsEIP158(block.Number())) // here, statedb.go > Commit() being executed (joonha)
 
-	// fmt.Println("^^^^^^^len(AddrToKeyDirty_inactive): ", len(state.AddrToKeyDirty_inactive)) // (joonha)
-
 	if err != nil {
 		return err
 	}
@@ -1350,45 +1356,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
 	}
 
-	/***********************************************/
-	//print and delete database, set Deletenode
-	/***********************************************/
-	// // // print to check disk size before delete leaf nodes (joonha)
-	// if block.Header().Number.Int64() % common.InspectEpoch == 0 {
-	// 	// inspect database
-	// 	rawdb.InspectDatabase(rawdb.GlobalDB, nil, nil)
-
-	// // 	// // print state trie 
-	// // 	// fmt.Println("(BEFORE DELETION) $$$ print state trie at block", bc.CurrentBlock().Header().Number)
-	// }
-
-	/***********************************************/
-	// // delete leaf nodes from disk (joonha)
-	/***********************************************/
-	// // fmt.Println("\nBLOCK NUMBER: ", block.Header().Number.Int64())
-	// if (block.Header().Number.Int64()) == common.DeleteLeafNodeEpoch-1 {
-	// 	// skip
-	// } else if (block.Header().Number.Int64()) % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-1 {
-	// 	// fmt.Println("THIS IS THE DELETING EPOCH\n")
-	// 	for _, addr := range common.AccountsToDeleteFromDisk {
-	// 		// fmt.Println("\nDeleting addr: ", addr)
-
-	// 		// 1. get obj's storage trie
-	// 		storageTrie := state.GetTrie(addr)
-	// 		// fmt.Println("storageTrie: ", storageTrie)
-
-	// 		// 2. delete every nodes found during trie traversing from disk
-	// 		// storageTrie.Delete_storageTrie() // --> secure_trie.go >> trie.go >> node.go
-	// 		if storageTrie != nil {
-	// 			storageTrie.Delete_storageTrie() // --> secure_trie.go >> trie.go >> node.go
-	// 		}
-	// 	}
-	// 	// empty the list
-	// 	common.AccountsToDeleteFromDisk = make([]common.Address, 0)
-	// } else {
-	// 	// fmt.Println("NOT A DELETING EPOCH")
-	// }
-
+	
 	// print database inspect result (jmlee)
 	//fmt.Println("\nblock inserted -> blocknumber:", block.Header().Number.Int64())
 	//fmt.Println("InactiveBoundaryKey:", common.InactiveBoundaryKey)
@@ -1407,25 +1375,28 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		// } else {
 		// 	stateTrie.Print()
 		// }
-
-		// /******************************************/
-		// // PRINTINNG STATETRIE FROM SOMETHING
-		// /******************************************/
-		// // (temp for debugging) print state trie (joonha)
-		// fmt.Println("(AFTER DELETION) $$$ print state trie at block", bc.CurrentBlock().Header().Number)
-		// ldb := trie.NewDatabase(bc.db)
-		// stateTrie, _ := trie.NewSecure(bc.CurrentBlock().Root(), ldb)
-		// fmt.Println("1 Root: ", bc.CurrentBlock().Root())
-		// if stateTrie != nil {
-		// 	stateTrie.Print()
-		// } else {
-		// 	fmt.Println("stateTrie is nil")
-		// }
 	}
 
-	// fmt.Println("\n\n>>> InactiveBoundaryKey: ", common.InactiveBoundaryKey)
-	// fmt.Println("len(AddrToKey_inactive['0xA1E4380A3B1f749673E270229993eE55F35663b4']):", len(common.AddrToKey_inactive[common.HexToAddress("0xA1E4380A3B1f749673E270229993eE55F35663b4")]), "\n\n")
+	
+	// (debugging) export log to file (joonha)
+	f1, err := os.Create("joonha AddrToKey_inactive.txt")
+	checkError(err)
+	defer f1.Close()
+	fmt.Fprintf(f1, "\n\n>>> InactiveBoundaryKey: %d", common.InactiveBoundaryKey)
+	_, doExist := common.AddrToKey_inactive[common.HexToAddress("0xA1E4380A3B1f749673E270229993eE55F35663b4")]
+	if doExist {
+		fmt.Fprintf(f1, "\nlen(AddrToKey_inactive['0xA1E4380A3B1f749673E270229993eE55F35663b4']): %d", len(common.AddrToKey_inactive[common.HexToAddress("0xA1E4380A3B1f749673E270229993eE55F35663b4")]))
+		fmt.Fprintf(f1, "\ncommon.AddrToKey_inactive[0xA1E4380A3B1f749673E270229993eE55F35663b4]: %s", common.AddrToKey_inactive[common.HexToAddress("0xA1E4380A3B1f749673E270229993eE55F35663b4")])
+	} else {
+		fmt.Fprintf(f1, "\nlen(AddrToKey_inactive['0xA1E4380A3B1f749673E270229993eE55F35663b4']): 0")
+	}
+	fmt.Fprintf(f1, "\nlen(AddrToKey_inactive): %d", len(common.AddrToKey_inactive))
+	fmt.Fprintf(f1, "\nlen(AddrToKey): %d", len(common.AddrToKey))
+	fmt.Fprintf(f1, "\n46147 SENDER GetBalance: %d", state.GetBalance(common.HexToAddress("0xA1E4380A3B1f749673E270229993eE55F35663b4")))
+	fmt.Fprintf(f1, "\n46147 46219 RECEIVER GetBalance: %d", state.GetBalance(common.HexToAddress("0x5DF9B87991262F6BA471F09758CDE1c0FC1De734")))
+	fmt.Fprintf(f1, "\n46214 RECEIVER GetBalance: %d", state.GetBalance(common.HexToAddress("0xc9D4035F4A9226D50f79b73Aafb5d874a1B6537e")))
 
+	
 	// // set common.DoDeleteLeafNode (jmlee)
 	// if (block.Header().Number.Int64()+1) % common.DeleteLeafNodeEpoch == 0 {
 	// 	common.DoDeleteLeafNode = true
@@ -1433,29 +1404,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	// 	common.DoDeleteLeafNode = false
 	// }
 
-	// // set common.DoDeleteLeafNode (joonha)
-	// // bn := (block.Header().Number.Int64())
-	// bn := (block.Header().Number.Int64()+1)
-	// //fmt.Println("BLOCKCHAIN >>>>>>>>>>>>> bn: ", bn)
-	// if bn == common.DeleteLeafNodeEpoch-1 {
-	// 	// skip (default = false)
-	// } else if bn % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-1 {
-	// 	common.DoDeleteLeafNode = true
-	// } else {
-	// 	common.DoDeleteLeafNode = false
-	// }
-
-	// common.IsFirst = true
 	common.IsSecond = false // set false (2207061736) (joonha)
-
-	// /*********************************/
-	// // PRINTINNG COMPACTTRIE
-	// /*********************************/
-	// // 여기서도 state trie에 delete와 inactivate가 적용되지 않은 상태인지 확인하기 위해 프린팅을 해보는 것임 (joonha)
-	// fmt.Println("\n\n\n(final) printing state trie from blockchain.go > writeBlockAndSetHead()")
-	// state.PrintStateTrie() // (joonha)
-	// fmt.Println("2 Root: ", state.Hash())
-	// // --> 확인 결과, compactTrie 임.
 	
 	return status, nil
 }
