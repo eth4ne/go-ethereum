@@ -867,17 +867,6 @@ func (w *worker) updateSnapshot(env *environment) {
 }
 
 func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*types.Log, error) {
-	
-	// print for debugging (joonha)
-	// fmt.Println("\n\n>>> tx: ", tx)
-	// fmt.Println("\n>>> tx.To: ", tx.To())
-	// fmt.Println("\n>>> tx.Gas: ", tx.Gas())
-	// fmt.Println("\n>>> tx.GasPrice: ", tx.GasPrice())
-	// fmt.Println("\n>>> tx.Value: ", tx.Value())
-	// fmt.Println("\n>>> tx.Nonce: ", tx.Nonce())
-	// fmt.Println("\n>>> tx.DelegatedFrom: ", tx.DelegatedFrom())
-	// fmt.Println("\n>>> tx.Data: ", tx.Data())
-
 	snap := env.state.Snapshot()
 
 	log.Trace("[worker.go/commitTransaction] Applying transaction", "to", tx.To())
@@ -923,20 +912,6 @@ func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*
 			GasPrice: tx.GasPrice(),
 			Data:     tx.Data(),
 		})
-
-		// print for debugging (joonha)
-		// fmt.Println("\n\nDELEGATED STARTS")
-		// fmt.Println("\n>>> delegated tx: ", tx)
-		// fmt.Println("\n>>> tx: ", tx)
-		// fmt.Println("\n>>> tx.To: ", tx.To())
-		// fmt.Println("\n>>> tx.Gas: ", tx.Gas())
-		// fmt.Println("\n>>> tx.GasPrice: ", tx.GasPrice())
-		// fmt.Println("\n>>> tx.Value: ", tx.Value())
-		// fmt.Println("\n>>> tx.Nonce: ", tx.Nonce())
-		// fmt.Println("\n>>> tx.DelegatedFrom: ", tx.DelegatedFrom())
-		// fmt.Println("\n>>> tx.Data: ", tx.Data())
-		// fmt.Println("DELEGATED DONE")
-
 		log.Trace("[worker.go/commitTransaction] replaced delegated tx with legacy tx", "nonce", tx.Nonce())
 		tx.SetRawSignatureValues(v, r, s) 
 	}
@@ -1223,80 +1198,56 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 		}
 	}
 
-	// return // (joonha)
+	/*
+	* [Deletion and Inactivation]
+	* Delete and inactivate only for the second execution.
+	* Placed epoch check inside the IsSecond check because the
+	* delete epoch and the inactivate epoch might be different.
+	*/
 
-	// fmt.Println("----------------------------------------------------------------------------------------------------------------")
-	// fmt.Println("\n\n\nenv.header.Number.Int64(): ", env.header.Number.Int64())
 	bn := env.header.Number.Int64()
-	// fmt.Println("\n\n>>> bn: ", bn)
-	// // fmt.Println(">>> IsFirst: ", common.IsFirst)
-	// fmt.Println(">>> IsSecond: ", common.IsSecond)
-	// fmt.Println("\n")
-
 	if bn <= 1 {
 		// fmt.Println("block number is below 2")
 		return 
 	}
+	// fmt.Println("IsSecond: ", common.IsSecond)
 
-	// 1st에서 건너뛰고 2nd에서 실행해야 함.
-	// 변경 220706 1st에서 실행하고 2nd를 건너뛰어 봄.
-	// 원인 후보 1: 1st는 local, 2nd는 remote인 것이 아닐까.
-
-	/******************************************/
-	// DELETE PREVIOUS LEAF NODES
-	/******************************************/
-	// exe below only for the second appearance (joonha)
+	// delete previous leaf nodes (jmlee)
 	if common.IsSecond == true { // 2nd
 		// fmt.Println("this is the second time so skip")
-		// common.IsSecond = false
 		return 
 	} else if common.IsSecond == false { // 1st
 		common.IsSecond = true
-		if bn % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-1 { // delEpoch
+		if bn % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-1 { // delete Epoch
 
 			// skip at the first epoch (joonha)
 			if bn == common.DeleteLeafNodeEpoch-1 {
 				return 
 			}
-
-			// fmt.Println("this is the first time and also the deleting epoch")
-			// delete previous leaf nodes (jmlee)
-			// fmt.Println("\n\nenv.header.Number.Int64(): ", env.header.Number.Int64())
-			//fmt.Println("\n\n/************************************************************************************/")
-			//fmt.Println("// delete previous leaf nodes (block number: ", bn, ")")
-			//fmt.Println("/************************************************************************************/\n")
-
-			keysToDelete := append(common.KeysToDelete, env.state.KeysToDeleteDirty...)
+			
+			keysToDelete := append(common.KeysToDelete, env.state.KeysToDeleteDirty...) // to include current state's KeysToDeleteDirty
 			env.state.DeletePreviousLeafNodes(keysToDelete)
 
 			// reset common.KeysToDelete
 			common.KeysToDelete = make([]common.Hash, 0)
-			// reset common.AlreadyRestored (joonha)
-			common.AlreadyRestored = make(map[common.Hash]common.Empty) 
-		} else { // not a delEpoch
+
+		} else { // not a delete Epoch
 			// fmt.Println("return cuz it's not a deleting epoch")
-			// return 
 		}
 	}
 
-	/******************************************/
-	// INACTIVATE INACTIVE ACCOUNTS
-	/******************************************/
-	if bn % common.InactivateLeafNodeEpoch == common.InactivateLeafNodeEpoch-1 { // inactEpoch
-		// fmt.Println("\n\n/*************************************/")
-		// fmt.Println("// inactivate accounts (bn: ", bn, ")")
-		// fmt.Println("/*************************************/\n")
-
+	// inactivate inactive leaf nodes
+	if bn % common.InactivateLeafNodeEpoch == common.InactivateLeafNodeEpoch-1 { // inactivate Epoch
 		// skip at the first epoch (joonha)
 		if bn == common.InactivateLeafNodeEpoch-1 {
 			return 
 		}
-		lastKeyToCheck := common.CheckpointKeys[bn-(common.InactivateCriterion-1)]-1 // [4] 2204014 (joonha
 		firstKeyToCheck := common.CheckpointKeys[bn-(2*common.InactivateCriterion-1)]
-		inactivatedAccountsNum := env.state.InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck) // [2] 220410 (joonha)
+		lastKeyToCheck := common.CheckpointKeys[bn-(common.InactivateCriterion-1)]-1
+		inactivatedAccountsNum := env.state.InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck)
 		common.InactiveBoundaryKey += inactivatedAccountsNum
-	} else { // not a delEpoch
-		// fmt.Println("return cuz it's not a deleting epoch")
+	} else { // not a inactivate Epoch
+		// fmt.Println("return cuz it's not a inactivating epoch")
 		return 
 	}
 }
