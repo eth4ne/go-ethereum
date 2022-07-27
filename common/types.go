@@ -44,15 +44,17 @@ const (
 	AddressLength = 20
 )
 
-// (joonha)
-type ProofList [][]byte
+/*
+* Below three definitions are for executing VerifyProof_ProofList(), 
+* VerifyProof_restore(), and GetAccountsAndKeysFromMerkleProof() 
+* (commenter: joonha)
+*/
 
 // (joonha)
+type ProofList [][]byte
 func (n *ProofList) Has(key []byte) (bool, error) {
 	panic("not supported")
 }
-
-// (joonha)
 func (n *ProofList) Get(key []byte) ([]byte, error) {
 	x := (*n)[0]
 	*n = (*n)[1:]
@@ -86,10 +88,7 @@ var (
 
 	KeysToDelete = make([]Hash, 0) // store previous leaf nodes' keys to delete later
 	KeysToDelete_restore = make([]Hash, 0) // previous leaf nodes' keys to delete after restoration
-	// AccountsToDeleteFromDisk = make([]Address, 0) // store previous leaf nodes' keys to delete later (joonha)
-	// AddrsToDeleteFromDisk = make(map[Hash][]byte) // store previous leaf nodes(addr) to delete later (joonha)
 	DeleteLeafNodeEpoch = int64(315) // block epoch to delete previous leaf nodes (from active area to temp area) (const)
-	// DeleteLeafNodeEpoch = big.NewInt(3) // block epoch to delete previous leaf nodes (& inactivate inactive leaf nodes) (const)
 	DoDeleteLeafNode bool // flag to determine whether to delete leaf nodes or not
 
 	InactivateLeafNodeEpoch = int64(315) // block epoch to inactivate inactive leaf nodes (from temp area to inactive trie) (joonha)

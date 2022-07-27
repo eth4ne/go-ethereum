@@ -386,14 +386,6 @@ func (pool *TxPool) validateTx(ctx context.Context, tx *types.Transaction) error
 	if err != nil {
 		return err
 	}
-	// // if restore tx or reward tx, do not levy gas (joonha)
-	// if *tx.To() == common.HexToAddress("0x0123456789012345678901234567890123456789") {
-	// 	gas = 0
-	// } else if tx.From() == common.HexToAddress("0x36eCA1fe87f68B49319dB55eBB502e68c4981716") {
-	// 	gas = 0
-	// } else if tx.From() == common.HexToAddress("0xb3711B7e50Fe9Ff914ec0F08C6b8330a41E93C10") {
-	// 	gas = 0
-	// }
 	if tx.Gas() < gas {
 		return core.ErrIntrinsicGas
 	}

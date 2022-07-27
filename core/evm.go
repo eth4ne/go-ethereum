@@ -58,7 +58,7 @@ func NewEVMBlockContext(header *types.Header, chain ChainContext, author *common
 	return vm.BlockContext{
 		CanTransfer: CanTransfer,
 		Transfer:    Transfer,
-		Restore:	 Restore, // restore inactivate account function (joonha)
+		Restore:	 Restore, // (joonha)
 		GetHash:     GetHashFn(header, chain),
 		Coinbase:    beneficiary,
 		BlockNumber: new(big.Int).Set(header.Number),

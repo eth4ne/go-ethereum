@@ -164,7 +164,7 @@ type BlockChain struct {
 
 	db     ethdb.Database // Low level persistent database to store final content in
 	snaps  *snapshot.Tree // Snapshot tree for fast trie leaf access
-	snaps_inactive *snapshot.Tree // Snapshot tree for storage trie restoration (joonha)
+	snaps_inactive *snapshot.Tree // Snapshot tree for storage trie restoration (so-called inactive snapshot) (joonha)
 	triegc *prque.Prque   // Priority queue mapping block numbers to tries to gc
 	gcproc time.Duration  // Accumulates canonical block processing for trie dumping
 
@@ -293,7 +293,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	// Make sure the state associated with the block is available
 	head := bc.CurrentBlock()
 	// if _, err := state.New(head.Root(), bc.stateCache, bc.snaps); err != nil { // --> original code
-	if _, err := state.New_inactiveSnapshot(head.Root(), bc.stateCache, bc.snaps, bc.snaps_inactive); err != nil { // New state making inactive snapshot (joonha)
+	if _, err := state.New_inactiveSnapshot(head.Root(), bc.stateCache, bc.snaps, bc.snaps_inactive); err != nil { // New state with inactive snapshot (joonha)
 		// Head state is missing, before the state recovery, find out the
 		// disk layer point of snapshot(if it's enabled). Make sure the
 		// rewound point is lower than disk layer.
@@ -386,7 +386,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 			recover = true
 		}
 		bc.snaps, _ = snapshot.New(bc.db, bc.stateCache.TrieDB(), bc.cacheConfig.SnapshotLimit, head.Root(), !bc.cacheConfig.SnapshotWait, true, recover)
-		bc.snaps_inactive, _ = snapshot.New(bc.db, bc.stateCache.TrieDB(), bc.cacheConfig.SnapshotLimit, head.Root(), !bc.cacheConfig.SnapshotWait, true, recover) // making inactive snapshot (joonha)
+		bc.snaps_inactive, _ = snapshot.New(bc.db, bc.stateCache.TrieDB(), bc.cacheConfig.SnapshotLimit, head.Root(), !bc.cacheConfig.SnapshotWait, true, recover) // make inactive snapshot (joonha)
 	}
 
 	// Start future block processor.
@@ -541,7 +541,7 @@ func (bc *BlockChain) setHeadBeyondRoot(head uint64, root common.Hash, repair bo
 						beyondRoot, rootNumber = true, newHeadBlock.NumberU64()
 					}
 					// if _, err := state.New(newHeadBlock.Root(), bc.stateCache, bc.snaps); err != nil { // --> original code
-					if _, err := state.New_inactiveSnapshot(newHeadBlock.Root(), bc.stateCache, bc.snaps, bc.snaps_inactive); err != nil { // New state making inactive snapshot (joonha)
+					if _, err := state.New_inactiveSnapshot(newHeadBlock.Root(), bc.stateCache, bc.snaps, bc.snaps_inactive); err != nil { // New state with inactive snapshot (joonha)
 						log.Trace("Block state missing, rewinding further", "number", newHeadBlock.NumberU64(), "hash", newHeadBlock.Hash())
 						if pivot == nil || newHeadBlock.NumberU64() > *pivot {
 							parent := bc.GetBlock(newHeadBlock.ParentHash(), newHeadBlock.NumberU64()-1)
@@ -1397,7 +1397,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	fmt.Fprintf(f1, "\n46214 RECEIVER GetBalance: %d", state.GetBalance(common.HexToAddress("0xc9D4035F4A9226D50f79b73Aafb5d874a1B6537e")))
 
 	
-	// // set common.DoDeleteLeafNode (jmlee)
+	// // set common.DoDeleteLeafNode (jmlee) // --> commented-out because we check the epoch at worker.go > fillTransactions (joonha)
 	// if (block.Header().Number.Int64()+1) % common.DeleteLeafNodeEpoch == 0 {
 	// 	common.DoDeleteLeafNode = true
 	// } else {
@@ -1661,7 +1661,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 			parent = bc.GetHeader(block.ParentHash(), block.NumberU64()-1)
 		}
 		// statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps) // --> original code
-		statedb, err := state.New_inactiveSnapshot(parent.Root, bc.stateCache, bc.snaps, bc.snaps_inactive) // New state making inactive snapshot (joonha)
+		statedb, err := state.New_inactiveSnapshot(parent.Root, bc.stateCache, bc.snaps, bc.snaps_inactive) // New state with inactive snapshot (joonha)
 
 		if err != nil {
 			return it.index, err
@@ -1677,7 +1677,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		if !bc.cacheConfig.TrieCleanNoPrefetch {
 			if followup, err := it.peek(); followup != nil && err == nil {
 				// throwaway, _ := state.New(parent.Root, bc.stateCache, bc.snaps) // --> original code
-				throwaway, _ := state.New_inactiveSnapshot(parent.Root, bc.stateCache, bc.snaps, bc.snaps_inactive) // New state making inactive snapshot (joonha)
+				throwaway, _ := state.New_inactiveSnapshot(parent.Root, bc.stateCache, bc.snaps, bc.snaps_inactive) // New state with inactive snapshot (joonha)
 
 				go func(start time.Time, followup *types.Block, throwaway *state.StateDB, interrupt *uint32) {
 					bc.prefetcher.Prefetch(followup, throwaway, bc.vmConfig, &followupInterrupt)

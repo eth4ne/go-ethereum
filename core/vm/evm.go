@@ -240,7 +240,6 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 	* input contains target address, checkpoint block 
 	* number, and the leaf nodes' Merkle proofs.
 	* (commenter: joonha)
-	*
 	*/
 
 	if addr == common.RestoreAddress {
@@ -325,8 +324,8 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 
 			
 			// retrieve target accounts and keys from the merkle proof
-			// GetKeyFromMerkleProof will return final restoring target excluding the already restored nodes.
-			targetAccounts, targetKeys = trie.GetKeyFromMerkleProof(blockHeader.Root, merkleProof)
+			// GetAccountsAndKeysFromMerkleProof will return final restoring target excluding the already restored nodes.
+			targetAccounts, targetKeys = trie.GetAccountsAndKeysFromMerkleProof(blockHeader.Root, merkleProof)
 
 			log.Info("targetAccounts", "targetAccounts", targetAccounts)
 			log.Info("targetKeys", "targetKeys", targetKeys) 
@@ -346,7 +345,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 				acc := targetAccounts[i]
 				if acc == nil { // there is no account // --> this case might not exist
 					log.Info("### No account in the merkle proof")
-					accounts = append(accounts, nil) // should this be executed? (joonha)
+					accounts = append(accounts, nil) // necessary? (joonha)
 				} else { // there is the account
 					log.Info("### There is the account in the merkle proof")
 					curAcc = &state.Account{}
@@ -388,7 +387,12 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		// keysToDelete := make([]common.Hash, 0)
 		isMerge := false
 
-		_, doExist := common.AddrToKey[inactiveAddr] // shouldn't we get this from s.dirty? (joonha)
+		// check state's dirty first and then common list 
+		doExist := evm.StateDB.DoDirtyCrumbExist(inactiveAddr)
+		if !doExist {
+			_, doExist = common.AddrToKey[inactiveAddr]
+		}
+		
 		if !doExist { // create (no crumb account in the active trie)
 			log.Info("### CREATE")
 
@@ -431,6 +435,17 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		// rebuild CA's storage trie if inactive storage snapshot is on
 		if common.UsingInactiveStorageSnapshot {
 			evm.StateDB.RebuildStorageTrieFromSnapshot(blockRoot, inactiveAddr, targetKeys[0])
+
+			// // compare rebuilt storage trie's root to the retrieved account's root // cannot debug now so comment-out. Activate later after debugging.
+			// origRoot := accounts[0].Root
+			// newRoot := evm.StateDB.GetRoot(inactiveAddr)
+			// if origRoot == newRoot {
+			// 	log.Info("Storage trie is successfully rebuilt")
+			// } else {
+			// 	// storage trie is different from the original
+			// 	log.Info("storage trie is different from the original")
+			// }
+
 		} else {
 			log.Info("Snapshot option is OFF... Please rebuild the storage trie in another way.")
 		}

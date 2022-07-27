@@ -306,7 +306,7 @@ func (bc *BlockChain) State() (*state.StateDB, error) {
 // StateAt returns a new mutable state based on a particular point in time.
 func (bc *BlockChain) StateAt(root common.Hash) (*state.StateDB, error) {
 	// return state.New(root, bc.stateCache, bc.snaps) // --> original code
-	return state.New_inactiveSnapshot(root, bc.stateCache, bc.snaps, bc.snaps_inactive) // (joonha)
+	return state.New_inactiveSnapshot(root, bc.stateCache, bc.snaps, bc.snaps_inactive) // inactive snapshot is added (joonha)
 }
 
 // Config retrieves the chain's fork configuration.

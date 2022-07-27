@@ -182,7 +182,7 @@ func New(root common.Hash, db Database, snaps *snapshot.Tree) (*StateDB, error) 
 		trie:                tr,
 		originalRoot:        root,
 		snaps:               snaps,
-		snaps_inactive:		 snaps, // (joonha)
+		// snaps_inactive:		 snaps, // (joonha)
 		stateObjects:        make(map[common.Address]*stateObject),
 		stateObjectsPending: make(map[common.Address]struct{}),
 		stateObjectsDirty:   make(map[common.Address]struct{}),
@@ -207,19 +207,20 @@ func New(root common.Hash, db Database, snaps *snapshot.Tree) (*StateDB, error) 
 			sdb.snapStorage = make(map[common.Hash]map[common.Hash][]byte)
 		}
 	}
-	// inactive storage snapshot (joonha)
-	if sdb.snaps_inactive != nil {
-		if sdb.snap_inactive == nil {
-			sdb.snap_inactive = sdb.snaps_inactive.Snapshot(root)
-		}
-		sdb.snapDestructs_inactive = make(map[common.Hash]struct{})
-		sdb.snapAccounts_inactive = make(map[common.Hash][]byte)
-		sdb.snapStorage_inactive = make(map[common.Hash]map[common.Hash][]byte)
-	}
+	// // inactive storage snapshot (joonha)
+	// if sdb.snaps_inactive != nil {
+	// 	if sdb.snap_inactive == nil {
+	// 		sdb.snap_inactive = sdb.snaps_inactive.Snapshot(root)
+	// 	}
+	// 	sdb.snapDestructs_inactive = make(map[common.Hash]struct{})
+	// 	sdb.snapAccounts_inactive = make(map[common.Hash][]byte)
+	// 	sdb.snapStorage_inactive = make(map[common.Hash]map[common.Hash][]byte)
+	// }
 	return sdb, nil
 }
 
 // Second New function to get snaps_inactive info from blockchain.go (joonha)
+// Couldn't modify New() directly because there are so many functions calling New() and it is not easy to hand-over inactive snapshot every time.
 func New_inactiveSnapshot(root common.Hash, db Database, snaps *snapshot.Tree, snaps_inactive *snapshot.Tree) (*StateDB, error) {
 	tr, err := db.OpenTrie(root)
 	if err != nil {
@@ -264,7 +265,7 @@ func New_inactiveSnapshot(root common.Hash, db Database, snaps *snapshot.Tree, s
 	// inactive storage snapshot (joonha)
 	if sdb.snaps_inactive != nil {
 		if common.UsingInactiveStorageSnapshot {
-			sdb.snap_inactive = sdb.snaps_inactive.Snapshot(root) // watch out: insufficient funds err may occur
+			sdb.snap_inactive = sdb.snaps_inactive.Snapshot(root)
 			sdb.snapDestructs_inactive = make(map[common.Hash]struct{})
 			sdb.snapAccounts_inactive = make(map[common.Hash][]byte)
 			sdb.snapStorage_inactive = make(map[common.Hash]map[common.Hash][]byte)
@@ -404,6 +405,15 @@ func (s *StateDB) TxIndex() int {
 	return s.txIndex
 }
 
+// GetRoot returns the storage root associated with this object, if any (joonha)
+func (s *StateDB) GetRoot(addr common.Address) common.Hash {
+	stateObject := s.getStateObject(addr)
+	if stateObject != nil {
+		return stateObject.data.Root
+	}
+	return common.Int64ToHash(0)
+}
+
 func (s *StateDB) GetCode(addr common.Address) []byte {
 	stateObject := s.getStateObject(addr)
 	if stateObject != nil {
@@ -442,24 +452,32 @@ func (s *StateDB) GetState(addr common.Address, hash common.Hash) common.Hash {
 // 	return s.GetProofByHash(crypto.Keccak256Hash(addr.Bytes()))
 // }
 
-// GetProof returns the Merkle proofs for *ALL KEYS* of the given account.
+// GetProof returns the Merkle proofs for keys of the given account (joonha)
+// Keys can either be all keys or just selected keys
 func (s *StateDB) GetProof(addr common.Address) ([][]byte, error) {
 	
+	/*
+	* In Ethane, we consider GetProof called by restore transactions only.
+	* There are several Restore Modes.
+	* If common.RestoreMode is:
+	* 0, restore all.
+	* 1, restore one recent node.
+	* 2, restore one oldest node.
+	* 3, restore the fewest nodes that their sum meets the amount requirement(common.RestoreAmount)
+	* GetProof returns compact Merkle Proofs of all proper nodes.
+	* (commneter: joonha)
+	*
+	*/
+
 	// fmt.Println("\ncommon.RestoreMode: ", common.RestoreMode)
 	// fmt.Println("common.RestoreAmount: ", common.RestoreAmount,"\n")
-	// common.RestoreMode:
-	// 0 All
-	// 1 RECENT
-	// 2 OLDEST
-	// 3 OPTIMIZED (w/ common.RestoreAmount)
-
 	
 	if len(common.AddrToKey_inactive[addr]) <= 0 {
 		return nil, errors.New("No Account to Restore (ethane) (1)")
 	}
 
 	// get proofs
-	// optimize opportunity: store balance of inactive accounts with AddrToKey_inactive from the first (TODO)
+	// optimize opportunity: store balance of inactive accounts with AddrToKey_inactive from the first (TODO (joonha))
 	var mps [][]byte
 
 	if common.RestoreMode == 0 { // ALL
@@ -527,12 +545,9 @@ func (s *StateDB) GetProof(addr common.Address) ([][]byte, error) {
 	}
 
 
-	/***********************************/
-	// REMOVE REDUNDANT NODES
-	/***********************************/
+	// Remove redundant nodes
 	// fmt.Println("\n\nmps ===>")
 	// fmt.Println(mps, "\n===> end of mps\n\n")
-
 	var mps_no_redundancy [][]byte
 	m := make(map[string]int)
 	// dummy := []byte{'@'}
@@ -548,7 +563,6 @@ func (s *StateDB) GetProof(addr common.Address) ([][]byte, error) {
 			// redundant
 			dummy := []byte{'@'}
 			dummy = append(dummy, byte(m[string(node[:])])) // dummy: @ + index of the ref node
-			// 아마 byte -> int 로 바꿔야 원래 index를 retrieve 할 수 있을 것임.
 			mps_no_redundancy = append(mps_no_redundancy, dummy)
 		}
 	}
@@ -759,7 +773,8 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 		/*
 		* This account is newly created or already moved at this epoch.
 		* So there is no move.
-		* Creating a crumb is this case.
+		* Creating a crumb is in this case.
+		* (commenter: joonha)
 		*/
 
 		// fmt.Println("insert -> key:", addrKey.Hex(), "/ addr:", addr.Hex())
@@ -1184,27 +1199,10 @@ func (s *StateDB) Copy() *StateDB {
 	for key, value := range s.AlreadyRestoredDirty {
 		state.AlreadyRestoredDirty[key] = value
 	}
-	
-	// TODO simplify this code (joonha)
-	for key, _ := range s.AddrToKeyDirty_inactive {
-		// deep copy
-		for idx, value := range s.AddrToKeyDirty_inactive[key] {
-			_, doExist := state.AddrToKeyDirty_inactive[key]
-			if !doExist {
-				state.AddrToKeyDirty_inactive[key] = make([]common.Hash, len(s.AddrToKeyDirty_inactive[key]))
-			}
-			state.AddrToKeyDirty_inactive[key][idx] = value
-		}
-		if len(s.AddrToKeyDirty_inactive[key]) > 0 {
-			state.AddrToKeyDirty_inactive[key] = state.AddrToKeyDirty_inactive[key][:len(s.AddrToKeyDirty_inactive[key])]
-		}
-
-		_, ok := s.AddrToKeyDirty_inactive[key];
-		if !ok { // empty map
-			delete(state.AddrToKeyDirty_inactive, key);
-		}
+	// (joonha)
+	for key, value := range s.AddrToKeyDirty_inactive {		
+		state.AddrToKeyDirty_inactive[key] = value
 	}
-
 	for i := 0; i < len(s.KeysToDeleteDirty); i++ {
 		state.KeysToDeleteDirty[i] = s.KeysToDeleteDirty[i]
 	}
@@ -1422,7 +1420,7 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 	// Now we're about to start to write changes to the trie. The trie is so far
 	// _untouched_. We can check with the prefetcher, if it can give us a trie
 	// which has the same root, but also has some content loaded into it.
-	// // --> (joonha) comment-out the original code (this hinders inactive node to be restored when snapshot is on)
+	// // --> comment-out the original code (this hinders inactive node to be restored when snapshot is on) (joonha)
 	// if prefetcher != nil {
 	// 	if trie := prefetcher.trie(s.originalRoot); trie != nil {
 	// 		s.trie = trie
@@ -1541,7 +1539,7 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 	// apply dirties to common.AddrToKey_inactive (joonha)
 	// fmt.Println("len(s.AddrToKeyDirty_inactive): ", len(s.AddrToKeyDirty_inactive))
 	for key, value := range s.AddrToKeyDirty_inactive {		
-		// // (debugging) export log to file
+		// // (codes for debugging) export log to file
 		// f1, err := os.OpenFile("joonha dirty addrtokey inactive.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		// // f1, err := os.Create("joonha dirty addrtokey inactive.txt")
 		// checkError(err)
@@ -1550,8 +1548,6 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 		common.AddrToKey_inactive[key] = append(common.AddrToKey_inactive[key], value...)
 		// fmt.Fprintf(f1, "(after)addr: %s\nlen(common.AddrToKey_inactive[%s]): %d\n\n", key, key, len(common.AddrToKey_inactive[key]))
 	}
-
-
 
 	// apply dirties to common.KeysToDelete (jmlee)
 	// for i := 0; i < len(s.KeysToDeleteDirty); i++ {
@@ -1576,13 +1572,13 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 		start = time.Now()
 	}
 
-	// // decide whether to delete leaf nodes or not (jmlee) --> commented-out by (joonha) cuz it occurs an err and the check is already done in fillTransactions()
+	// // decide whether to delete leaf nodes or not (jmlee) --> commented-out by (joonha) because it occurs an err and the check is already done in fillTransactions()
 	// // this might be needed for full sync
 	// if common.DoDeleteLeafNode {
 	// 	// delete previous leaf nodes from state trie
 	// 	s.DeletePreviousLeafNodes(common.KeysToDelete)
 
-	// 	// reset common.KeysToDelete --> commented-out by (joonha) cuz it occurs an err and the check is already done in fillTransactions()
+	// 	// reset common.KeysToDelete --> commented-out by (joonha) because it occurs an err and the check is already done in fillTransactions()
 	// 	common.KeysToDelete = make([]common.Hash, 0) // only works at the epoch
 	// }
 
@@ -1765,7 +1761,7 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 	// DFS the non-nil leaf nodes from the trie (joonha)
 	firstKey := common.Int64ToHash(firstKeyToCheck)
 	lastKey := common.Int64ToHash(lastKeyToCheck)
-	AccountsToInactivate, KeysToInactivate, _ := s.trie.GetAllLeafNodes(firstKey[:], lastKey[:])
+	AccountsToInactivate, KeysToInactivate, _ := s.trie.TryGetAllLeafNodes(firstKey[:], lastKey[:])
 
 	// fmt.Println("Accounts length: ", len(AccountsToInactivate))
 	// fmt.Println("Keys length: ", len(KeysToInactivate))
@@ -1801,6 +1797,7 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 		* storage trie when restoring CA. If active snapshot is on, 
 		* copy it. Else, traverse the storage trie and manually make 
 		* the snapshot.
+		* (commenter: joonha)
 		*/
 	
 		// // [Inactive Account Snapshot]
@@ -1896,8 +1893,6 @@ func (s *StateDB) RemoveRestoredKeyFromAddrToKey_inactive(inactiveAddr common.Ad
 // rebuild a storage trie when restoring using snapshot (joonha)
 func (s *StateDB) RebuildStorageTrieFromSnapshot(snapRoot common.Hash, addr common.Address, accountHash common.Hash) {
 
-	// TODO (joonha) verify if the rebuilt trie root is equal to the account's storage root
-
 	// retrieve storage slots from snapshot
 	slotKeyList := s.snaps_inactive.StorageList_ethane(snapRoot, accountHash)
 	// fmt.Println("RESTORING STORAGE LIST: ", slotKeyList)
@@ -1946,4 +1941,12 @@ func (s *StateDB) TrieDB() *trie.Database {
 
 func (s *StateDB) Hash() common.Hash {
 	return s.trie.Hash()
+}
+
+func (s *StateDB) DoDirtyCrumbExist(addr common.Address) bool {
+	_, doExist := s.AddrToKeyDirty[addr]
+	if doExist {
+		return true
+	}
+	return false
 }

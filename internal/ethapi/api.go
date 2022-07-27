@@ -700,7 +700,6 @@ func (s *PublicBlockChainAPI) GetProof(ctx context.Context, address common.Addre
 	/*
 	* conjugate the storageKeys as a restore option
 	* (commenter: joonha)
-	*
 	*/
 	// fmt.Println("\n\nGetProof >>> storageKeys: ", storageKeys)
 	// fmt.Println("GetProof >>> storageKeys[0]: ", storageKeys[0])

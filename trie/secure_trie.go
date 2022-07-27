@@ -92,8 +92,8 @@ func (t *SecureTrie) TryGet_SetKey(key []byte) ([]byte, error) {
 }
 
 // DFS the range (from inactiveBoundaryKey to lastKeyToCheck) and return the found accounts (joonha)
-func (t *SecureTrie) GetAllLeafNodes(firstKey, lastKey []byte) ([][]byte, []common.Hash, error) {
-	return t.trie.GetAllLeafNodes(firstKey, lastKey)
+func (t *SecureTrie) TryGetAllLeafNodes(firstKey, lastKey []byte) ([][]byte, []common.Hash, error) {
+	return t.trie.TryGetAllLeafNodes(firstKey, lastKey)
 }
 
 // TryGetAllSlots return all the found slots while traversing storage trie (joonha)
@@ -269,7 +269,7 @@ func (t *SecureTrie) Print_storageTrie() {
 	t.trie.Print_storageTrie()
 }
 
-// Delete_storageTrie deletes storage trie's all nodes from disk (joonha)
+// Delete_storageTrie deletes storage trie's all nodes from disk (joonha) // --> this function withered in Ethane (joonha)
 func (t *SecureTrie) Delete_storageTrie() {
 	t.trie.Delete_storageTrie()
 }

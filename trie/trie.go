@@ -169,8 +169,8 @@ func (t *Trie) tryGet(origNode node, key []byte, pos int) (value []byte, newnode
 	}
 }
 
-// GetAllLeafNodes returns all non-nil leaf nodes' accounts and keys between the firstKey and the lastKey (joonha)
-func (t *Trie) GetAllLeafNodes(firstKey, lastKey []byte) ([][]byte, []common.Hash, error) {
+// TryGetAllLeafNodes returns all non-nil leaf nodes' accounts and keys between the firstKey and the lastKey (joonha)
+func (t *Trie) TryGetAllLeafNodes(firstKey, lastKey []byte) ([][]byte, []common.Hash, error) {
 	// init
 	Accounts = make([][]byte, 0)
 	Keys = make([]common.Hash, 0)
@@ -178,12 +178,12 @@ func (t *Trie) GetAllLeafNodes(firstKey, lastKey []byte) ([][]byte, []common.Has
 	leftIsSafe := false // true means 'bigger than the firstKey'
 	rightIsSafe := false // true means 'smaller than the lastKey'
 
-	t.getAllLeafNodes(t.root, keybytesToHex(firstKey), keybytesToHex(firstKey), keybytesToHex(lastKey), leftIsSafe, rightIsSafe, 0)
+	t.tryGetAllLeafNodes(t.root, keybytesToHex(firstKey), keybytesToHex(firstKey), keybytesToHex(lastKey), leftIsSafe, rightIsSafe, 0)
 	return Accounts, Keys, nil
 }
 
-// internal function of GetAllLeafNodes (joonha)
-func (t *Trie) getAllLeafNodes(currNode node, parentKey, firstKey, lastKey []byte, leftIsSafe, rightIsSafe bool, pos int) {
+// internal function of TryGetAllLeafNodes (joonha)
+func (t *Trie) tryGetAllLeafNodes(currNode node, parentKey, firstKey, lastKey []byte, leftIsSafe, rightIsSafe bool, pos int) {
 
 	/*
 	* Depth-Frist-Search by recursion and find all the non-nil leaf nodes.
@@ -191,7 +191,7 @@ func (t *Trie) getAllLeafNodes(currNode node, parentKey, firstKey, lastKey []byt
 	* 
 	* notation:
 	* pos - pointer that pointing each digit of the key
-	* n.Key - n's Key (shortNode's key is just the common part)
+	* n.Key - n's Key (shortNode's key is just the short common part)
 	* n - encountered node
 	*/
 
@@ -257,7 +257,7 @@ func (t *Trie) getAllLeafNodes(currNode node, parentKey, firstKey, lastKey []byt
 			}
 		}
 		// this node is in the range, so move on to the child
-		t.getAllLeafNodes(n.Val, tempKey, firstKey, lastKey, leftIsSafe, rightIsSafe, pos+len(n.Key))
+		t.tryGetAllLeafNodes(n.Val, tempKey, firstKey, lastKey, leftIsSafe, rightIsSafe, pos+len(n.Key))
 		return 
 
 	case *fullNode:
@@ -301,7 +301,7 @@ func (t *Trie) getAllLeafNodes(currNode node, parentKey, firstKey, lastKey []byt
 				} // When just the leftOut is true, should go more because we've not reached the range yet!
 			} else { // this node is in the range, so move on to the child
 				// fmt.Println("O ------> (FN) pos:",pos," / i: ", i)
-				t.getAllLeafNodes(n.Children[i], tempKey, firstKey, lastKey, leftIsSafe, rightIsSafe, pos+1)
+				t.tryGetAllLeafNodes(n.Children[i], tempKey, firstKey, lastKey, leftIsSafe, rightIsSafe, pos+1)
 			}
 		}
 		return 
@@ -312,7 +312,7 @@ func (t *Trie) getAllLeafNodes(currNode node, parentKey, firstKey, lastKey []byt
 		if err != nil {
 			return 
 		}
-		t.getAllLeafNodes(child, parentKey, firstKey, lastKey, leftIsSafe, rightIsSafe, pos)
+		t.tryGetAllLeafNodes(child, parentKey, firstKey, lastKey, leftIsSafe, rightIsSafe, pos)
 		return 
 
 	default:
@@ -348,9 +348,9 @@ func (t *Trie) tryGetAllSlots(currNode node, parentKey[]byte, pos int) {
 	case *shortNode:
 		// fmt.Println("SHORTNODE")
 
-		// shortNode Key copy from n.Key to key
+		// apply shortNode.key(=n.Key) to tempKey
 		// direct key edit affects other nodes, so use tempKey
-		tempKey := make([]byte, len(parentKey))
+		tempKey := make([]byte, len(parentKey)) // parent key is already in hash format
 		copy(tempKey, parentKey)
 		for i := 0; i < len(n.Key); i++ {
 			tempKey[pos+i] = n.Key[i] 

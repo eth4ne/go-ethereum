@@ -270,7 +270,7 @@ func (s *stateObject) GetCommittedState(db Database, key common.Hash) common.Has
 	return value
 }
 
-// (joonha)
+// GetCommittedState retrieves a value from the committed account storage trie without key hashing (joonha)
 func (s *stateObject) GetCommittedState_hashedKey(db Database, key common.Hash) common.Hash {
 	// If the fake storage is set, only lookup the state here(in the debugging mode)
 	if s.fakeStorage != nil {

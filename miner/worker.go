@@ -1135,7 +1135,6 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	// Note genParams.coinbase can be different with header.Coinbase
 	// since clique algorithm can modify the coinbase field in header.
 	env, err := w.makeEnv(parent, header, genParams.coinbase) // load parent block's state before apply pending transactions (jmlee)
-	// err (joonha)
 	if err != nil {
 		log.Error("Failed to create sealing context", "err", err)
 		return nil, err
@@ -1223,12 +1222,10 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 			}
 			
 			keysToDelete := append(common.KeysToDelete, env.state.KeysToDeleteDirty...) // to include current state's KeysToDeleteDirty
-			keysToDelete = append(keysToDelete, common.KeysToDelete_restore...) // to include previous keys of inactive trie after restoration
 			env.state.DeletePreviousLeafNodes(keysToDelete)
 
 			// reset common.KeysToDelete
 			common.KeysToDelete = make([]common.Hash, 0)
-			common.KeysToDelete_restore = make([]common.Hash, 0)
 
 		} else { // not a delete Epoch
 			// fmt.Println("return cuz it's not a deleting epoch")
@@ -1245,6 +1242,13 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 		lastKeyToCheck := common.CheckpointKeys[bn-(common.InactivateCriterion-1)]-1
 		inactivatedAccountsNum := env.state.InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck)
 		common.InactiveBoundaryKey += inactivatedAccountsNum
+
+		// delete common.KeysToDelete_restore (previous keys of inactive trie after restoration)
+		env.state.DeletePreviousLeafNodes(common.KeysToDelete_restore)
+		common.KeysToDelete_restore = make([]common.Hash, 0)
+
+		// reset AlreadyRestored list
+		common.AlreadyRestored = make(map[common.Hash]common.Empty)
 	} else { // not a inactivate Epoch
 		// fmt.Println("return cuz it's not a inactivating epoch")
 		return 
@@ -1325,7 +1329,6 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 
 	// save this block's initial NextKey (joonha)
 	if work.header != nil && w.current != nil {
-		// common.CheckpointKeys[work.header.Number.Int64()+1] = w.current.state.NextKey
 		common.CheckpointKeys[work.header.Number.Int64()+1] = w.current.state.NextKey
 	}
 
@@ -1447,5 +1450,3 @@ func totalFees(block *types.Block, receipts []*types.Receipt) *big.Float {
 	}
 	return new(big.Float).Quo(new(big.Float).SetInt(feesWei), new(big.Float).SetInt(big.NewInt(params.Ether)))
 }
-
-// commit test 2022-03-10 16:13 (joonha)
