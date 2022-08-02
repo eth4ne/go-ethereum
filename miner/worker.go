@@ -1198,6 +1198,7 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 	* Delete and inactivate only for the second execution.
 	* Placed epoch check inside the IsSecond check because the
 	* delete epoch and the inactivate epoch might be different.
+	* IsSecond is for executing deletion and inactivation just once.
 	* (commenter: joonha)
 	*/
 
@@ -1227,31 +1228,25 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 			// reset common.KeysToDelete
 			common.KeysToDelete = make([]common.Hash, 0)
 
-		} else { // not a delete Epoch
-			// fmt.Println("return cuz it's not a deleting epoch")
 		}
-	}
+		// inactivate inactive leaf nodes
+		if bn % common.InactivateLeafNodeEpoch == common.InactivateLeafNodeEpoch-1 { // inactivate Epoch
+			// skip at the first epoch (joonha)
+			if bn == common.InactivateLeafNodeEpoch-1 {
+				return 
+			}
+			firstKeyToCheck := common.CheckpointKeys[bn-(2*common.InactivateCriterion-1)]
+			lastKeyToCheck := common.CheckpointKeys[bn-(common.InactivateCriterion-1)]-1
+			inactivatedAccountsNum := env.state.InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck)
+			common.InactiveBoundaryKey += inactivatedAccountsNum
 
-	// inactivate inactive leaf nodes
-	if bn % common.InactivateLeafNodeEpoch == common.InactivateLeafNodeEpoch-1 { // inactivate Epoch
-		// skip at the first epoch (joonha)
-		if bn == common.InactivateLeafNodeEpoch-1 {
-			return 
-		}
-		firstKeyToCheck := common.CheckpointKeys[bn-(2*common.InactivateCriterion-1)]
-		lastKeyToCheck := common.CheckpointKeys[bn-(common.InactivateCriterion-1)]-1
-		inactivatedAccountsNum := env.state.InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck)
-		common.InactiveBoundaryKey += inactivatedAccountsNum
+			// delete common.KeysToDelete_restore (previous keys of inactive trie after restoration)
+			env.state.DeletePreviousLeafNodes(common.KeysToDelete_restore)
+			common.KeysToDelete_restore = make([]common.Hash, 0)
 
-		// delete common.KeysToDelete_restore (previous keys of inactive trie after restoration)
-		env.state.DeletePreviousLeafNodes(common.KeysToDelete_restore)
-		common.KeysToDelete_restore = make([]common.Hash, 0)
-
-		// reset AlreadyRestored list
-		common.AlreadyRestored = make(map[common.Hash]common.Empty)
-	} else { // not a inactivate Epoch
-		// fmt.Println("return cuz it's not a inactivating epoch")
-		return 
+			// reset AlreadyRestored list
+			common.AlreadyRestored = make(map[common.Hash]common.Empty)
+		} 
 	}
 }
 

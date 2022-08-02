@@ -297,27 +297,20 @@ func getAccountsAndKeysFromMerkleProof(nodeHash common.Hash, origNode node, tKey
 		// fmt.Println("tKey: ", tKey)
 		// fmt.Println("len(tKey): ", len(tKey))
 
+		// finalNode should be shortNode, and its value must be valueNode
 		switch finalNode := (origNode).(type) {
 		case *shortNode:
-			for i := 0; ; i++ {
-				_, cld := get(origNode, finalNode.Key, true)
-				// fmt.Println("tKey is ", tKey[len(tKey)-1:])
-				switch cld := cld.(type) {
-				case nil:
-					// The trie doesn't contain the key.
-					// fmt.Println("nil")
-					return nil, nil
-				case hashNode:
-					// fmt.Println("hashNode")
-					copy(nodeHash[:], cld)
-				case valueNode:
-					// fmt.Println("valueNode")
-					hexToInt := new(big.Int)
-					hexToInt.SetString(common.BytesToHash(hexToKeybytes(tKey)).Hex()[2:], 16)
-					return cld, hexToInt
-				default:
-					// fmt.Println("default")
-				}
+			_, acc := get(origNode, finalNode.Key, true)
+			// fmt.Println("tKey is ", tKey[len(tKey)-1:])
+			switch acc := acc.(type) {
+			case valueNode:
+				// fmt.Println("valueNode")
+				hexToInt := new(big.Int)
+				hexToInt.SetString(common.BytesToHash(hexToKeybytes(tKey)).Hex()[2:], 16)
+				return acc, hexToInt
+			default:
+				// fmt.Println("default")
+				return nil, nil
 			}
 		default: 
 		}

@@ -125,7 +125,7 @@ func Transfer(db vm.StateDB, sender, recipient common.Address, amount *big.Int) 
 }
 
 // Restore restores the inactive account (joonha)
-func Restore(db vm.StateDB, Addr common.Address, amount *big.Int, codeHash []byte, blockNum *big.Int, isMerge bool) {
+func Restore(db vm.StateDB, Addr common.Address, amount *big.Int, codeHash []byte, root common.Hash) {
 	// set account balance with 0 (delete cached balance)
 	bal := db.GetBalance(Addr)
 	db.SubBalance(Addr, bal)
@@ -133,19 +133,10 @@ func Restore(db vm.StateDB, Addr common.Address, amount *big.Int, codeHash []byt
 	// restore inactive account with latest state
 	db.AddBalance(Addr, amount)
 
-	if isMerge {
-		// set nonce crumb's nonce + 1
-		newNonce := db.GetNonce(Addr) + 1
-		db.SetNonce(Addr, newNonce)
-
-	} else { // creating
-		// set nonce (blockNumber * MAX_TXS_PER_BLOCK)
-		newNonce := big.NewInt(0)
-		newNonce.Mul(blockNum, big.NewInt(64))
-		db.SetNonce(Addr, newNonce.Uint64())
-	}
-
 	// restore codeHash
 	// fmt.Println("(RESTORING)codeHash: ", codeHash)
 	db.SetCode_Restore(Addr, codeHash)
+
+	// set storageRoot
+	db.SetStorageRoot(Addr, root)
 }

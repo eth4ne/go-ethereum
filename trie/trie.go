@@ -252,8 +252,6 @@ func (t *Trie) tryGetAllLeafNodes(currNode node, parentKey, firstKey, lastKey []
 				// out of range
 				// fmt.Println("right: out of range\n")
 				return 
-		return 
-				return 
 			}
 		}
 		// this node is in the range, so move on to the child
@@ -294,9 +292,9 @@ func (t *Trie) tryGetAllLeafNodes(currNode node, parentKey, firstKey, lastKey []
 				}
 			}
 			// fmt.Println("pos:", pos, " / leftIsSafe:", leftIsSafe, " / rightIsSafe:", rightIsSafe, " / leftOut:", leftOut, " / rightOut:", rightOut)
-			if leftOut == true || rightOut == true { // out of range
+			if leftOut || rightOut { // out of range
 				// fmt.Println("X ------> (FN) i:", i, "(out of range)")
-				if rightOut == true {
+				if rightOut {
 					break // no need to go more because it already surpassed the lastKey
 				} // When just the leftOut is true, should go more because we've not reached the range yet!
 			} else { // this node is in the range, so move on to the child

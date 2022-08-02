@@ -65,7 +65,7 @@ func (n *ProofList) Get(key []byte) ([]byte, error) {
 type Empty struct{}
 
 var (
-	// to delete and inactivate the nodes just for the secode appearance (worker.go) (joonha)
+	// to delete and inactivate the nodes just for once (worker.go) (joonha)
 	IsSecond bool
 
 	// inactive storage snapshot ON/OFF option (joonha)

@@ -48,7 +48,7 @@ type (
 	// TransferFunc is the signature of a transfer function
 	TransferFunc func(StateDB, common.Address, common.Address, *big.Int)
 	// RestoreFunc is the signature of a restore function (joonha)
-	RestoreFunc func(StateDB, common.Address, *big.Int, []byte, *big.Int, bool)
+	RestoreFunc func(StateDB, common.Address, *big.Int, []byte, common.Hash)
 	// GetHashFunc returns the n'th block hash in the blockchain
 	// and is used by the BLOCKHASH EVM op code.
 	GetHashFunc func(uint64) common.Hash
@@ -265,14 +265,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		log.Info("### restoration target", "address", inactiveAddr)
 		log.Info("### len(AddrToKey_inactive)", "len(AddrToKey_inactive)", len(common.AddrToKey_inactive[inactiveAddr]))
 		
-		// if there is no inactive acc, skip restoration
-		if len(common.AddrToKey_inactive[inactiveAddr]) <= 0 {
-			log.Error("there is no inactive account to restore", "inactiveAddr", inactiveAddr)
-			// goto afterRestoration
-			return nil, gas, nil
-		}
 
-	
 		// (log for Debugging)
 		// lastIndex := len(common.AddrToKey_inactive[inactiveAddr]) - 1
 		// ii := 0
@@ -338,6 +331,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 			}
 			
 
+			// decode leaf nodes to accounts
 			// accounts are ready to be restored
 			// TODO (joonha): change code to get non-nil codeHash not the first's.
 			firstValidIndex := -1
@@ -352,10 +346,11 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 					rlp.DecodeBytes(acc, &curAcc)
 					accounts = append(accounts, curAcc)
 					
-					// get codeHash of the first inactive CA
+					// get codeHash and storageRoot of the first inactive CA
 					if firstValidIndex == -1 {
 						firstValidIndex = i
 						resAcc.CodeHash = curAcc.CodeHash
+						resAcc.Root = curAcc.Root
 					}
 				}
 			}
@@ -385,7 +380,6 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 
 		// decide whether to create or merge for accounts[0]
 		// keysToDelete := make([]common.Hash, 0)
-		isMerge := false
 
 		// check state's dirty first and then common list 
 		doExist := evm.StateDB.DoDirtyCrumbExist(inactiveAddr)
@@ -398,12 +392,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 
 			// fmt.Println("inactiveAddr: ", inactiveAddr)
 			// fmt.Println("accounts[0]: ", accounts[0])
-			evm.StateDB.CreateAccount_restoring(inactiveAddr)
-
-			if accounts[0] != nil {
-				log.Info("restoring Balance", "restoring Balance", accounts[0].Balance) // index 유의
-				resAcc.Balance.Add(resAcc.Balance, accounts[0].Balance)
-			}
+			evm.StateDB.CreateAccount_withBlockNum(inactiveAddr, evm.Context.BlockNumber)
 
 		} else { // merge (crumb account exists in the active trie)
 			log.Info("### MERGE")
@@ -411,31 +400,30 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 
 			log.Info("activeBalance", "activeBalance", activeBalance)
 			if  accounts[0] != nil {
-				log.Info("restoring Balance", "restoring Balance", accounts[0].Balance)
-				resAcc.Balance.Add(activeBalance, accounts[0].Balance)
+				resAcc.Balance.Add(activeBalance, big.NewInt(0))
 			}
-			isMerge = true // this is for nonce setting
 
 			// // when restoring by merging, preexisting (active) crumb should be deleted
 			// keysToDelete = append(common.KeysToDelete, common.AddrToKey[inactiveAddr]) // --> might be done in updateStateObject() even though we don't here
 		}
 
-		// merge balances of the rest of the accounts
+		// merge balances of the restoring accounts
 		log.Info("len(accounts)", "len(accounts)", len(accounts))
-		for i := 1; i < len(accounts); i++ {
+		for i := 0; i < len(accounts); i++ {
 			if  accounts[i] != nil {
 				resAcc.Balance.Add(resAcc.Balance, accounts[i].Balance)
 			}
 		}
 
-		// apply balance, codeHash of resAcc and set new nonce
-		evm.Context.Restore(evm.StateDB, inactiveAddr, resAcc.Balance, resAcc.CodeHash, evm.Context.BlockNumber, isMerge)
+		// apply balance, codeHash of resAcc
+		evm.Context.Restore(evm.StateDB, inactiveAddr, resAcc.Balance, resAcc.CodeHash, resAcc.Root)
 
 
 		// rebuild CA's storage trie if inactive storage snapshot is on
 		if common.UsingInactiveStorageSnapshot {
 			evm.StateDB.RebuildStorageTrieFromSnapshot(blockRoot, inactiveAddr, targetKeys[0])
 
+			// TODO (joonha) move this verifying into RebuildStorageTrieFromSnapshot (before updateTrie)
 			// // compare rebuilt storage trie's root to the retrieved account's root // cannot debug now so comment-out. Activate later after debugging.
 			// origRoot := accounts[0].Root
 			// newRoot := evm.StateDB.GetRoot(inactiveAddr)
@@ -452,7 +440,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 
 
 		// Remove inactive account from AddrToKey_inactive map
-		evm.StateDB.RemoveRestoredKeyFromAddrToKey_inactive(inactiveAddr, targetKeys)
+		evm.StateDB.RemoveRestoredKeyFromAddrToKey_inactive(inactiveAddr, targetKeys) // TODO(joonha) dirty로 처리하는 게 맞을 듯
 		
 
 		// Remove inactive account from inactive Trie

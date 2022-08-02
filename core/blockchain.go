@@ -1396,15 +1396,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	fmt.Fprintf(f1, "\n46147 46219 RECEIVER GetBalance: %d", state.GetBalance(common.HexToAddress("0x5DF9B87991262F6BA471F09758CDE1c0FC1De734")))
 	fmt.Fprintf(f1, "\n46214 RECEIVER GetBalance: %d", state.GetBalance(common.HexToAddress("0xc9D4035F4A9226D50f79b73Aafb5d874a1B6537e")))
 
-	
-	// // set common.DoDeleteLeafNode (jmlee) // --> commented-out because we check the epoch at worker.go > fillTransactions (joonha)
-	// if (block.Header().Number.Int64()+1) % common.DeleteLeafNodeEpoch == 0 {
-	// 	common.DoDeleteLeafNode = true
-	// } else {
-	// 	common.DoDeleteLeafNode = false
-	// }
-
-	common.IsSecond = false // set false (2207061736) (joonha)
+	common.IsSecond = false // set false (joonha)
 	
 	return status, nil
 }

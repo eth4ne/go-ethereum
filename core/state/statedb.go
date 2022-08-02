@@ -668,10 +668,10 @@ func (s *StateDB) SetCode(addr common.Address, code []byte) {
 }
 
 // hashing code is not needed during restoring (joonha)
-func (s *StateDB) SetCode_Restore(addr common.Address, code []byte) {
+func (s *StateDB) SetCode_Restore(addr common.Address, codeHash []byte) {
 	stateObject := s.GetOrNewStateObject(addr)
 	if stateObject != nil {
-		stateObject.SetCode(common.BytesToHash(code), code)
+		stateObject.SetCode(common.BytesToHash(codeHash), codeHash)
 	}
 }
 
@@ -682,14 +682,15 @@ func (s *StateDB) SetState(addr common.Address, key, value common.Hash) {
 	}
 }
 
-// SetState_Restore set storage slot when restoring CA (joonha)
-func (s *StateDB) SetState_Restore(addr common.Address, key, value common.Hash) {
+// SetState_hashedKey set storage slot when restoring CA (joonha)
+// Calls SetState_hashedKey() not SetState()
+func (s *StateDB) SetState_hashedKey(addr common.Address, key, value common.Hash) {
 	// get renewed account
 	var stateObject *stateObject
 	stateObject = s.getStateObject(addr)
 
 	if stateObject != nil {
-		stateObject.SetState_Restore(s.db, key, value)
+		stateObject.SetState_hashedKey(s.db, key, value)
 	}
 }
 
@@ -699,6 +700,14 @@ func (s *StateDB) SetStorage(addr common.Address, storage map[common.Hash]common
 	stateObject := s.GetOrNewStateObject(addr)
 	if stateObject != nil {
 		stateObject.SetStorage(storage)
+	}
+}
+
+// set storage root when restore (joonha)
+func (s *StateDB) SetStorageRoot(addr common.Address,  root common.Hash) {
+	stateObject := s.GetOrNewStateObject(addr)
+	if stateObject != nil {
+		stateObject.SetStorageRoot(root)
 	}
 }
 
@@ -768,7 +777,7 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 	// fmt.Println("Addr: ", obj.data.Addr)
 	// fmt.Println("")
 
-	if addrKey_bigint.Int64() >= s.CheckpointKey { // updated at this epoch
+	if addrKey_bigint.Int64() >= s.CheckpointKey { // updated at this block
 		
 		/*
 		* This account is newly created or already moved at this epoch.
@@ -781,7 +790,7 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 		if err = s.trie.TryUpdate_SetKey(addrKey[:], data); err != nil {
 			s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
 		}
-	} else { // not updated yet at this epoch
+	} else { // not updated yet at this block
 
 		/* 
 		* This account was active at previous epoch and touched again at this epoch.
@@ -978,9 +987,12 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 		}
 
 		// get key
-		key, doExist := common.AddrToKey[addr]
+		key, doExist := s.AddrToKeyDirty[addr]
 		if !doExist {
-			key = common.NoExistKey
+			key, doExist = common.AddrToKey[addr]
+			if !doExist {
+				key = common.NoExistKey
+			}
 		}
 		
 		if key == common.NoExistKey {
@@ -1078,30 +1090,6 @@ func (s *StateDB) createObject(addr common.Address, blockNum *big.Int) (newobj, 
 	return newobj, nil
 }
 
-// createObject_restoring creates an object restored from the inactive trie (joonha)
-func (s *StateDB) createObject_restoring(addr common.Address) (newobj, prev *stateObject) {
-	
-	// insert to map to make compactTrie (jmlee)
-	_, doExist := common.AddrToKey[addr]
-	if !doExist && addr != common.ZeroAddress {
-		newAddrKey := common.HexToHash(strconv.FormatInt(s.NextKey, 16))
-		// fmt.Println("make new account -> addr:", addr.Hex(), "/ keyHash:", newAddrKey)
-		s.AddrToKeyDirty[addr] = newAddrKey
-		s.NextKey += 1
-	}
-
-	newobj = newObject(s, addr, types.StateAccount{})
-	s.journal.append(createObjectChange{account: &addr})
-	s.setStateObject(newobj)
-
-	// // Create active account snapshot. // --> this occurs in updateStateObject (joonha)
-	// if common.UsingActiveSnapshot {
-	// 	s.snapAccounts[s.AddrToKeyDirty[addr]] = make([]byte, 0) // byte is a numeric type, actually an alias for uint8 (joonha)
-	// }
-
-	return newobj, nil
-}
-
 // CreateAccount explicitly creates a state object. If a state object with the address
 // already exists the balance is carried over to the new account.
 //
@@ -1127,11 +1115,6 @@ func (s *StateDB) CreateAccount_withBlockNum(addr common.Address, blockNum *big.
 	if prev != nil { // ref: https://github.com/ethereum/go-ethereum/issues/25334
 		newObj.setBalance(prev.data.Balance)
 	}
-}
-
-// CreateAccount_restoring restores account by creation (joonha)
-func (s *StateDB) CreateAccount_restoring(addr common.Address) {
-	s.createObject_restoring(addr)
 }
 
 func (db *StateDB) ForEachStorage(addr common.Address, cb func(key, value common.Hash) bool) error {
@@ -1768,10 +1751,7 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 
 	// move inactive leaf nodes to left
 	for index, key := range KeysToInactivate {
-		addr := common.BytesToAddress(AccountsToInactivate[index])
-
-		// // to delete storage trie from disk // --> commented-out because we won't delete'em from disk due to overlapping issue (joonha)
-		// common.AccountsToDeleteFromDisk = append(common.AccountsToDeleteFromDisk, addr)
+		addr := common.BytesToAddress(AccountsToInactivate[index]) // BytesToAddress() turns last 20 bytes into addr
 
 		// insert inactive leaf node to left
 		keyToInsert := common.Int64ToHash(common.InactiveBoundaryKey + int64(index))
@@ -1781,13 +1761,13 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 		} else {
 
 			// delete from AddrToKey
-			delete(common.AddrToKey, common.BytesToAddress(AccountsToInactivate[index]))
-			delete(s.AddrToKeyDirty, common.BytesToAddress(AccountsToInactivate[index])) // maybe unnenecessary (joonha)
+			delete(common.AddrToKey, addr)
+			delete(s.AddrToKeyDirty, addr) // maybe unnenecessary (joonha)
 			
 			// insert to AddrToKey_inactive
 			// applying to dirty doesn't make change so apply directly to common (joonha)
-			// s.AddrToKeyDirty_inactive[common.BytesToAddress(AccountsToInactivate[index])] = append(s.AddrToKeyDirty_inactive[common.BytesToAddress(AccountsToInactivate[index])], keyToInsert)
-			common.AddrToKey_inactive[common.BytesToAddress(AccountsToInactivate[index])] = append(common.AddrToKey_inactive[common.BytesToAddress(AccountsToInactivate[index])], keyToInsert)
+			// s.AddrToKeyDirty_inactive[addr] = append(s.AddrToKeyDirty_inactive[addr], keyToInsert)
+			common.AddrToKey_inactive[addr] = append(common.AddrToKey_inactive[addr], keyToInsert)
 		}
 
 
@@ -1814,6 +1794,7 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 				snapRoot := s.snap.Root()
 
 				// get slotKeyList from active snapshot
+				// if EOA, slotKeyList is nil
 				slotKeyList := s.snaps.StorageList_ethane(snapRoot, key) // active snapshot's storage list
 				// fmt.Println("slotKeyList: ", slotKeyList)
 				temp := make(map[common.Hash][]byte)
@@ -1830,7 +1811,7 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 				delete(s.snapAccounts, key)
 				delete(s.snapStorage, key)
 
-			} else if common.UsingActiveSnapshot == false { // get slotKeyList from object's storage trie
+			} else { // get slotKeyList from object's storage trie
 				obj := s.getStateObject(addr)
 				slots := make(map[common.Hash][]byte)
 
@@ -1843,11 +1824,15 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 					s.snapStorage_inactive[keyToInsert] = slots
 					// fmt.Println("slots: ", slots)
 
-				} else {
-					// fmt.Println("obj has been deleted.")
 				}
 			}
+		} else if common.UsingActiveSnapshot {
+			// delete previous active snapshot 
+			s.snapDestructs[key] = struct{}{}
+			delete(s.snapAccounts, key)
+			delete(s.snapStorage, key)
 		}
+		
 		// delete account from trie
 		if err := s.trie.TryUpdate_SetKey(key[:], nil); err != nil {
 			s.setError(fmt.Errorf("updateStateObject (%x) error: %v", key[:], err))
@@ -1904,7 +1889,7 @@ func (s *StateDB) RebuildStorageTrieFromSnapshot(snapRoot common.Hash, addr comm
 		v, _ := s.snap_inactive.Storage(accountHash, slotKey)
 		// fmt.Println("v is", v)
 
-		s.SetState_Restore(addr, slotKey, common.BytesToHash(v))
+		s.SetState_hashedKey(addr, slotKey, common.BytesToHash(v))
 		temp[slotKey] = v
 	}
 

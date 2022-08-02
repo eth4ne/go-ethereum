@@ -205,6 +205,21 @@ func (s *stateObject) GetState(db Database, key common.Hash) common.Hash {
 	return s.GetCommittedState(db, key)
 }
 
+// GetState_hashedKey retrieves a value from the account storage trie with already hashed key (joonha)
+func (s *stateObject) GetState_hashedKey(db Database, key common.Hash) common.Hash {
+	// If the fake storage is set, only lookup the state here(in the debugging mode)
+	if s.fakeStorage != nil {
+		return s.fakeStorage[key]
+	}
+	// If we have a dirty value for this state entry, return it
+	value, dirty := s.dirtyStorage[key]
+	if dirty {
+		return value
+	}
+	// Otherwise return the entry's original value
+	return s.GetCommittedState_hashedKey(db, key)
+}
+
 // GetCommittedState retrieves a value from the committed account storage trie.
 func (s *stateObject) GetCommittedState(db Database, key common.Hash) common.Hash {
 	// If the fake storage is set, only lookup the state here(in the debugging mode)
@@ -318,7 +333,7 @@ func (s *stateObject) GetCommittedState_hashedKey(db Database, key common.Hash) 
 	}
 
 	// no hashing (joonha)
-	if enc, err = s.getTrie(db).TryGet(key.Bytes()); err != nil {
+	if enc, err = s.getTrie(db).TryGet_SetKey(key.Bytes()); err != nil {
 		s.setError(err)
 		return common.Hash{}
 	}
@@ -334,7 +349,7 @@ func (s *stateObject) GetCommittedState_hashedKey(db Database, key common.Hash) 
 		if metrics.EnabledExpensive {
 			meter = &s.db.StorageReads
 		}
-		if enc, err = s.getTrie(db).TryGet_SetKey(key.Bytes()); err != nil { 
+		if enc, err = s.getTrie(db).TryGet_SetKey(key.Bytes()); err != nil { // no hashing (joonha)
 			s.setError(err)
 			return common.Hash{}
 		}
@@ -359,7 +374,7 @@ func (s *stateObject) SetState(db Database, key, value common.Hash) { // key = s
 		return
 	}
 	// If the new value is the same as old, don't set
-	prev := s.GetState(db, key)
+	prev := s.GetState(db, key) // get value of hash(key) (joonha)
 	if prev == value {
 		return
 	}
@@ -372,12 +387,24 @@ func (s *stateObject) SetState(db Database, key, value common.Hash) { // key = s
 	s.setState(key, value)
 }
 
-// SetState_Restore set storage slot when restoring CA (joonha)
-func (s *stateObject) SetState_Restore(db Database, key, value common.Hash) {
+// SetState_hashedKey set storage slot when restoring CA (joonha)
+// Getting prev with key not hash(key) is different from SetState()
+func (s *stateObject) SetState_hashedKey(db Database, key, value common.Hash) {
+	// If the fake storage is set, put the temporary state update here.
+	if s.fakeStorage != nil {
+		s.fakeStorage[key] = value
+		return
+	}
+	// If the new value is the same as old, don't set
+	prev := s.GetState_hashedKey(db, key) // get value of hash(key) (joonha)
+	if prev == value {
+		return
+	}
 	// New value is different, update and journal the change
 	s.db.journal.append(storageChange{
 		account:  &s.address,
 		key:      key,
+		prevalue: prev,
 	})
 	s.setState(key, value)
 }
@@ -398,6 +425,11 @@ func (s *stateObject) SetStorage(storage map[common.Hash]common.Hash) {
 	}
 	// Don't bother journal since this function should only be used for
 	// debugging and the `fake` storage won't be committed to database.
+}
+
+// set storage root when restore (joonha)
+func (s *stateObject) SetStorageRoot(root common.Hash) {
+	s.data.Root = root
 }
 
 func (s *stateObject) setState(key, value common.Hash) {
@@ -443,7 +475,7 @@ func (s *stateObject) updateTrie(db Database) Trie {
 	usedStorage := make([][]byte, 0, len(s.pendingStorage))
 	for key, value := range s.pendingStorage {
 
-		hk := crypto.HashData(hasher, key[:]) // hash the key (joonha)
+		// hk := crypto.HashData(hasher, key[:]) // hash the key (joonha)
 
 		// Skip noop changes, persist actual changes
 		if value == s.originStorage[key] {
@@ -453,14 +485,14 @@ func (s *stateObject) updateTrie(db Database) Trie {
 
 		var v []byte
 		if (value == common.Hash{}) {
-			// s.setError(tr.TryDelete(key[:])) // --> original code
-			s.setError(tr.TryUpdate_SetKey(hk[:], nil)) // (joonha)
+			s.setError(tr.TryDelete(key[:])) // --> original code
+			// s.setError(tr.TryUpdate_SetKey(hk[:], nil)) // (joonha)
 			s.db.StorageDeleted += 1
 		} else {
 			// Encoding []byte cannot fail, ok to ignore the error.
 			v, _ = rlp.EncodeToBytes(common.TrimLeftZeroes(value[:]))
-			// s.setError(tr.TryUpdate(key[:], v)) // --> original code 
-			s.setError(tr.TryUpdate_SetKey(hk[:], v)) // TryUpdate's hashKey is modified for compactMPT so we use already hashed key to update trie (joonha)
+			s.setError(tr.TryUpdate(key[:], v)) // --> original code 
+			// s.setError(tr.TryUpdate_SetKey(hk[:], v)) // TryUpdate's hashKey is modified for compactMPT so we use already hashed key to update trie (joonha)
 			// maybe related to storage trie update? (jmlee)
 			s.db.StorageUpdated += 1
 		}
@@ -489,7 +521,7 @@ func (s *stateObject) updateTrie(db Database) Trie {
 // updateTrie_hashedKey updates trie with already hashed key (joonha)
 func (s *stateObject) updateTrie_hashedKey(db Database) Trie {
 	// Make sure all dirty slots are finalized into the pending storage area
-	s.finalise(false) // Don't prefetch any more, pull directly if need be
+	s.finalise(false) // Don't prefetch any more, pull directly if need be // here, dirtyStorage becomes pendingStorage
 	if len(s.pendingStorage) == 0 {
 		return s.trie
 	}
@@ -505,7 +537,7 @@ func (s *stateObject) updateTrie_hashedKey(db Database) Trie {
 
 	usedStorage := make([][]byte, 0, len(s.pendingStorage))
 
-	for key, value := range s.pendingStorage { 
+	for key, value := range s.pendingStorage { // key is already hashed (joonha)
 
 		// Skip noop changes, persist actual changes
 		if value == s.originStorage[key] {
@@ -577,7 +609,7 @@ func (s *stateObject) CommitTrie(db Database) (int, error) {
 	return committed, err
 }
 
-// (joonha)
+// CommitTrie_hashedKey calls updateTrie_hashedKey (joonha)
 func (s *stateObject) CommitTrie_hashedKey(db Database) error {
 	// If nothing changed, don't bother with hashing anything
 	if s.updateTrie_hashedKey(db) == nil {
