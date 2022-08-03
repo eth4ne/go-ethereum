@@ -1342,6 +1342,7 @@ var _ = os.MkdirAll(path, 0777)
 func PrintTxSubstate(blocknumber, distance int) {
 	ss := fmt.Sprintf("Write TxSubstate %d-%d in txt file", blocknumber-distance, blocknumber)
 	filepath := path + "TxSubstate" + strconv.FormatInt(int64(blocknumber-distance+1), 10) + "-" + strconv.FormatInt(int64(blocknumber), 10) + ".txt"
+	// filepath := "/shared/jhkim/TxSubstate" + strconv.FormatInt(int64(blocknumber-distance+1), 10) + "-" + strconv.FormatInt(int64(blocknumber), 10) + ".txt"
 
 	f, err := os.Create(filepath)
 	if err != nil {
@@ -1438,7 +1439,7 @@ func PrintTxSubstate(blocknumber, distance int) {
 							// s += fmt.Sprintln()
 						}
 					}
-					s += fmt.Sprintf("      RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSubstateAccount(*stateAccount)))
+					// s += fmt.Sprintf("      RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSubstateAccount(*stateAccount)))
 					fmt.Fprintln(f, s)
 				}
 				// s += fmt.Sprintln()
@@ -1454,7 +1455,7 @@ func PrintTxSubstate(blocknumber, distance int) {
 		s += fmt.Sprintf("  Balance:%v\n", minerSA.Balance)
 		s += fmt.Sprintf("  Codehash:%v\n", minerSA.Codehash)
 		s += fmt.Sprintf("  StorageRoot:%v\n", minerSA.StorageRoot)
-		s += fmt.Sprintf("  RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSimpleAccount(minerSA)))
+		// s += fmt.Sprintf("  RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSimpleAccount(minerSA)))
 		fmt.Fprintln(f, s)
 		// s = fmt.Sprintln("Miner:", common.BlockMinerList[i].Addr, ",Balance:", common.BlockMinerList[i].Balance)
 		uncles := common.BlockUncleList[i]
@@ -1465,7 +1466,7 @@ func PrintTxSubstate(blocknumber, distance int) {
 				s += fmt.Sprintf("  Balance:%v\n", uncle.Balance)
 				s += fmt.Sprintf("  Codehash:%v\n", uncle.Codehash)
 				s += fmt.Sprintf("  StorageRoot:%v\n", uncle.StorageRoot)
-				s += fmt.Sprintf("  RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSimpleAccount(uncle)))
+				// s += fmt.Sprintf("  RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSimpleAccount(uncle)))
 				fmt.Fprintln(f, s)
 			}
 
