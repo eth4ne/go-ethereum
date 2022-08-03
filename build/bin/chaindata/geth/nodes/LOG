@@ -1,8 +1,0 @@
-=============== Jun 22, 2022 (KST) ===============
-13:21:32.300902 log@legend F·NumFile S·FileSize N·Entry C·BadEntry B·BadBlock Ke·KeyError D·DroppedEntry L·Level Q·SeqNum T·TimeElapsed
-13:21:32.308710 db@open opening
-13:21:32.309774 version@stat F·[] S·0B[] Sc·[]
-13:21:32.311665 db@janitor F·2 G·0
-13:21:32.311679 db@open done T·2.950962ms
-13:46:17.348548 db@close closing
-13:46:17.348679 db@close done T·127.994µs
