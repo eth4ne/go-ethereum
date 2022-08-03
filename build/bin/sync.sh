@@ -6,6 +6,7 @@ make geth
 
 # WARNING: delete geth datadir. 
 DataDir="/ssd/ethereum"
+#DataDir="/home/jhkim/chaindata"
 echo "clear chaindata"
 rm -rf ${DataDir} && mkdir ${DataDir}
 

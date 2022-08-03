@@ -24,6 +24,7 @@ import (
 	"math/big"
 	"os"
 	"sort"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1312,52 +1313,172 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
 	}
 
-	common.Flushednode_block[common.GlobalBlockNumber] = common.FlushedNodeList // append flushed nodehash list
-	// fmt.Println("blocknumber", common.GlobalBlockNumber, "length of flushednode_block", len(common.Flushednode_block))
-	common.TrieUpdateElse[common.GlobalBlockNumber] = common.TrieUpdateElseTemp
-	var distance int
+	var distance = 500000
 
-	if common.GlobalDistance == 0 {
-		distance = 100000
-	} else {
-		distance = common.GlobalDistance
-	}
-	if common.GlobalBlockNumber%distance == 0 { // distance is heuristic number for not to shutdown
-		// fmt.Println("txDetail distance : ", distance)
-		printResult(distance) //jhkim
+	// fmt.Println("  state_processor.go", blocknumber, distance, common.GlobalDistance)
+	if common.GlobalBlockNumber%distance == 0 && common.GlobalBlockNumber != 0 {
+		PrintTxSubstate(common.GlobalBlockNumber, distance)
+		fmt.Println("DONE blocknumber:", common.GlobalBlockNumber)
+
+		// reset TxReadList and TxWriteList
+		common.TxDetail = make(map[common.Hash]*common.TxInformation)
+		common.TxReadList = make(map[common.Hash]common.SubstateAlloc)
+		common.TxWriteList = make(map[common.Hash]common.SubstateAlloc)
+		common.BlockMinerList = make(map[int]common.SimpleAccount)
+		common.BlockUncleList = make(map[int][]common.SimpleAccount)
+		common.BlockTxList = make(map[int][]common.Hash)
 	}
 
-	common.FlushedNodeList = map[common.Hash]int{}
-	common.TrieUpdateElseTemp = []common.Address{}
-	common.GlobalTxHash = common.HexToHash("0x0")
-	common.GlobalBlockMiner = common.Address{}
-	common.GlobalBlockUncles = []common.Address{}
-	// common.MinerUnlce = map[int]map[common.Address]uint64{}
-	common.GlobalBlockNumber = common.GlobalBlockNumber + 1
-	if common.GlobalBlockNumber == 2000001 {
+	if common.GlobalBlockNumber == 500001 {
 		os.Exit(0)
 	}
 
 	return status, nil
 }
 
-func printResult(distance int) {
+var path = "/home/jhkim/go/src/github.com/ethereum/go-ethereum-substate/txDetail/" // used absolute path
+var _ = os.MkdirAll(path, 0777)
 
-	// jhkim: write transaction details and flushed node list files every distance block
+func PrintTxSubstate(blocknumber, distance int) {
+	ss := fmt.Sprintf("Write TxSubstate %d-%d in txt file", blocknumber-distance, blocknumber)
+	filepath := path + "TxSubstate" + strconv.FormatInt(int64(blocknumber-distance+1), 10) + "-" + strconv.FormatInt(int64(blocknumber), 10) + ".txt"
 
-	if common.GlobalBlockNumber < 2 {
-		common.TxDetail[common.HexToHash("0x0")] = &common.ZeroBlockTI
+	f, err := os.Create(filepath)
+	if err != nil {
+		fmt.Printf("Cannot create result file.\n")
+		os.Exit(1)
+	}
+	defer f.Close()
+
+	start := time.Now()
+	txcounter := 0
+
+	for i := blocknumber - distance + 1; i <= blocknumber; i++ {
+		// s := fmt.Sprintln("##########################################################################")
+		if i%(distance/10) == 0 {
+			elapsed := time.Since(start)
+			fmt.Println("Writing file.. Block #:", i, "elapsed", elapsed.Seconds(), "s")
+		}
+
+		s := fmt.Sprintf("/Block:%v\n", i)
+		fmt.Fprintln(f, s)
+		if txlist, exist := common.BlockTxList[i]; exist {
+			txcounter += len(common.BlockTxList[i])
+			for _, tx := range txlist {
+				s := fmt.Sprintf("TxHash:%v\n", tx)
+				txDetail := common.TxDetail[tx]
+				if txDetail.Types == 1 {
+					s += fmt.Sprintln("  Type:Transfer")
+					// s += fmt.Sprintln("  common.TxInformation: Transfer or Contract call")
+				} else if txDetail.Types == 2 {
+					s += fmt.Sprintln("  Type:ContractDeploy")
+				} else if txDetail.Types == 3 {
+					s += fmt.Sprintln("  Type:ContractCall")
+				} else if txDetail.Types == 4 {
+					s += fmt.Sprintln("  Type:Failed")
+				} else {
+					s += fmt.Sprintln("  Wrong Tx Information")
+				}
+				s += fmt.Sprintf("  From:%v\n", txDetail.From)
+
+				if txDetail.Types == 1 || txDetail.Types == 3 {
+					s += fmt.Sprintf("  To:%v\n", txDetail.To)
+				} else if txDetail.Types == 4 {
+					// Do nothing
+				} else {
+					s += fmt.Sprintf("  DeployedCA:%v\n", txDetail.DeployedContractAddress)
+				}
+				s += fmt.Sprintln()
+				fmt.Fprintln(f, s)
+				readlist := common.TxReadList[tx]
+				// fmt.Println("blocknumber", i, "readlist", readlist)
+				s = fmt.Sprintln("  ReadList")
+				for addr := range readlist {
+					s += fmt.Sprintf("    address:%v\n", addr)
+					// s += fmt.Sprintln("      Nonce:", stateAccount.Nonce)
+					// s += fmt.Sprintln("      Balance:", stateAccount.Balance)
+					// s += fmt.Sprintln("      CodeHash:", common.BytesToHash(stateAccount.CodeHash))
+
+					// if stateAccount.Code != nil {
+					// 	s += fmt.Sprintln("      Code:", common.Bytes2Hex(stateAccount.Code))
+					// }
+					// s += fmt.Sprintln("      StorageRoot:", stateAccount.StorageRoot)
+
+					// s += fmt.Sprintln()
+				}
+				// s += fmt.Sprintln()
+				writelist := common.TxWriteList[tx]
+				s = fmt.Sprintln("  WriteList")
+				fmt.Fprintln(f, s)
+				for addr, stateAccount := range writelist {
+
+					s = fmt.Sprintf("    address:%v\n", addr)
+					s += fmt.Sprintf("      Nonce:%v\n", stateAccount.Nonce)
+					s += fmt.Sprintf("      Balance:%v\n", stateAccount.Balance)
+					s += fmt.Sprintf("      CodeHash:%v\n", common.BytesToHash(stateAccount.CodeHash))
+					if txDetail.Types == 2 && stateAccount.Code != nil {
+						s += fmt.Sprintf("      Code:%v\n", common.Bytes2Hex(stateAccount.Code))
+					}
+					s += fmt.Sprintf("      StorageRoot:%v\n", stateAccount.StorageRoot)
+					if len(stateAccount.Storage) != 0 {
+						s += fmt.Sprintln("        Storage:")
+						for _, v := range stateAccount.Storage {
+							for kk, vv := range v {
+								s += fmt.Sprint("          slot:", kk, ",value:")
+								tmp := common.TrimLeftZeroes(vv[:])
+								if len(tmp) != 0 {
+									s += fmt.Sprintf("0x%v\n", common.Bytes2Hex(tmp))
+								} else {
+									s += fmt.Sprintln("0x0")
+								}
+
+							}
+
+							// s += fmt.Sprintln()
+						}
+					}
+					s += fmt.Sprintf("      RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSubstateAccount(*stateAccount)))
+					fmt.Fprintln(f, s)
+				}
+				// s += fmt.Sprintln()
+				// fmt.Fprintln(f, s)
+			}
+
+		}
+
+		// s += fmt.Sprintln("##########################################################################")
+		minerSA := common.BlockMinerList[i]
+		s = fmt.Sprintf("Miner:%v\n", minerSA.Addr)
+		s += fmt.Sprintf("  Nonce:%v\n", minerSA.Nonce)
+		s += fmt.Sprintf("  Balance:%v\n", minerSA.Balance)
+		s += fmt.Sprintf("  Codehash:%v\n", minerSA.Codehash)
+		s += fmt.Sprintf("  StorageRoot:%v\n", minerSA.StorageRoot)
+		s += fmt.Sprintf("  RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSimpleAccount(minerSA)))
+		fmt.Fprintln(f, s)
+		// s = fmt.Sprintln("Miner:", common.BlockMinerList[i].Addr, ",Balance:", common.BlockMinerList[i].Balance)
+		uncles := common.BlockUncleList[i]
+		if len(uncles) != 0 {
+			for _, uncle := range uncles {
+				s = fmt.Sprintf("Uncle:%v\n", uncle.Addr)
+				s += fmt.Sprintf("  Nonce:%v\n", uncle.Nonce)
+				s += fmt.Sprintf("  Balance:%v\n", uncle.Balance)
+				s += fmt.Sprintf("  Codehash:%v\n", uncle.Codehash)
+				s += fmt.Sprintf("  StorageRoot:%v\n", uncle.StorageRoot)
+				s += fmt.Sprintf("  RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSimpleAccount(uncle)))
+				fmt.Fprintln(f, s)
+			}
+
+		}
+		// s += fmt.Sprintln("##########################################################################")
+		// fmt.Fprintln(f, s)
 	}
 
-	// fmt.Println(common.TrieUpdateElse)
-	trie.PrintTxDetail(common.GlobalBlockNumber, distance)
-	trie.PrintTxElse(common.GlobalBlockNumber, distance)
-	trie.PrintDuplicatedFlushedNode(common.GlobalBlockNumber, distance)
+	elapsed := time.Since(start)
+	ss += fmt.Sprintln(" in", elapsed.Seconds(), "seconds")
+	fmt.Print(ss)
+	fmt.Println("# of Txs written in block", strconv.FormatInt(int64(blocknumber-distance+1), 10)+"-"+strconv.FormatInt(int64(blocknumber), 10), ":", txcounter)
 
-	trie.PrintFlushedNode(common.GlobalBlockNumber, distance)
-	trie.PrintAddrhash2Addr(common.GlobalBlockNumber, distance)
-
-	// os.Exit(0)
+	common.BlockTxList = map[int][]common.Hash{}
 
 }
 

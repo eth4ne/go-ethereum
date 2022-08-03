@@ -51,3 +51,5 @@ profile.cov
 
 #ethane
 /txDetail
+/build/bin/keystore
+/build/bin/experiment

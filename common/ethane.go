@@ -3,66 +3,88 @@ package common
 // (jhkim)
 
 import (
+	"math/big"
 	"sync"
 )
 
 var (
-	GlobalDistance    int     = 0
-	GlobalTxHash      Hash    = HexToHash("0x0")
-	GlobalTxTo        Address = HexToAddress("0x0")
-	GlobalTxFrom      Address = HexToAddress("0x0")
-	GlobalBlockNumber int     = 0
-	GlobalMutex       sync.Mutex
-	GlobalBlockMiner  Address = HexToAddress("0x0")
-	GlobalBlockUncles         = []Address{}
-	// GlobalBlockUnclesHeader         = []Address{}
+	// GlobalDistance                int     = 0
+	GlobalTxHash                  Hash    = HexToHash("0x0")
+	GlobalTxTo                    Address = HexToAddress("0x0")
+	GlobalTxFrom                  Address = HexToAddress("0x0")
+	GlobalBlockNumber             int     = 0
+	GlobalMutex                   sync.Mutex
+	GlobalBlockMiner              Address = HexToAddress("0x0")
+	GlobalBlockUncles                     = []Address{}
 	GlobalDeployedContractAddress Address = HexToAddress("0x0")
-	ZeroBlockTI                           = TxInformation{}
-	MinerUnlce                            = map[int]map[Address]uint64{} // key: block number, value: map[key: address of miner and uncles, value: last balance]
-
-	Flushednode_block = map[int](map[Hash]int){} // key : block number, value: list of node hash
-	FlushedNodeList   = map[Hash]int{}           // key : block number, value: list of node hash
-
-	FlushedNodeDuplicate_block = map[Hash][]int{} // key : block number, value: map [key: duplicated node hash, value: count]
-	FlushedNodeDuplicate       = map[Hash]int{}   // 1: already existed
-
-	AddrHash2Addr = map[Hash]Address{} // key : AddressHash, value: Ethereum Address
-	// Account_SlotHash2Slot = map[Address]([][][]byte){} // key : Contract account address, value: bytes array of slothash and slot and value and blocknumber
-	Account_SlotHash2Slot = map[Address]([]SlotDetail){} // key : Contract account address, value: bytes array of slothash and slot and value and blocknumber
-	// AddrHash2AddrSyncMap = sync.Map{} // key : AddressHash, value: Ethereum Address
 
 	TxDetail = map[Hash]*TxInformation{} // key : TxID, value: struct common.TxInformation
-	// TxDetailSyncMap    = sync.Map{}
-	// TrieUpdateElse     = sync.Map{} // include miner and else // key: blocknumber, value: list of Address
-	TrieUpdateElse     = map[int][]Address{} // include miner and else // key: blocknumber, value: list of Address
-	TrieUpdateElseTemp = []Address{}         // unknown account update. zeroblock
 
-	Coinbase Address = HexToAddress("0xc4422d1C18E9Ead8A9bB98Eb0d8bB9dbdf2811D7")
-	// TxDetailHashmap = map[string]([]Hash){}    // key : TxID(temporaliy set string), value: addressHash List{from , to, isCA(boolean)}
-	// CASlotHash      = map[Hash][]Hash{}        // key : CA addressHash
+	TxSubstate     = map[int](map[Hash]SubstateAlloc){} // key: block number, value: map(key: tx hash, value: SubstateAlloc)
+	BlockTxList    = map[int][]Hash{}                   // key: block number, value: tx hash
+	BlockMinerList = map[int]SimpleAccount{}            // key: block number, value: Address of block miner
 
-	IsPrefetch bool = false
+	BlockUncleList = map[int][]SimpleAccount{} // key: block number, value: Addresses of block uncles
+
+	TxReadList  = map[Hash]SubstateAlloc{} // key: tx hash, value: SubstateAlloc(map key:address, value:stateAccount)
+	TxWriteList = map[Hash]SubstateAlloc{} // key: tx hash, value: SubstateAlloc(map key:address, value:stateAccount)
+
 )
 
-type SlotDetail struct {
-	Hashkey     Hash
-	Key         Address
-	Value       []byte
-	Blocknumber int
+type SimpleAccount struct {
+	Addr Address
+
+	Nonce       uint64
+	Balance     *big.Int
+	Codehash    Hash
+	StorageRoot Hash
 }
 
+type SubstateAlloc map[Address]*SubstateAccount
+
 type TxInformation struct {
-	BlockNumber             int64
 	From                    Address
 	To                      Address
-	FromAdrHash             Hash
-	ToAdrHash               Hash
-	Types                   int       // 1: send, 2: contract creation, 3: contract call, 4: failed, 0: default.
-	Internal                []Address // list of EOA those balance is modified by internal tx
-	InternalCA              []Address // list of CA those balance is modified by internal tx
+	Types                   int // 1: send, 2: contract creation, 3: contract call, 4: failed, 0: default.
 	DeployedContractAddress Address
-	AccountBalance          map[Address]uint64
 
-	ContractAddress_SlotHash map[Address]*[]Hash // key: contract address, value: ca's slotHashes
-	SlotHash                 []Hash
+	// CA_write_slotHash map[Address]*[]Hash // key: contract address, value: written slothashes in tx
+	// CA_read_slotHash  map[Address]*[]Hash // key: contract address, value: read(touched) slothashes in tx
+
+}
+
+// SubstateAccount is modification of GenesisAccount in core/genesis.go
+type SubstateAccount struct {
+	Nonce   uint64
+	Balance *big.Int
+	// Storage map[Hash]Hash
+	// Storage map[Hash][]Hash // To keep tracking changes of slot values, use hash list rather than hash
+	Storage [](map[Hash]Hash) // make order of changes of slot values, list of maps (key: slot, value: hex value)
+	Code    []byte
+
+	StorageRoot Hash
+	// CodeHash    Hash
+	CodeHash []byte
+}
+
+func NewSubstateAccount(nonce uint64, balance *big.Int, code []byte) *SubstateAccount {
+	return &SubstateAccount{
+		Nonce:   nonce,
+		Balance: new(big.Int).Set(balance),
+		// Storage: make(map[Hash]Hash),
+		// Storage: make(map[Hash][]Hash),
+		Storage: [](map[Hash]Hash){},
+		Code:    code,
+	}
+}
+
+func MyGetStorage(storage [](map[Hash]Hash), slot Hash) (Hash, bool) {
+
+	for _, m := range storage { // 이거 뒤에서부터 봐야할거같은데?
+		// fmt.Println("  ContainStorage/ index:", i)
+		if value, exist := m[slot]; exist {
+			return value, true
+		}
+	}
+	return Hash{}, false
 }

@@ -108,18 +108,6 @@ func (db *Database) Put(key []byte, value []byte) error {
 	return nil
 }
 
-//jhkim: empty function
-func (db *Database) Put2(key []byte, value []byte, blocknumber int) error {
-	db.lock.Lock()
-	defer db.lock.Unlock()
-
-	if db.db == nil {
-		return errMemorydbClosed
-	}
-	db.db[string(key)] = common.CopyBytes(value)
-	return nil
-}
-
 // Delete removes the key from the key-value store.
 func (db *Database) Delete(key []byte) error {
 	db.lock.Lock()
@@ -217,13 +205,6 @@ func (b *batch) Put(key, value []byte) error {
 	// if common.GlobalBlockNumber == 432286 {
 	// 	fmt.Println("  batch.Put in ethdb/memorydb/memorydb.go\t\t ", common.Bytes2Hex(key))
 	// }
-	b.writes = append(b.writes, keyvalue{common.CopyBytes(key), common.CopyBytes(value), false})
-	b.size += len(key) + len(value)
-	return nil
-}
-
-//jhkim
-func (b *batch) Put2(key, value []byte, blocknumber int) error {
 	b.writes = append(b.writes, keyvalue{common.CopyBytes(key), common.CopyBytes(value), false})
 	b.size += len(key) + len(value)
 	return nil

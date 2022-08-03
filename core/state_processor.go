@@ -19,7 +19,6 @@ package core
 import (
 	"fmt"
 	"math/big"
-	"os"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -29,6 +28,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
 // StateProcessor is a basic Processor, which takes care of transitioning
@@ -70,24 +70,49 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	// Mutate the block and state according to any hard-fork specs
 	if p.config.DAOForkSupport && p.config.DAOForkBlock != nil && p.config.DAOForkBlock.Cmp(block.Number()) == 0 {
 		misc.ApplyDAOHardFork(statedb)
+
+		// jhkim: DAO account는 초반에 attack에 의해 생긴 account라고 보임
+		// stage1-substate: Finalise all DAO accounts, don't save them in substate
+		if config := p.config; config.IsByzantium(header.Number) {
+			statedb.Finalise(true)
+		} else {
+			statedb.Finalise(config.IsEIP158(header.Number))
+		}
+
 	}
 	blockContext := NewEVMBlockContext(header, p.bc, nil)
 	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, p.config, cfg)
 
+	blocknumber := int(block.Number().Int64())
+
+	//jhkim
 	common.GlobalBlockNumber = int(block.Number().Int64()) //jhkim
 	common.GlobalBlockMiner = block.Coinbase()
-	uncles := block.Uncles()
-	for _, uncle := range uncles {
-		common.GlobalBlockUncles = append(common.GlobalBlockUncles, uncle.Coinbase)
+	if common.TxReadList == nil {
+		common.TxReadList = make(map[common.Hash]common.SubstateAlloc)
+		common.TxWriteList = make(map[common.Hash]common.SubstateAlloc)
 	}
 
-	// }
-
+	if common.BlockMinerList == nil {
+		common.BlockMinerList = map[int]common.SimpleAccount{}
+	}
+	if common.BlockUncleList == nil {
+		common.BlockUncleList = map[int][]common.SimpleAccount{}
+	}
+	if common.BlockTxList == nil {
+		common.BlockTxList = map[int][]common.Hash{}
+	}
+	if common.BlockTxList[common.GlobalBlockNumber] == nil {
+		common.BlockTxList[common.GlobalBlockNumber] = []common.Hash{}
+	}
 	// Iterate over and process the individual transactions
-
 	for i, tx := range block.Transactions() {
+		common.TxReadList[tx.Hash()] = common.SubstateAlloc{}
+		common.TxWriteList[tx.Hash()] = common.SubstateAlloc{}
 
+		common.BlockTxList[common.GlobalBlockNumber] = append(common.BlockTxList[common.GlobalBlockNumber], tx.Hash())
 		common.GlobalTxHash = tx.Hash() // jhkim: set global variable
+
 		msg, err := tx.AsMessage(types.MakeSigner(p.config, header.Number), header.BaseFee)
 		if err != nil {
 			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
@@ -97,42 +122,126 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		if err != nil {
 			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
-
 		receipts = append(receipts, receipt)
 		allLogs = append(allLogs, receipt.Logs...)
 
 		//jhkim: reset global variable after process each transaction
-
 		common.GlobalTxTo = common.Address{}
 		common.GlobalTxFrom = common.Address{}
+
 	}
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles())
+	common.BlockMinerList[blocknumber] = common.SimpleAccount{Addr: block.Coinbase(),
+		Balance:     statedb.GetBalance(block.Coinbase()),
+		Nonce:       statedb.GetNonce(block.Coinbase()),
+		Codehash:    statedb.GetCodeHash(block.Coinbase()),
+		StorageRoot: statedb.GetStorageTrieHash(block.Coinbase()),
+	}
+	uncles := block.Uncles()
+	if len(uncles) != 0 {
+		common.BlockUncleList[blocknumber] = []common.SimpleAccount{}
+		for _, uncle := range uncles {
+			tmp := common.SimpleAccount{Addr: uncle.Coinbase,
+				Balance:     statedb.GetBalance(uncle.Coinbase),
+				Nonce:       statedb.GetNonce(uncle.Coinbase),
+				Codehash:    statedb.GetCodeHash(uncle.Coinbase),
+				StorageRoot: statedb.GetStorageTrieHash(uncle.Coinbase),
+			}
+			common.BlockUncleList[blocknumber] = append(common.BlockUncleList[blocknumber], tmp)
+		}
+
+	}
+	common.GlobalTxHash = common.Hash{}
 
 	return receipts, allLogs, *usedGas, nil
+
+}
+
+//jhkim: check contract related tx
+func isContractRelated(tx *types.Transaction, msg types.Message, statedb *state.StateDB) bool {
+	// isContractRelated := false
+	if tx.To() == nil { // contract deploy
+		// isContractRelated = true
+		return true
+	} else {
+		code := statedb.GetCode(*msg.To())
+		if code == nil { // transfer
+			return false
+		} else { // contract call
+			// isContractRelated = true
+
+			if msg.Value() != big.NewInt(0) {
+				// fmt.Println("dumbtx? transfer ether to contract")
+				// fmt.Println("dumb tx/ blocknumber: ", common.GlobalBlockNumber, "txHash:", tx.Hash())
+				// os.Exit(0)
+			}
+			return true
+		}
+	}
+
+}
+
+//jhkim: rlp encoding of common.SubStateAccount
+func RLPEncodeSubstateAccount(sa common.SubstateAccount) []byte {
+	var legacyAccount types.StateAccount
+
+	legacyAccount.Balance = sa.Balance
+	legacyAccount.CodeHash = sa.CodeHash
+	legacyAccount.Nonce = sa.Nonce
+	legacyAccount.Root = sa.StorageRoot
+
+	data, _ := rlp.EncodeToBytes(legacyAccount)
+	// fmt.Println("@@@@@@@RLPENCODEING@@@@@@@")
+	// fmt.Println("LEGACY ACCOUNT", legacyAccount)
+	// fmt.Println("nonce", legacyAccount.Nonce)
+	// fmt.Println("balance", legacyAccount.Balance)
+	// fmt.Println("root", legacyAccount.Root)
+	// fmt.Println("codehash", legacyAccount.CodeHash)
+
+	// fmt.Println("@@@@@@@")
+	return data
+}
+func RLPEncodeSimpleAccount(sa common.SimpleAccount) []byte {
+	var legacyAccount types.StateAccount
+	legacyAccount.Balance = sa.Balance
+	legacyAccount.CodeHash = sa.Codehash.Bytes()
+	legacyAccount.Nonce = sa.Nonce
+	legacyAccount.Root = sa.StorageRoot
+
+	data, _ := rlp.EncodeToBytes(legacyAccount)
+	// fmt.Println("@@@@@@@RLPENCODEING@@@@@@@")
+	// fmt.Println("LEGACY ACCOUNT", legacyAccount)
+	// fmt.Println("nonce", legacyAccount.Nonce)
+	// fmt.Println("balance", legacyAccount.Balance)
+	// fmt.Println("root", legacyAccount.Root)
+	// fmt.Println("codehash", legacyAccount.CodeHash)
+
+	// fmt.Println("@@@@@@@")
+	return data
 }
 
 func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM) (*types.Receipt, error) {
 	// Create a new context to be used in the EVM environment.
 	txContext := NewEVMTxContext(msg)
 	evm.Reset(txContext, statedb)
-	// fmt.Println("applytransaction", common.GlobalBlockNumber, tx.Hash())
+	common.GlobalTxHash = tx.Hash() // jhkim: set global variable
 	// Apply the transaction to the current state (included in the env).
 	result, err := ApplyMessage(evm, msg, gp)
 	if err != nil {
 		return nil, err
 	}
 
+	//jhkim: write Txdetail
 	common.GlobalMutex.Lock()
-
 	if _, ok := common.TxDetail[tx.Hash()]; !ok {
-
 		WriteTxDetail(tx, msg, blockNumber, statedb) //jhkim
 	} else {
-		fmt.Println("Error: Tx already exist!", tx.Hash(), common.GlobalBlockNumber)
-		os.Exit(0)
+		// fmt.Println("Error: Tx already exist!", tx.Hash(), common.GlobalBlockNumber)
+		// os.Exit(0)
 	}
 	common.GlobalMutex.Unlock()
+
 	if tx.To() == nil {
 		common.GlobalDeployedContractAddress = crypto.CreateAddress(evm.TxContext.Origin, tx.Nonce()) // jhkim: for cacheing
 	}
@@ -150,12 +259,34 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	// by the tx.
 	receipt := &types.Receipt{Type: tx.Type(), PostState: root, CumulativeGasUsed: *usedGas}
 	if result.Failed() {
-
 		receipt.Status = types.ReceiptStatusFailed
+
 		// fmt.Println("Failed Transaction", common.GlobalBlockNumber, tx.Hash())
 		// delete(common.TxDetail, tx.Hash())
 		common.GlobalMutex.Lock()
 		common.TxDetail[tx.Hash()].Types = 4 // marking failed transaction
+		// fmt.Println("@#@#@#@# who is authour", author)
+		// fmt.Println("@#@#@#@# before", common.TxWriteList[tx.Hash()])
+		tmp := common.SubstateAlloc{}
+		tmp[common.GlobalBlockMiner] = common.TxWriteList[tx.Hash()][common.GlobalBlockMiner]
+		tmp[msg.From()] = common.TxWriteList[tx.Hash()][msg.From()]
+		common.TxWriteList[tx.Hash()] = tmp
+		// fmt.Println("@#@#@#@#", common.GlobalBlockMiner, msg.From())
+		// fmt.Println("@#@#@#@#  after", common.TxWriteList[tx.Hash()])
+		if result.Err == vm.ErrCodeStoreOutOfGas {
+			// fmt.Println("Failed tx/ blocknumber:", common.GlobalBlockNumber, " txhash:", tx.Hash(), "result.err", result.Err) // 나중에 read list만 남기고 write list는 없애야함
+			// fmt.Println("  Failed tx/ErrCodeStoreOutOfGas/block#:", common.GlobalBlockNumber, " txhash:", tx.Hash()) // 나중에 read list만 남기고 write list는 없애야함
+			// fmt.Println()
+		} else if result.Err == vm.ErrOutOfGas {
+			// fmt.Println("  Failed tx/ErrOutOfGas/block#:", common.GlobalBlockNumber, " txhash:", tx.Hash()) // 나중에 read list만 남기고 write list는 없애야함
+		}
+		// tmp := common.TxSubstate[common.GlobalBlockNumber][tx.Hash()]
+		// for k := range tmp {
+		// 	if k != msg.From() && k != common.GlobalBlockMiner { // failed tx에서는 sender와 miner만 남기자
+		// 		delete(tmp, k)
+		// 		// tmp[k] = nil
+		// 	}
+		// }
 		common.GlobalMutex.Unlock()
 	} else {
 		receipt.Status = types.ReceiptStatusSuccessful
@@ -169,9 +300,9 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 		// 	fmt.Println("Caching deployed contract address is wrong")
 		// }
 		if receipt.Status == types.ReceiptStatusSuccessful {
-			common.GlobalMutex.Lock()
+			// common.GlobalMutex.Lock()
 			common.TxDetail[tx.Hash()].DeployedContractAddress = receipt.ContractAddress
-			common.GlobalMutex.Unlock()
+			// common.GlobalMutex.Unlock()
 		}
 	}
 	receipt.TxHash = tx.Hash()
@@ -207,12 +338,12 @@ func WriteTxDetail(tx *types.Transaction, msg types.Message, number *big.Int, st
 	// defer common.GlobalMutex.Unlock()
 	// fmt.Println("WriteTxDetail", common.GlobalBlockNumber, tx.Hash())
 	txInform := common.TxInformation{}
-	txInform.ContractAddress_SlotHash = map[common.Address]*[]common.Hash{}
-	txInform.BlockNumber = (*number).Int64()
-	txInform.Internal = []common.Address{}
-	txInform.InternalCA = []common.Address{}
+	// txInform.ContractAddress_SlotHash = map[common.Address]*[]common.Hash{}
+	// txInform.BlockNumber = (*number).Int64()
+	// txInform.Internal = []common.Address{}
+	// txInform.InternalCA = []common.Address{}
 	txInform.DeployedContractAddress = common.Address{}
-	txInform.AccountBalance = map[common.Address]uint64{}
+	// txInform.AccountBalance = map[common.Address]uint64{}
 
 	if tx.To() == nil {
 		txInform.Types = 2 // contract creation

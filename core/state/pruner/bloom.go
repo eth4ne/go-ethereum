@@ -120,22 +120,6 @@ func (bloom *stateBloom) Put(key []byte, value []byte) error {
 	return nil
 }
 
-// jhkim: empty function
-func (bloom *stateBloom) Put2(key []byte, value []byte, blocknumber int) error {
-	// If the key length is not 32bytes, ensure it's contract code
-	// entry with new scheme.
-	if len(key) != common.HashLength {
-		isCode, codeKey := rawdb.IsCodeKey(key)
-		if !isCode {
-			return errors.New("invalid entry")
-		}
-		bloom.bloom.Add(stateBloomHasher(codeKey))
-		return nil
-	}
-	bloom.bloom.Add(stateBloomHasher(key))
-	return nil
-}
-
 // Delete removes the key from the key-value data store.
 func (bloom *stateBloom) Delete(key []byte) error { panic("not supported") }
 

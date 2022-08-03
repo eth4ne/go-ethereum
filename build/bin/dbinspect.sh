@@ -4,8 +4,8 @@ make geth
 cd build/bin
 
 
-DataDir="/ssd/ethereum"
-
+#DataDir="/ssd/ethereum"
+DataDir="/ssd/ethereum-vanilla"
 
 
 

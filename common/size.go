@@ -27,7 +27,7 @@ type StorageSize float64
 // String implements the stringer interface.
 func (s StorageSize) String() string {
 	//jhkim: use only Byte
-	return fmt.Sprintf("%.2f B", s)
+	// return fmt.Sprintf("%.2f B", s)
 
 	if s > 1099511627776 {
 		return fmt.Sprintf("%.2f TiB", s/1099511627776)

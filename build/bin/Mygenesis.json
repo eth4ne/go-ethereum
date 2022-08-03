@@ -1,0 +1,25 @@
+{
+    "config": {
+        "chainId": 12345, 
+        "homesteadBlock": 0,
+        "byzantiumBlock": 0,
+        "constantinopleBlock": 0,
+        "eip145Block": 0,
+        "eip150Block": 0,
+        "eip155Block": 0,
+        "eip158Block": 0
+     },
+    "difficulty": "1",
+    
+    "alloc": {
+        "c4422d1C18E9Ead8A9bB98Eb0d8bB9dbdf2811D7": {"balance": "10000000000000000000000000"}
+    },
+    "coinbase": "0x0000000000000000000000000000000000000000", 
+    
+    "timestamp": "0x0",
+    
+    
+    "gasLimit": "210000000"
+    
+}
+

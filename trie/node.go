@@ -19,6 +19,7 @@ package trie
 import (
 	"fmt"
 	"io"
+	"math/big"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -260,38 +261,17 @@ func (n hashNode) toString(ind string, db *Database) string {
 	}
 }
 
+type Account struct {
+	Nonce    uint64
+	Balance  *big.Int
+	Root     common.Hash // merkle root of the storage trie
+	CodeHash []byte
+}
+
 func (n valueNode) toString(ind string, db *Database) string {
 	// decode data into account & print account
 	var acc Account
 	rlp.DecodeBytes([]byte(n), &acc)
 
-	// if account is CA?
-
-	// if common.Bytes2Hex(acc.CodeHash) != "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470" {
-	// 	if acc.Root.Hex() != "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421" { // empty root hash
-
-	// 		if acc.Root.Hex() != "0x0000000000000000000000000000000000000000000000000000000000000000" {
-	// 			fmt.Println("\nContract Account's Root:", acc.Root)
-	// 			if storageTrie, err := NewSecure(acc.Root, db); err == nil {
-	// 				fmt.Println("  StorageTrie Print")
-	// 				fmt.Println(storageTrie.trie.Print())
-	// 				return fmt.Sprintf("[ Root: %x/ CodeHash: %x ]", acc.Root, common.BytesToHash(acc.CodeHash))
-	// 			}
-	// 		}
-	// 	}
-	// }
-
-	// if common.BytesToHash(acc.CodeHash) != common.HexToHash("c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470") {
-	// 	if acc.Root != common.HexToHash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421") { // empty root hash
-	// 		if storageTrie, err := NewSecure(acc.Root, db); err == nil {
-	// 			fmt.Println("StorageTrie Print/ acc.root:", acc.Root)
-	// 			fmt.Println(storageTrie.trie.Print())
-	// 			return fmt.Sprintf("[ Root: %x/ CodeHash: %x ]", acc.Root, common.BytesToHash(acc.CodeHash))
-	// 		}
-
-	// 	}
-	// }
-	// return fmt.Sprintf("[ Nonce: %d / Balance: %s ]", acc.Nonce, acc.Balance.String())
-	// return fmt.Sprintf("")
 	return fmt.Sprintf(common.Bytes2Hex([]byte(n)))
 }

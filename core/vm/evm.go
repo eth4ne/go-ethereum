@@ -471,6 +471,17 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 		if contract.UseGas(createDataGas) {
 			evm.StateDB.SetCode(address, ret)
 		} else {
+			// storagetrieroot := evm.StateDB.GetStorageTrieHash(address)
+			// fmt.Println("ErrCodeStoreOutOfGas", common.GlobalBlockNumber,
+			// 	"address:", address,
+			// 	"contractcode length:", len(ret),
+			// 	"balance:", evm.StateDB.GetBalance(address),
+			// 	"nonce", evm.StateDB.GetNonce(address),
+			// 	"storagetrie root:", storagetrieroot)
+			// if storagetrieroot != common.HexToHash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421") {
+			// 	fmt.Println("  None Empty StorageTrie", storagetrieroot)
+			// }
+
 			err = ErrCodeStoreOutOfGas
 		}
 	}

@@ -266,10 +266,6 @@ func (t *Trie) TryUpdateAccount(key []byte, acc *types.StateAccount) error {
 //
 // If a node was not found in the database, a MissingNodeError is returned.
 func (t *Trie) TryUpdate(key, value []byte) error {
-	// if common.BytesToHash(key) == common.HexToHash("0xcaff51dae2080974a0ae559787747fb731282015be43ef1aed15de3776aec806") {
-	// 	// fmt.Println("MyTryUpdate / 0xcaff51..? / txHash:", txHash, "/ slotHash:", slotHash, "/ CAaddress:", CAaddress)
-	// 	fmt.Println("MyTryUpdate / 0xcaff51..? /key:", key)
-	// }
 	t.unhashed++
 	k := keybytesToHex(key)
 	if len(value) != 0 {
