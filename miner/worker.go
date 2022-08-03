@@ -957,11 +957,9 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 		
 		// Retrieve the next transaction and abort if all done
 		tx := txs.Peek()
-		
 		if tx == nil {
 			break
 		}
-		tx.SetData(tx.Data()[24:])
 		// Error may be ignored here. The error has already been checked
 		// during transaction acceptance is the transaction pool.
 		//

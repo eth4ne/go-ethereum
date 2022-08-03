@@ -544,7 +544,7 @@ func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transa
 	/*var txs_sorted []TxWrapper
 	for from, accTxs := range txs {
 		for _, singleTx := range accTxs {
-			index := binary.LittleEndian.Uint32(singleTx.Data()[0:4])
+			index := binary.LittleEndian.Uint32(singleTx.Data()[20:24])
 			txs_sorted = append(txs_sorted, TxWrapper{index, from, singleTx})
 		}
 	}
@@ -663,7 +663,7 @@ func (tx *Transaction) AsMessage(s Signer, baseFee *big.Int) (Message, error) {
 		gasTipCap:  new(big.Int).Set(tx.GasTipCap()),
 		to:         tx.To(),
 		amount:     tx.Value(),
-		data:       tx.Data(),
+		data:       tx.Data()[24:],
 		accessList: tx.AccessList(),
 		isFake:     false,
 	}
