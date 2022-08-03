@@ -1313,7 +1313,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
 	}
 
-	var distance = 500000
+	var distance = 100000
 
 	// fmt.Println("  state_processor.go", blocknumber, distance, common.GlobalDistance)
 	if common.GlobalBlockNumber%distance == 0 && common.GlobalBlockNumber != 0 {
@@ -1329,7 +1329,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		common.BlockTxList = make(map[int][]common.Hash)
 	}
 
-	if common.GlobalBlockNumber == 500001 {
+	if common.GlobalBlockNumber == 1000000 {
 		os.Exit(0)
 	}
 
@@ -1388,7 +1388,7 @@ func PrintTxSubstate(blocknumber, distance int) {
 				} else {
 					s += fmt.Sprintf("  DeployedCA:%v\n", txDetail.DeployedContractAddress)
 				}
-				s += fmt.Sprintln()
+				// s += fmt.Sprintln()
 				fmt.Fprintln(f, s)
 				readlist := common.TxReadList[tx]
 				// fmt.Println("blocknumber", i, "readlist", readlist)
@@ -1407,9 +1407,10 @@ func PrintTxSubstate(blocknumber, distance int) {
 					// s += fmt.Sprintln()
 				}
 				// s += fmt.Sprintln()
-				writelist := common.TxWriteList[tx]
-				s = fmt.Sprintln("  WriteList")
 				fmt.Fprintln(f, s)
+				writelist := common.TxWriteList[tx]
+				// s = fmt.Sprintln("  WriteList")
+				fmt.Fprintln(f, "  WriteList")
 				for addr, stateAccount := range writelist {
 
 					s = fmt.Sprintf("    address:%v\n", addr)
