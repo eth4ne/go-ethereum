@@ -98,7 +98,7 @@ type rawNode []byte
 
 func (n rawNode) cache() (hashNode, bool)   { panic("this should never end up in a live trie") }
 func (n rawNode) fstring(ind string) string { panic("this should never end up in a live trie") }
-func (n rawNode) toString(ind string, db *Database) string { panic("this should never end up in a live trie") } // (jmlee)
+func (n rawNode) toString(ind string, db *Database, depth int) string { panic("this should never end up in a live trie") } // (jmlee)
 func (n rawNode) toString_storageTrie(ind string, db *Database) string { panic("this should never end up in a live trie") } // (joonha)
 func (n rawNode) delete_storageTrie(ind string, db *Database) string { panic("this should never end up in a live trie") } // (joonha)
 
@@ -114,7 +114,7 @@ type rawFullNode [17]node
 
 func (n rawFullNode) cache() (hashNode, bool)   { panic("this should never end up in a live trie") }
 func (n rawFullNode) fstring(ind string) string { panic("this should never end up in a live trie") }
-func (n rawFullNode) toString(ind string, db *Database) string { panic("this should never end up in a live trie") } // (jmlee)
+func (n rawFullNode) toString(ind string, db *Database, depth int) string { panic("this should never end up in a live trie") } // (jmlee)
 func (n rawFullNode) toString_storageTrie(ind string, db *Database) string { panic("this should never end up in a live trie") } // (joonha)
 func (n rawFullNode) delete_storageTrie(ind string, db *Database) string { panic("this should never end up in a live trie") } // (joonha)
 
@@ -141,7 +141,7 @@ type rawShortNode struct {
 
 func (n rawShortNode) cache() (hashNode, bool)   { panic("this should never end up in a live trie") }
 func (n rawShortNode) fstring(ind string) string { panic("this should never end up in a live trie") }
-func (n rawShortNode) toString(ind string, db *Database) string { panic("this should never end up in a live trie") } // (jmlee)
+func (n rawShortNode) toString(ind string, db *Database, depth int) string { panic("this should never end up in a live trie") } // (jmlee)
 func (n rawShortNode) toString_storageTrie(ind string, db *Database) string { panic("this should never end up in a live trie") } // (joonha)
 func (n rawShortNode) delete_storageTrie(ind string, db *Database) string { panic("this should never end up in a live trie") } // (joonha)
 
@@ -897,7 +897,7 @@ func (db *Database) SaveCachePeriodically(dir string, interval time.Duration, st
 	}
 }
 
-// delete storage trie leaf nodes when inactivate or restore (joonha)
+// delete storage trie leaf nodes when inactivate or restore (joonha) // --> this function withered in Ethane (joonha)
 func (db *Database) DeleteStorageTrieNode(accountHash common.Hash) {
 
 	// fmt.Println("\nDeleteStorageTrieNode > accountHash: ", accountHash)

@@ -44,15 +44,17 @@ const (
 	AddressLength = 20
 )
 
-// (joonha)
-type ProofList [][]byte
+/*
+* Below three definitions are for executing VerifyProof_ProofList(), 
+* VerifyProof_restore(), and GetAccountsAndKeysFromMerkleProof() 
+* (commenter: joonha)
+*/
 
 // (joonha)
+type ProofList [][]byte
 func (n *ProofList) Has(key []byte) (bool, error) {
 	panic("not supported")
 }
-
-// (joonha)
 func (n *ProofList) Get(key []byte) ([]byte, error) {
 	x := (*n)[0]
 	*n = (*n)[1:]
@@ -63,8 +65,7 @@ func (n *ProofList) Get(key []byte) ([]byte, error) {
 type Empty struct{}
 
 var (
-	// to delete and inactivate the nodes just for the secode appearance (worker.go) (joonha)
-	// IsFirst bool
+	// to delete and inactivate the nodes just for once (worker.go) (joonha)
 	IsSecond bool
 
 	// inactive storage snapshot ON/OFF option (joonha)
@@ -86,10 +87,8 @@ var (
 	AddrToKey_inactive = make(map[Address][]Hash)
 
 	KeysToDelete = make([]Hash, 0) // store previous leaf nodes' keys to delete later
-	AccountsToDeleteFromDisk = make([]Address, 0) // store previous leaf nodes' keys to delete later (joonha)
-	// AddrsToDeleteFromDisk = make(map[Hash][]byte) // store previous leaf nodes(addr) to delete later (joonha)
+	KeysToDelete_restore = make([]Hash, 0) // previous leaf nodes' keys to delete after restoration
 	DeleteLeafNodeEpoch = int64(315) // block epoch to delete previous leaf nodes (from active area to temp area) (const)
-	// DeleteLeafNodeEpoch = big.NewInt(3) // block epoch to delete previous leaf nodes (& inactivate inactive leaf nodes) (const)
 	DoDeleteLeafNode bool // flag to determine whether to delete leaf nodes or not
 
 	InactivateLeafNodeEpoch = int64(315) // block epoch to inactivate inactive leaf nodes (from temp area to inactive trie) (joonha)
@@ -100,7 +99,6 @@ var (
 	InspectEpoch = int64(315)
 
 	NoExistKey = HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff") // very large key which will not be reached forever (const)
-	ToBeDeletedKey = HexToHash("0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe") // very large key which will not be reached forever (const)
 	ZeroAddress = HexToAddress("0x0") // (const)
 
 	RewardAddress = HexToAddress("0x36eCA1fe87f68B49319dB55eBB502e68c4981716")
@@ -112,6 +110,7 @@ var (
 	NonceAddress = HexToAddress("0x0A258FF4194E8c135F2C23a16EDf3d8d91Ba0805")
 	GasLimitAddress = HexToAddress("0x91C656fE89dB9eb9FB6f5002613EE3754542D541")
 	ExtraDataAddress = HexToAddress("0x24e66Ef7d2EFE1b0eB194eB30955b0ed64A9F615")
+	RestoreAddress = HexToAddress("0x0123456789012345678901234567890123456789")
 	
 	RestoreMode int64
 	RestoreAmount *big.Int

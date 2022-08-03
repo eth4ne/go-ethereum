@@ -215,13 +215,7 @@ func (st *StateTransition) buyGas() error {
 	return nil
 }
 
-func (st *StateTransition) preCheck() error {
-	// // if restore tx, do not preCheck (joonha)
-	// if st.to() == common.HexToAddress("0x0123456789012345678901234567890123456789") { // *st.msg.To()
-	// 	// fmt.Println("\n\n>>> no preCheck\n\n")
-	// 	return st.buyGas()
-	// }
-	
+func (st *StateTransition) preCheck() error {	
 	// Only check transactions that are not fake
 	if !st.msg.IsFake() {
 		// Make sure this transaction's nonce is correct.

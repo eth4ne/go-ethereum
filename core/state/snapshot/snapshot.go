@@ -354,7 +354,7 @@ func (t *Tree) GetAccountFromSnapshots(accountHash, root common.Hash, /*limits i
 			break
 		}
 
-		// try to find the account (joonha)
+		// try to find the account
 		if !isdisk { // diffLayer
 			diff, _ := layer.(*diffLayer)
 			acc, _ := diff.Account(accountHash)

@@ -113,7 +113,7 @@ type Trie interface {
 	TryGet_SetKey(key []byte) ([]byte, error)
 
 	// (joonha)
-	GetAllLeafNodes([]byte, []byte) ([][]byte, []common.Hash, error)
+	TryGetAllLeafNodes([]byte, []byte) ([][]byte, []common.Hash, error)
 	TryGetAllSlots() (map[common.Hash][]byte, error)
 	Print()
 	Print_storageTrie()

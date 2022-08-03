@@ -1349,7 +1349,7 @@ func makeAccountTrieNoStorage(n int) (*trie.Trie, entrySlice) {
 	accTrie, _ := trie.New(common.Hash{}, db)
 	var entries entrySlice
 	for i := uint64(1); i <= uint64(n); i++ {
-		value, _ := rlp.EncodeToBytes(types.StateAccount{
+		value, _ := rlp.EncodeToBytes(types.StateAccount{ // flag (joonha)
 			Nonce:    i,
 			Balance:  big.NewInt(int64(i)),
 			Root:     emptyRoot,

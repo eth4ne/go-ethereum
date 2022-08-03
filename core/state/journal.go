@@ -116,7 +116,7 @@ type (
 		account            *common.Address
 		prevcode, prevhash []byte
 	}
-	// (joonha)
+	// this may be not used but anyway declared because there is addr field in account (joonha)
 	addrChange struct {
 		account	*common.Address
 	}

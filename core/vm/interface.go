@@ -81,12 +81,14 @@ type StateDB interface {
 	// using statedb methods in evm.go (joonha)
 	Database() state.Database
 	DeletePreviousLeafNodes([]common.Hash)
-	CreateAccount_restoring(common.Address)
+	DoDirtyCrumbExist(common.Address) bool
 	CreateAccount_withBlockNum(common.Address, *big.Int)
 	UpdateAlreadyRestoredDirty(common.Hash)
-	RemoveRestoredKeyFromAddrToKeyDirty_inactive(common.Address, []common.Hash)
+	RemoveRestoredKeyFromAddrToKey_inactive(common.Address, []common.Hash)
 	RebuildStorageTrieFromSnapshot(common.Hash, common.Address, common.Hash)
 	SetCode_Restore(common.Address, []byte)
+	SetStorageRoot(common.Address, common.Hash)
+	GetRoot(common.Address) common.Hash
 }
 
 // CallContext provides a basic interface for the EVM calling conventions. The EVM
