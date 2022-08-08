@@ -625,10 +625,10 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	if tx.Value().Sign() < 0 {
 		return ErrNegativeValue
 	}
-	// Ensure the transaction doesn't exceed the current block limit gas.
-	if pool.currentMaxGas < tx.Gas() {
-		return ErrGasLimit
-	}
+	// // Ensure the transaction doesn't exceed the current block limit gas.
+	// if pool.currentMaxGas < tx.Gas() {
+	// 	return ErrGasLimit
+	// }
 	// Sanity check for extremely large numbers
 	if tx.GasFeeCap().BitLen() > 256 {
 		return ErrFeeCapVeryHigh
