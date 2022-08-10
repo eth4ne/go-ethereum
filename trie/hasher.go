@@ -142,10 +142,6 @@ func (h *hasher) hash(n node, force bool) (hashed node, cached node) {
 				}
 
 				common.TrieNodeInfosDirty[myHash] = nodeInfo
-			} else {
-				// error: this cannot be happen
-				fmt.Println("can this happen? short node")
-				os.Exit(1)
 			}
 			common.ChildHashesMutex.Unlock()
 		} else {
@@ -183,10 +179,6 @@ func (h *hasher) hash(n node, force bool) (hashed node, cached node) {
 				}
 
 				common.TrieNodeInfosDirty[myHash] = nodeInfo
-			} else {
-				// error: this cannot be happen
-				fmt.Println("can this happen? full node")
-				os.Exit(1)
 			}
 			common.ChildHashesMutex.Unlock()
 		} else {
