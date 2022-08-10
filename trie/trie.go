@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"math/big"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -36,6 +37,10 @@ var (
 
 	// emptyState is the known hash of an empty state trie entry.
 	emptyState = crypto.Keccak256Hash(nil)
+
+	// to save the leaf info while traversing the trie (joonha)
+	accountsInTrie = make([][]byte, 0)
+	keysToLeafNode = make([]common.Hash, 0)
 )
 
 // LeafCallback is a callback type invoked when a trie operation reaches a leaf
@@ -602,6 +607,50 @@ func (t *Trie) Print() {
 	fmt.Println(t.root.toString("", t.db))
 }
 
+// GetLastKey brings the key of right-most leaf node in the trie (jmlee)
+func (t *Trie) GetLastKey() *big.Int {
+	lastKey := t.getLastKey(t.root, nil)
+	// fmt.Println("lastKey:", lastKey)
+	return lastKey
+}
+
+// get last key among leaf nodes (i.e., right-most key value) (jmlee)
+func (t *Trie) getLastKey(origNode node, lastKey []byte) *big.Int {
+	switch n := (origNode).(type) {
+	case nil:
+		return big.NewInt(0)
+	case valueNode:
+		hexToInt := new(big.Int)
+		hexToInt.SetString(common.BytesToHash(hexToKeybytes(lastKey)).Hex()[2:], 16)
+		fmt.Println("lastkey:", lastKey, "len:", len(lastKey))
+		fmt.Println("hexToKeybytes(lastKey):", hexToKeybytes(lastKey), "len:", len(hexToKeybytes(lastKey)))
+		return hexToInt
+	case *shortNode:
+		lastKey = append(lastKey, n.Key...)
+		// fmt.Println("at getLastKey -> lastKey: ", lastKey, "/ appended key:", n.Key, " (short node)")
+		return t.getLastKey(n.Val, lastKey)
+	case *fullNode:
+		last := 0
+		for i, node := range &n.Children {
+			if node != nil {
+				last = i
+			}
+		}
+		lastByte := common.HexToHash("0x" + indices[last])
+		lastKey = append(lastKey, lastByte[len(lastByte)-1])
+		// fmt.Println("at getLastKey -> lastKey: ", indices[last], "/ appended key:", indices[last], " (full node)")
+		return t.getLastKey(n.Children[last], lastKey)
+	case hashNode:
+		child, err := t.resolveHash(n, nil)
+		if err != nil {
+			lastKey = nil
+			return big.NewInt(0)
+		}
+		return t.getLastKey(child, lastKey)
+	default:
+		panic(fmt.Sprintf("%T: invalid node: %v", origNode, origNode))
+	}
+}
 
 // FindLeafNodes returns all leaf nodes within range (jmlee)
 // ex. leafNodes, keys, err := normTrie.FindLeafNodes(common.HexToHash("0x0").Bytes(), 
