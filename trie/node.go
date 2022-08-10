@@ -254,10 +254,10 @@ func (n *fullNode) toString(ind string, db *Database) string {
 	resp := fmt.Sprintf("[\n")
 	resp += fmt.Sprintf("%s fullNode - hash: %s\n", ind, hash.Hex())
 	for i, node := range &n.Children {
-		if node != nil{
+		if node != nil {
 			resp += fmt.Sprintf("%s branch '%s':\n", ind, indices[i])
 			resp += fmt.Sprintf("%s	%v\n", ind, node.toString(ind+"	", db))
-		} 
+		}
 	}
 	return resp + fmt.Sprintf("\n%s] ", ind)
 }
@@ -268,7 +268,14 @@ func (n *shortNode) toString(ind string, db *Database) string {
 	// if n.Val is account, then this node is leaf node & n.Key is left address of the account (along the path)
 	hashnode, _ := n.cache()
 	hash := common.BytesToHash(hashnode)
-	return fmt.Sprintf("{shortNode hash: %s, key: %x - value: %v} ", hash.Hex(), n.Key, n.Val.toString(ind+"  ", db))
+
+	var buffer bytes.Buffer
+	for i := 0; i < len(n.Key); i++ {
+		buffer.WriteString(Indices[n.Key[i]]) // faster than string += operation
+	}
+	shortNodeKey := buffer.String()
+
+	return fmt.Sprintf("{shortNode hash: %s, key: %s - value: %v} ", hash.Hex(), shortNodeKey, n.Val.toString(ind+"  ", db))
 }
 
 func (n hashNode) toString(ind string, db *Database) string {
@@ -282,7 +289,7 @@ func (n hashNode) toString(ind string, db *Database) string {
 	}
 }
 
-// same struct copied from state_object.go to decode data
+// same struct copied from state_account.go to decode data
 type Account struct {
 	Nonce    uint64
 	Balance  *big.Int
