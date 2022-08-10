@@ -123,11 +123,14 @@ type TrieGraphInfo struct {
 	// Edges: [[hash1, hash2], [hash1, hash3], ...]
 	Edges [][]string
 
-	// Features: map[hash] = feature
+	// Features[nodeHash] = feature map of this node
+	// 1. ["type"] = node type
 	// "0": leaf node
 	// "1": short node
 	// "2": full node
-	Features map[string]string
+	// 2. ["size"] = node size
+	// 3. ["childHashes"] = hashes of child nodes
+	Features map[string]map[string]string
 }
 
 // Hash represents the 32 byte Keccak256 hash of arbitrary data.

@@ -446,36 +446,52 @@ func trieToGraph(hash common.Hash) {
 		}
 	}
 
-	// set features
+	//
+	// collect features: (nodeType,nodeSize,childHashes)
+	//
+	delimiter := ","
+	common.TrieGraph.Features[hash.Hex()] = make(map[string]string)
+
+	// add node type
 	if nodeInfo.IsLeafNode {
-		common.TrieGraph.Features[hash.Hex()] = "0"
+		common.TrieGraph.Features[hash.Hex()]["type"] = "0"
 	} else if nodeInfo.IsShortNode {
-		common.TrieGraph.Features[hash.Hex()] = "1"
+		common.TrieGraph.Features[hash.Hex()]["type"] = "1"
 	} else {
-		common.TrieGraph.Features[hash.Hex()] = "2"
+		common.TrieGraph.Features[hash.Hex()]["type"] = "2"
 	}
 
-	// set edges
-	for i, childHash := range nodeInfo.ChildHashes {
-		_ = i
-		// fmt.Println("  inspect children -> i:", i, "/ childHash:", childHash.Hex())
+	// add node size
+	common.TrieGraph.Features[hash.Hex()]["size"] = strconv.FormatUint(uint64(nodeInfo.Size), 10)
 
-		// get child node info (just for debugging)
-		_, exist := common.TrieNodeInfos[childHash]
-		if !exist {
-			_, exist = common.TrieNodeInfosDirty[childHash]
-			if !exist {
-				fmt.Println("error: inspectTrie() -> child node do not exist")
-				os.Exit(1)
-			}
-		}
+	// add edges & childHashes
+	for _, childHash := range nodeInfo.ChildHashes {
 
 		// add edges
 		common.TrieGraph.Edges = append(common.TrieGraph.Edges, []string{hash.Hex(), childHash.Hex()})
 
+		// add child hashes
+		common.TrieGraph.Features[hash.Hex()]["childHashes"] += childHash.Hex()
+		common.TrieGraph.Features[hash.Hex()]["childHashes"] += delimiter
+
 		// recursive call
 		trieToGraph(childHash)
 	}
+	// delete last delimiter
+	childHashesLen := len(common.TrieGraph.Features[hash.Hex()]["childHashes"])
+	if childHashesLen != 0 {
+		common.TrieGraph.Features[hash.Hex()]["childHashes"] = common.TrieGraph.Features[hash.Hex()]["childHashes"][:childHashesLen-1]
+	} else {
+		common.TrieGraph.Features[hash.Hex()]["childHashes"] = ""
+	}
+
+	// TODO(jmlee): add prefix
+	// common.TrieGraph.Features[hash.Hex()] += delimiter
+	// common.TrieGraph.Features[hash.Hex()]["prefix"] += nodeInfo.Prefix
+
+	// TODO(jmlee): add depth
+	// common.TrieGraph.Features[hash.Hex()] += delimiter
+	// common.TrieGraph.Features[hash.Hex()]["depth"] += nodeInfo.Depth
 
 }
 
@@ -714,10 +730,13 @@ func ConnHandler(conn net.Conn) {
 
 				// reset trie graph
 				common.TrieGraph = common.TrieGraphInfo{}
-				common.TrieGraph.Features = make(map[string]string)
+				common.TrieGraph.Features = make(map[string]map[string]string)
 
-				// convert trie to graph
+				// inspect trie before graph generation
 				root := normTrie.Hash()
+				inspectTrie(root)
+
+				// collect graph info
 				trieToGraph(root)
 
 				// create log file directory if not exist
