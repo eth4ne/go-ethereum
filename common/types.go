@@ -75,6 +75,41 @@ var (
 	TrieGraph TrieGraphInfo
 )
 
+var (
+	//
+	// vars for Ethane simulation (jmlee)
+	//
+
+	// run as a Ethane or normal Ethereum
+	IsEthane = true
+
+	// temp map for verifying compactTrie idea(jmlee)
+	// map storing active address list (AddrToKeyActive[addr] = counter key in trie's active part)
+	AddrToKeyActive = make(map[Address]Hash)
+	// map storing inactive address list (AddrToKeyActive[addr] = counter keys in trie's inactive part)
+	AddrToKeyInactive = make(map[Address][]Hash)
+	// to avoid fatal error: "concurrent map read and map write"
+	AddrToKeyMapMutex = sync.RWMutex{}
+	// disk path to save AddrToKey (will be set as [datadir]/geth/chaindata/) (const)
+	// AddrToKeyPath = ""
+
+	NextKey        = uint64(0)               // key of the first 'will be inserted' account
+	CheckpointKey  = uint64(0)               // save initial NextKey value to determine whether move leaf nodes or not
+	CheckpointKeys = make(map[uint64]uint64) // initial NextKeys of blocks (CheckpointKeys[blockNumber] = initialNextKeyOfTheBlock)
+
+	KeysToDelete        = make([]Hash, 0) // store previous leaf nodes' keys to delete later
+	DeleteEpoch         = uint64(3)       // block epoch to delete previous leaf nodes (from active area to temp area)
+	InactivateEpoch     = uint64(3)       // block epoch to inactivate inactive leaf nodes (from temp area to inactive trie)
+	InactivateCriterion = uint64(3)       // inactive accounts were touched more before than this block timestamp (min: 1) (const)
+	InactiveBoundaryKey = uint64(0)       // inactive accounts have keys smaller than InactiveBoundaryKey
+	RestoredKeys        = make([]Hash, 0) // merkle proof keys in restore txs, need to be deleted after inactivation
+
+	// very large key which will not be reached forever
+	NoExistKey     = HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+	ToBeDeletedKey = HexToHash("0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe")
+	ZeroAddress    = HexToAddress("0x0")
+)
+
 // NodeInfo stores trie node related information
 type NodeInfo struct {
 	Size uint // size of node (i.e., len of rlp-encoded node)

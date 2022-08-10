@@ -156,6 +156,17 @@ def trieToGraph():
     print("trieToGraph result -> root hash:", rootHash)
     return rootHash
 
+# select simulation mode (0: Geth, 1: Ethane)
+def switchSimulationMode(mode):
+    cmd = str("switchSimulationMode")
+    cmd += str(",")
+    cmd += str(mode)
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    switchSimulationModeResult = data.decode()
+    print("switchSimulationModeResult result:", switchSimulationModeResult)
+    return switchSimulationModeResult
+
 # generate random address
 def makeRandAddr():
     randHex = binascii.b2a_hex(os.urandom(20))

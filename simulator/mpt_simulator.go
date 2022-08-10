@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -59,6 +60,8 @@ var (
 
 	// empty account
 	emptyAccount types.StateAccount
+	// empty ethane account
+	emptyEthaneAccount types.EthaneStateAccount
 	// emptyCodeHash for EoA accounts
 	emptyCodeHash = crypto.Keccak256(nil)
 	// emptyRoot is the known root hash of an empty trie.
@@ -134,9 +137,27 @@ func reset() {
 	emptyAccount.CodeHash = emptyCodeHash
 	emptyAccount.Root = emptyRoot
 
+	// reset ethane account
+	emptyEthaneAccount.Balance = big.NewInt(0)
+	emptyEthaneAccount.Nonce = 0
+	emptyEthaneAccount.CodeHash = emptyCodeHash
+	emptyEthaneAccount.Root = emptyRoot
+
 	// reset blocks
 	common.Blocks = make(map[uint64]common.BlockInfo)
 	common.CurrentBlockNum = 0
+
+	// reset Ethane related vars
+	if common.IsEthane {
+		common.AddrToKeyActive = make(map[common.Address]common.Hash)
+		common.AddrToKeyInactive = make(map[common.Address][]common.Hash)
+		common.NextKey = uint64(0)
+		common.CheckpointKey = uint64(0)
+		common.KeysToDelete = make([]common.Hash, 0)
+		common.InactiveBoundaryKey = uint64(0)
+		common.CheckpointKeys = make(map[uint64]uint64)
+		common.RestoredKeys = make([]common.Hash, 0)
+	}
 
 	// set genesis block (with empty state trie)
 	flushTrieNodes()
@@ -144,6 +165,7 @@ func reset() {
 	common.Blocks[0] = common.Blocks[1]
 	delete(common.Blocks, 1)
 	common.CurrentBlockNum = 0
+	common.CheckpointKeys[0] = common.CheckpointKey
 }
 
 // rollbackUncommittedUpdates goes back to latest flushed trie (i.e., undo all uncommitted trie updates)
@@ -258,6 +280,57 @@ func estimateIncrement(hash common.Hash) (uint64, uint64) {
 func flushTrieNodes() {
 	// increase block number
 	common.CurrentBlockNum++
+
+	fmt.Println("flush: generate block number", common.CurrentBlockNum)
+
+	// do inactivate or delete previous leaf nodes
+	if common.IsEthane {
+
+		// update checkpoint key
+		bn := common.CurrentBlockNum
+		common.CheckpointKeys[bn] = common.CheckpointKey
+		common.CheckpointKey = common.NextKey
+		for index, key := range common.CheckpointKeys {
+			fmt.Println("blocknum:", index, "/ check point key:", key)
+		}
+
+		// delete
+		if (bn+1)%common.DeleteEpoch == 0 {
+			deletePrevLeafNodes()
+		}
+
+		// inactivate
+		if (bn+1)%common.InactivateEpoch == 0 && bn != common.InactivateEpoch-1 {
+			// check condition (lastBlockNum >= 0)
+			if bn >= common.InactivateCriterion {
+				// find block range to inactivate (firstBlockNum ~ lastBlockNum)
+				firstBlockNum := uint64(0)
+				if bn+1 >= common.InactivateCriterion+common.InactivateEpoch {
+					firstBlockNum = bn - common.InactivateCriterion - common.InactivateEpoch + 1
+				}
+				lastBlockNum := bn - common.InactivateCriterion
+
+				// find keys that have leaf nodes within inactivate range in trie
+				firstKey := common.Uint64ToHash(common.CheckpointKeys[firstBlockNum])
+				lastKey := common.Uint64ToHash(common.CheckpointKeys[lastBlockNum+1] - 1)
+
+				// fmt.Println("first block num:", firstBlockNum)
+				// fmt.Println("last block num:", lastBlockNum)
+				// fmt.Println("firstKey:", firstKey.Big().Int64())
+				// fmt.Println("lastKey:", lastKey.Big().Int64())
+
+				if firstKey.Big().Int64() <= lastKey.Big().Int64() {
+					// inactivate old accounts
+					inactivateLeafNodes(firstKey, lastKey)
+
+					// delete used merkle proofs for restoration
+					// TODO(jmlee): need independent epoch?
+					deleteRestoredLeafNodes()
+				}
+
+			}
+		}
+	}
 
 	// reset db stats before flush
 	common.NewNodeStat.Reset()
@@ -431,6 +504,92 @@ func inspectTrie(hash common.Hash) {
 	}
 }
 
+// inspectTrieWithinRange measures number and size of trie nodes in the sub trie
+// (count duplicated nodes)
+// do not utilize dynamic programming, just keep searching until it reaches to leaf nodes
+func inspectTrieWithinRange(hash common.Hash, depth uint, leafNodeDepths *[]uint, prefix string, startKey, endKey []byte) common.NodeStat {
+	// fmt.Println("insepctTrie() node hash:", hash.Hex())
+
+	// find this node's info
+	nodeInfo, isFlushedNode := common.TrieNodeInfos[hash]
+	if !isFlushedNode {
+		var exist bool
+		nodeInfo, exist = common.TrieNodeInfosDirty[hash]
+		if !exist {
+			// this node is unknown, just return
+			// fmt.Println("insepctTrie() unknown node")
+			return common.NodeStat{}
+		}
+	}
+
+	// check range
+	prefix = prefix + nodeInfo.Key // fullNode's key = "", so does not matter
+	prefixBytes := trie.StringKeybytesToHex(prefix)
+	prefixBytesLen := len(prefixBytes)
+	subStartKey := startKey[:prefixBytesLen]
+	subEndKey := endKey[:prefixBytesLen]
+	if bytes.Compare(subStartKey, prefixBytes) > 0 || bytes.Compare(subEndKey, prefixBytes) < 0 {
+		// out of range, stop inspecting
+		return common.NodeStat{}
+	}
+
+	// measure trie nodes num & size
+	subTrieFullNodesNum := uint64(0)
+	subTrieShortNodesNum := uint64(0)
+	subTrieLeafNodesNum := uint64(0)
+
+	subTrieFullNodesSize := uint64(0)
+	subTrieShortNodesSize := uint64(0)
+	subTrieLeafNodesSize := uint64(0)
+
+	for i, childHash := range nodeInfo.ChildHashes {
+		// inspect child node
+		var childNodeStat common.NodeStat
+		if len(nodeInfo.Indices) != 0 {
+			// this node is full node
+			childNodeStat = inspectTrieWithinRange(childHash, depth+1, leafNodeDepths, prefix+nodeInfo.Indices[i], startKey, endKey)
+		} else {
+			// this node is short node
+			childNodeStat = inspectTrieWithinRange(childHash, depth+1, leafNodeDepths, prefix, startKey, endKey)
+		}
+
+		// collect nums
+		subTrieFullNodesNum += childNodeStat.FullNodesNum
+		subTrieShortNodesNum += childNodeStat.ShortNodesNum
+		subTrieLeafNodesNum += childNodeStat.LeafNodesNum
+
+		// collect sizes
+		subTrieFullNodesSize += childNodeStat.FullNodesSize
+		subTrieShortNodesSize += childNodeStat.ShortNodesSize
+		subTrieLeafNodesSize += childNodeStat.LeafNodesSize
+	}
+
+	// measure itself
+	nodeSize := uint64(nodeInfo.Size)
+	if nodeInfo.IsLeafNode {
+		subTrieLeafNodesNum++
+		subTrieLeafNodesSize += nodeSize
+
+		*leafNodeDepths = append(*leafNodeDepths, depth)
+	} else if nodeInfo.IsShortNode {
+		subTrieShortNodesNum++
+		subTrieShortNodesSize += nodeSize
+	} else {
+		subTrieFullNodesNum++
+		subTrieFullNodesSize += nodeSize
+	}
+
+	// return result
+	var nodeStat common.NodeStat
+	nodeStat.FullNodesNum = subTrieFullNodesNum
+	nodeStat.ShortNodesNum = subTrieShortNodesNum
+	nodeStat.LeafNodesNum = subTrieLeafNodesNum
+	nodeStat.FullNodesSize = subTrieFullNodesSize
+	nodeStat.ShortNodesSize = subTrieShortNodesSize
+	nodeStat.LeafNodesSize = subTrieLeafNodesSize
+	return nodeStat
+}
+
 // trieToGraph converts trie to graph (edges & features)
 func trieToGraph(hash common.Hash) {
 
@@ -560,7 +719,239 @@ func updateTrie(key []byte) error {
 	return err
 }
 
-func ConnHandler(conn net.Conn) {
+//
+// functions for Ethane
+//
+
+// update state trie following Ethane protocol
+func updateTrieForEthane(addr common.Address, rlpedAccount []byte) error {
+
+	// get addrKey of this address
+	addrKey, exist := common.AddrToKeyActive[addr]
+	if !exist {
+		// this is new address or crumb account
+		fmt.Println("this is new address or crumb account")
+		addrKey = common.HexToHash(strconv.FormatUint(common.NextKey, 16))
+		// fmt.Println("make new account -> addr:", addr.Hex(), "/ keyHash:", newAddrKey)
+		common.AddrToKeyActive[addr] = addrKey
+		common.NextKey++
+	}
+	addrKeyUint := common.HashToUint64(addrKey)
+	fmt.Println("addr:", addr.Hex(), "/ addrKey:", addrKey.Big().Int64())
+
+	// update state trie
+	if addrKeyUint >= common.CheckpointKey {
+		// newly created address or already moved address in this block
+		// do not change its addrKey, just update
+		fmt.Println("insert -> key:", addrKey.Hex(), "/ addr:", addr.Hex())
+		if err := normTrie.TryUpdate(addrKey[:], rlpedAccount); err != nil {
+			fmt.Println("ERROR: updateTrieForEthane() failed to update trie 1 -> addr:", addr.Hex(), "/ addrKey:", addrKey)
+			os.Exit(1)
+		}
+
+	} else if addrKeyUint >= common.InactiveBoundaryKey {
+		// this address is already in the trie, so move the previous leaf node to the right side
+		// but do not delete now, this useless previous leaf node will be deleted at every delete epoch
+		common.KeysToDelete = append(common.KeysToDelete, addrKey)
+		fmt.Println("add KeysToDelete:", addrKey.Big().Int64())
+
+		// insert new leaf node at next key position
+		newAddrHash := common.HexToHash(strconv.FormatUint(common.NextKey, 16))
+		common.AddrToKeyActive[addr] = newAddrHash
+		fmt.Println("insert -> key:", newAddrHash.Hex(), "/ addr:", addr.Hex())
+		if err := normTrie.TryUpdate(newAddrHash[:], rlpedAccount); err != nil {
+			fmt.Println("ERROR: updateTrieForEthane() failed to update trie 2 -> addr:", addr[:], "/ addrKey:", addrKey)
+			os.Exit(1)
+		}
+		fmt.Println("move leaf node to right -> addr:", addr.Hex(), "/ keyHash:", newAddrHash)
+
+		// increase next key for future trie updates
+		common.NextKey++
+
+	} else {
+		// addrKeyUint < common.InactiveBoundaryKey
+		// this is impossible, should not reach to here
+		fmt.Println("ERROR: addrKeyUint < common.InactiveBoundaryKey -> this is impossible, should not reach to here")
+		os.Exit(1)
+	}
+
+	// no error occured (os.Exit(1) is not called)
+	return nil
+}
+
+// delete previous leaf nodes in active trie
+func deletePrevLeafNodes() {
+	fmt.Println("delete prev leaf nodes() executed")
+
+	// delete all keys in trie
+	for _, keyToDelete := range common.KeysToDelete {
+		fmt.Println("  key to delete:", keyToDelete.Big().Int64())
+		err := normTrie.TryDelete(keyToDelete[:])
+		if err != nil {
+			fmt.Println("ERROR deletePrevLeafNodes(): trie.TryDelete ->", err)
+			os.Exit(1)
+		}
+	}
+
+	// init keys to delete
+	common.KeysToDelete = make([]common.Hash, 0)
+}
+
+// delete already used merkle proofs in inactive trie
+func deleteRestoredLeafNodes() {
+
+	// delete all used merkle proofs for restoration
+	for _, keyToDelete := range common.RestoredKeys {
+		err := normTrie.TryDelete(keyToDelete[:])
+		if err != nil {
+			fmt.Println("ERROR deleteRestoredLeafNodes(): trie.TryDelete ->", err)
+			os.Exit(1)
+		}
+	}
+
+	// init keys to delete
+	common.RestoredKeys = make([]common.Hash, 0)
+}
+
+// move inactive accounts from active trie to inactive trie
+func inactivateLeafNodes(firstKeyToCheck, lastKeyToCheck common.Hash) {
+	// fmt.Println("do inactivation -> firstKey:", firstKeyToCheck.Big().Int64(), "lastKey:", lastKeyToCheck.Big().Int64())
+
+	// find accounts to inactivate (i.e., all leaf nodes in the range after delete prev leaf nodes)
+	accountsToInactivate, keysToInactivate, _ := normTrie.FindLeafNodes(firstKeyToCheck[:], lastKeyToCheck[:])
+
+	// move inactive leaf nodes to left
+	for index, key := range keysToInactivate {
+		addr := common.BytesToAddress(accountsToInactivate[index]) // BytesToAddress() turns last 20 bytes into addr
+
+		// delete inactive account from right
+		// fmt.Println("(Inactivate)delete -> key:", key.Hex())
+		err := normTrie.TryUpdate(key[:], nil)
+		if err != nil {
+			fmt.Println("inactivateLeafNodes delete error:", err)
+			os.Exit(1)
+		}
+
+		// insert inactive account to left
+		keyToInsert := common.Uint64ToHash(common.InactiveBoundaryKey)
+		common.InactiveBoundaryKey++
+		// fmt.Println("(Inactivate)insert -> key:", keyToInsert.Hex())
+		err = normTrie.TryUpdate(keyToInsert[:], accountsToInactivate[index])
+		if err != nil {
+			fmt.Println("inactivateLeafNodes insert error:", err)
+			os.Exit(1)
+		}
+
+		// update AddrToKey (active & inactive)
+		delete(common.AddrToKeyActive, addr)
+		common.AddrToKeyInactive[addr] = append(common.AddrToKeyInactive[addr], keyToInsert)
+	}
+}
+
+// restore this address's accounts
+func restoreAccount(restoreAddr common.Address) {
+
+	// record merkle proofs for restoration
+	// RESTORE_ALL: restore all inactive leaf nodes of this address
+	common.RestoredKeys = append(common.RestoredKeys, common.AddrToKeyInactive[restoreAddr]...)
+	delete(common.AddrToKeyInactive, restoreAddr)
+
+	// TODO(jmlee): reconstruct real latest state later
+	// temply now, just raise state update with meaningless data
+	emptyEthaneAccount.Nonce++
+	emptyEthaneAccount.Addr = restoreAddr
+	data, _ := rlp.EncodeToBytes(emptyEthaneAccount)
+	updateTrieForEthane(restoreAddr, data)
+}
+
+// print Ethane related stats
+func printEthaneState() {
+
+	// active addresses
+	fmt.Println("active accounts:", len(common.AddrToKeyActive))
+
+	// inactive addresses
+	fmt.Println("inactive accounts:", len(common.AddrToKeyInactive))
+	fmt.Println("inactive boundary key:", common.InactiveBoundaryKey)
+
+	// current NextKey = # of state trie updates
+	fmt.Println("current NextKey:", common.NextKey, "/ NextKey(hex):", common.Uint64ToHash(common.NextKey).Hex())
+
+	//
+	// print active trie stats (size, node num, node types, depths)
+	//
+	startKey := trie.KeybytesToHex(common.HexToHash("0x0").Bytes())
+	inactiveBoundary := trie.KeybytesToHex(common.Uint64ToHash(common.InactiveBoundaryKey).Bytes())
+	inactiveBoundarySubOne := trie.KeybytesToHex(common.Uint64ToHash(common.InactiveBoundaryKey - 1).Bytes())
+	endKey := trie.KeybytesToHex(common.HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff").Bytes())
+	activeLeafNodeDepths := []uint{}
+	inactiveLeafNodeDepths := []uint{}
+	totalLeafNodeDepths := []uint{}
+	fmt.Println("inactive boundary:", common.InactiveBoundaryKey)
+	activeTrieNodeStat := inspectTrieWithinRange(normTrie.Hash(), 0, &activeLeafNodeDepths, "", inactiveBoundary, endKey)
+	fmt.Println("print active trie")
+	activeMinDepth := uint(100)
+	activeMaxDepth := uint(0)
+	activeDepthSum := uint(0)
+	for _, depth := range activeLeafNodeDepths {
+		activeDepthSum += depth
+		if activeMaxDepth < depth {
+			activeMaxDepth = depth
+		}
+		if activeMinDepth > depth {
+			activeMinDepth = depth
+		}
+	}
+	fmt.Println("avg depth:", activeDepthSum/uint(len(activeLeafNodeDepths)), "( min:", activeMinDepth, "/ max:", activeMaxDepth, ")")
+	activeTrieNodeStat.Print()
+
+	//
+	// print active trie stats (size, node num, node types, depths)
+	//
+	inactiveTrieNodeStat := inspectTrieWithinRange(normTrie.Hash(), 0, &inactiveLeafNodeDepths, "", startKey, inactiveBoundarySubOne)
+	fmt.Println("print inactive trie")
+	inactiveMinDepth := uint(100)
+	inactiveMaxDepth := uint(0)
+	inactiveDepthSum := uint(0)
+	for _, depth := range inactiveLeafNodeDepths {
+		inactiveDepthSum += depth
+		if inactiveMaxDepth < depth {
+			inactiveMaxDepth = depth
+		}
+		if inactiveMinDepth > depth {
+			inactiveMinDepth = depth
+		}
+	}
+	fmt.Println("avg depth:", inactiveDepthSum/uint(len(inactiveLeafNodeDepths)), "( min:", inactiveMinDepth, "/ max:", inactiveMaxDepth, ")")
+	inactiveTrieNodeStat.Print()
+
+	//
+	// print total trie stats (size, node num, node types, depths)
+	//
+	totalTrieNodeStat := inspectTrieWithinRange(normTrie.Hash(), 0, &totalLeafNodeDepths, "", startKey, endKey)
+	fmt.Println("print total trie")
+	totalMinDepth := uint(100)
+	totalMaxDepth := uint(0)
+	totalDepthSum := uint(0)
+	for _, depth := range totalLeafNodeDepths {
+		totalDepthSum += depth
+		if totalMaxDepth < depth {
+			totalMaxDepth = depth
+		}
+		if totalMinDepth > depth {
+			totalMinDepth = depth
+		}
+	}
+	fmt.Println("avg depth:", totalDepthSum/uint(len(totalLeafNodeDepths)), "( min:", totalMinDepth, "/ max:", totalMaxDepth, ")")
+	totalTrieNodeStat.Print()
+}
+
+func getTrieLastKey() {
+	fmt.Println("getTrieLastKey:", normTrie.GetLastKey())
+	fmt.Printf("getTrieLastKey hex: %x", normTrie.GetLastKey())
+}
+
+func connHandler(conn net.Conn) {
 	recvBuf := make([]byte, 4096)
 	for {
 		// wait for message from client
@@ -607,6 +998,7 @@ func ConnHandler(conn net.Conn) {
 			case "printCurrentTrie":
 				fmt.Println("execute printCurrentTrie()")
 				normTrie.Hash()
+				fmt.Println("current block num:", common.CurrentBlockNum)
 				normTrie.Print()
 				response = []byte("success")
 
@@ -822,6 +1214,7 @@ func ConnHandler(conn net.Conn) {
 
 				fmt.Print(totalResult)
 				fmt.Print(subTrieResult)
+				fmt.Println("@")
 
 				// create log file directory if not exist
 				if _, err := os.Stat(logFilePath); errors.Is(err, os.ErrNotExist) {
@@ -840,6 +1233,80 @@ func ConnHandler(conn net.Conn) {
 				fmt.Fprintln(logFile, logData)
 				logFile.Close()
 
+				response = []byte("success")
+
+			case "switchSimulationMode":
+				fmt.Println("execute updateTrieForEthane()")
+				mode, _ := strconv.ParseUint(params[1], 10, 64)
+				if mode == 0 {
+					common.IsEthane = false
+				} else if mode == 1 {
+					common.IsEthane = true
+				} else {
+					fmt.Println("Error switchSimulationMode: invalid mode ->", mode)
+					os.Exit(1)
+				}
+
+				response = []byte("success")
+
+			case "updateTrieForEthane":
+				// get params
+				fmt.Println("execute updateTrieForEthane()")
+				nonce, _ := strconv.ParseUint(params[1], 10, 64)
+				balance := new(big.Int)
+				balance, _ = balance.SetString(params[2], 10)
+				root := common.HexToHash(params[3])
+				codeHash := common.Hex2Bytes(params[4])
+				addr := common.HexToAddress(params[5])
+				// fmt.Println("nonce:", nonce)
+				// fmt.Println("balance:", balance)
+				// fmt.Println("root:", root)
+				// fmt.Println("codeHash:", codeHash)
+				// fmt.Println("codeHashHex:", common.Bytes2Hex(codeHash))
+				// fmt.Println("addr:", addr.Hex())
+
+				// encoding account
+				var ethaneAccount types.EthaneStateAccount
+				ethaneAccount.Nonce = nonce
+				ethaneAccount.Balance = balance
+				ethaneAccount.Root = root
+				ethaneAccount.CodeHash = codeHash
+				ethaneAccount.Addr = addr
+				data, _ := rlp.EncodeToBytes(ethaneAccount)
+
+				updateTrieForEthane(addr, data)
+				normTrie.Hash()
+				// fmt.Println("print state trie\n")
+				// normTrie.Print()
+
+				response = []byte("success")
+
+			case "updateTrieForEthaneSimple":
+				// get params
+				fmt.Println("execute updateTrieForEthaneSimple()")
+				addr := common.HexToAddress(params[1])
+				fmt.Println("addr:", addr.Hex())
+
+				// encoding account: just raise state update with meaningless data
+				emptyEthaneAccount.Addr = addr
+				data, _ := rlp.EncodeToBytes(emptyEthaneAccount)
+				emptyEthaneAccount.Nonce++
+
+				updateTrieForEthane(addr, data)
+				normTrie.Hash()
+				// fmt.Println("print state trie\n")
+				// normTrie.Print()
+
+				response = []byte("success")
+
+			case "printEthaneState":
+				fmt.Println("execute printEthaneState()")
+				printEthaneState()
+				response = []byte("success")
+
+			case "getTrieLastKey":
+				normTrie.Print()
+				getTrieLastKey()
 				response = []byte("success")
 
 			default:
@@ -918,16 +1385,16 @@ func main() {
 
 	// wait for requests
 	for {
-		fmt.Println("wait for requests...")
+		fmt.Println("\nwait for requests...")
 		conn, err := listener.Accept()
-		if nil != err {
+		if err != nil {
 			log.Println(err)
 			continue
 		}
 		defer conn.Close()
 
 		// go ConnHandler(conn) // asynchronous
-		ConnHandler(conn) // synchronous
+		connHandler(conn) // synchronous
 	}
 
 }

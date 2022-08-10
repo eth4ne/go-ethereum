@@ -30,3 +30,13 @@ type StateAccount struct {
 	Root     common.Hash // merkle root of the storage trie
 	CodeHash []byte
 }
+
+// EthanetateAccount is the Ethane consensus representation of accounts. (jmlee)
+// These objects are stored in the main account trie.
+type EthaneStateAccount struct {
+	Nonce    uint64
+	Balance  *big.Int
+	Root     common.Hash // merkle root of the storage trie
+	CodeHash []byte
+	Addr     common.Address // address of this account
+}
