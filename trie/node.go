@@ -17,10 +17,11 @@
 package trie
 
 import (
+	"bytes"
 	"fmt"
 	"io"
-	"strings"
 	"math/big"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -28,6 +29,24 @@ import (
 
 var indices = []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f", "[17]"}
 var Indices = []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f", ""}
+var StringToIndex = map[string]byte{
+	"0": 0,
+	"1": 1,
+	"2": 2,
+	"3": 3,
+	"4": 4,
+	"5": 5,
+	"6": 6,
+	"7": 7,
+	"8": 8,
+	"9": 9,
+	"a": 10,
+	"b": 11,
+	"c": 12,
+	"d": 13,
+	"e": 14,
+	"f": 15,
+}
 
 type node interface {
 	fstring(string) string

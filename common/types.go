@@ -189,6 +189,18 @@ func (ns NodeStat) ToString(delimiter string) string {
 	return str
 }
 
+// Uint64ToHash converts uint64 to hex key (ex. 10 -> 0x0...0a) (jmlee)
+func Uint64ToHash(i uint64) Hash {
+	return HexToHash(strconv.FormatUint(i, 16))
+}
+
+// HashToUint64 converts hash to uint64 (ex. 0x0...0a -> 10) (jmlee)
+// caution: hash might be bigger than max uint64 value
+func HashToUint64(h Hash) uint64 {
+	i, _ := strconv.ParseUint(h.Hex()[2:], 16, 64)
+	return i
+}
+
 // BytesToHash sets b to hash.
 // If b is larger than len(h), b will be cropped from the left.
 func BytesToHash(b []byte) Hash {

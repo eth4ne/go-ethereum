@@ -94,6 +94,20 @@ func compactToHex(compact []byte) []byte {
 	return base[chop:]
 }
 
+// StringKeybytesToHex is same as keybytesToHex, but input is hex string (jmlee)
+func StringKeybytesToHex(str string) []byte {
+	hexBytes := []byte{}
+	for _, c := range str {
+		hexBytes = append(hexBytes, StringToIndex[string(c)])
+	}
+	return hexBytes
+}
+
+// KeybytesToHex is a public function for keybytesToHex (jmlee)
+func KeybytesToHex(str []byte) []byte {
+	return keybytesToHex(str)
+}
+
 func keybytesToHex(str []byte) []byte {
 	l := len(str)*2 + 1
 	var nibbles = make([]byte, l)
