@@ -1,7 +1,7 @@
 ## TxSubstate Recorder
 
 Geth for recording TxSubstate and details of storage.
-** Default file path uses absolute address in `lynx`
+* Default file path uses absolute address in `lynx`
 * Record files of TxSubstates saved in ./txDetail
 
 
