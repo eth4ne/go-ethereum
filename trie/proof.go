@@ -224,7 +224,9 @@ func GetAccountsAndKeysFromMerkleProof(rootHash common.Hash, proofDb common.Proo
 			retrievedKey := common.HexToHash(strconv.FormatInt(tKey_i, 16)) // int64 -> hex -> hash
 
 			// check if this is already restored
+			common.CommonMapMutex.Lock()
 			_, doExist := common.AlreadyRestored[retrievedKey]
+			common.CommonMapMutex.Unlock()
 			if doExist { // already restored
 				continue
 			}
@@ -249,7 +251,9 @@ func GetAccountsAndKeysFromMerkleProof(rootHash common.Hash, proofDb common.Proo
 	retrievedKey := common.HexToHash(strconv.FormatInt(tKey_i, 16)) // int64 -> hex -> hash
 
 	// check if already restored
+	common.CommonMapMutex.Lock()
 	_, doExist := common.AlreadyRestored[retrievedKey]
+	common.CommonMapMutex.Unlock()
 	if doExist { // already restored
 		return targetNodes, retrievedKeys
 	}

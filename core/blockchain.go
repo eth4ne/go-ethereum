@@ -1222,8 +1222,38 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	// Make sure no inconsistent state is leaked during insertion
 	externTd := new(big.Int).Add(block.Difficulty(), ptd)
 
+	// // Irrelevant of the canonical status, write the block itself to the database. // ---> original code location (moved down)
+	// //
+	// // Note all the components of block(td, hash->number map, header, body, receipts)
+	// // should be written atomically. BlockBatch is used for containing all components.
+	// blockBatch := bc.db.NewBatch()
+	// rawdb.WriteTd(blockBatch, block.Hash(), block.NumberU64(), externTd)
+	// rawdb.WriteBlock(blockBatch, block)
+	// rawdb.WriteReceipts(blockBatch, block.Hash(), block.NumberU64(), receipts)
+	// rawdb.WritePreimages(blockBatch, state.Preimages())
+	// if err := blockBatch.Write(); err != nil {
+	// 	log.Crit("Failed to write block into disk", "err", err)
+	// }
+
+	// Commit all cached state changes into underlying memory database.
+	root, err := state.Commit(bc.chainConfig.IsEIP158(block.Number())) // here, statedb.go > Commit() being executed (joonha)
+
+	// fmt.Println("(before) block.Hash(): ", block.Hash())
+	block.SetRoot(root) // set block root to trie root (joonha)
+	// fmt.Println("(after) block.Hash(): ", block.Hash())
+
+	/*
+	* Below code part was moved from above to here which is after state.Commit()
+	* This is because when Deletion or Inactivation occurs, block root would be different
+	* from the trie root which is the return value of state.Commit().
+	* (Block root is already calculated before commit.)
+	* So in Ethane, we set block root after commit with a custom function SetRoot().
+	* Block hash is also re-calculated when block.Hash() is called.
+	* Revision of block root affects only block root and block hash and we handled them.
+	* (commenter: joonha)
+	*/
+
 	// Irrelevant of the canonical status, write the block itself to the database.
-	//
 	// Note all the components of block(td, hash->number map, header, body, receipts)
 	// should be written atomically. BlockBatch is used for containing all components.
 	blockBatch := bc.db.NewBatch()
@@ -1234,8 +1264,6 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	if err := blockBatch.Write(); err != nil {
 		log.Crit("Failed to write block into disk", "err", err)
 	}
-	// Commit all cached state changes into underlying memory database.
-	root, err := state.Commit(bc.chainConfig.IsEIP158(block.Number())) // here, statedb.go > Commit() being executed (joonha)
 
 	if err != nil {
 		return err
@@ -1378,26 +1406,62 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	}
 
 	
-	// (debugging) export log to file (joonha)
-	f1, err := os.Create("joonha AddrToKey_inactive.txt")
-	checkError(err)
-	defer f1.Close()
-	fmt.Fprintf(f1, "\n\n>>> InactiveBoundaryKey: %d", common.InactiveBoundaryKey)
-	_, doExist := common.AddrToKey_inactive[common.HexToAddress("0xA1E4380A3B1f749673E270229993eE55F35663b4")]
-	if doExist {
-		fmt.Fprintf(f1, "\nlen(AddrToKey_inactive['0xA1E4380A3B1f749673E270229993eE55F35663b4']): %d", len(common.AddrToKey_inactive[common.HexToAddress("0xA1E4380A3B1f749673E270229993eE55F35663b4")]))
-		fmt.Fprintf(f1, "\ncommon.AddrToKey_inactive[0xA1E4380A3B1f749673E270229993eE55F35663b4]: %s", common.AddrToKey_inactive[common.HexToAddress("0xA1E4380A3B1f749673E270229993eE55F35663b4")])
-	} else {
-		fmt.Fprintf(f1, "\nlen(AddrToKey_inactive['0xA1E4380A3B1f749673E270229993eE55F35663b4']): 0")
-	}
-	fmt.Fprintf(f1, "\nlen(AddrToKey_inactive): %d", len(common.AddrToKey_inactive))
-	fmt.Fprintf(f1, "\nlen(AddrToKey): %d", len(common.AddrToKey))
-	fmt.Fprintf(f1, "\n46147 SENDER GetBalance: %d", state.GetBalance(common.HexToAddress("0xA1E4380A3B1f749673E270229993eE55F35663b4")))
-	fmt.Fprintf(f1, "\n46147 46219 RECEIVER GetBalance: %d", state.GetBalance(common.HexToAddress("0x5DF9B87991262F6BA471F09758CDE1c0FC1De734")))
-	fmt.Fprintf(f1, "\n46214 RECEIVER GetBalance: %d", state.GetBalance(common.HexToAddress("0xc9D4035F4A9226D50f79b73Aafb5d874a1B6537e")))
+	// // (debugging) export log to file (joonha)
+	// f1, err := os.Create("joonha result.txt")
+	// checkError(err)
+	// defer f1.Close()
+	// fmt.Fprintf(f1, "\n\n>>> InactiveBoundaryKey: %d", common.InactiveBoundaryKey)
+	// common.CommonMapMutex.Lock()
+	// _, doExist := common.AddrToKey_inactive[common.HexToAddress("0xA1E4380A3B1f749673E270229993eE55F35663b4")]
+	// if doExist {
+	// 	fmt.Fprintf(f1, "\nlen(AddrToKey_inactive['0xA1E4380A3B1f749673E270229993eE55F35663b4']): %d", len(common.AddrToKey_inactive[common.HexToAddress("0xA1E4380A3B1f749673E270229993eE55F35663b4")]))
+	// 	fmt.Fprintf(f1, "\ncommon.AddrToKey_inactive[0xA1E4380A3B1f749673E270229993eE55F35663b4]: %s", common.AddrToKey_inactive[common.HexToAddress("0xA1E4380A3B1f749673E270229993eE55F35663b4")])
+	// } else {
+	// 	fmt.Fprintf(f1, "\nlen(AddrToKey_inactive['0xA1E4380A3B1f749673E270229993eE55F35663b4']): 0")
+	// }
+	// common.CommonMapMutex.Unlock()
+	// common.CommonMapMutex.Lock()
+	// _, doExist = common.AddrToKey_inactive[common.HexToAddress("0xbD08e0cDDEc097DB7901EA819a3d1FD9de8951A2")]
+	// if doExist {
+	// 	fmt.Fprintf(f1, "\nlen(AddrToKey_inactive['0xbD08e0cDDEc097DB7901EA819a3d1FD9de8951A2']): %d", len(common.AddrToKey_inactive[common.HexToAddress("0xbD08e0cDDEc097DB7901EA819a3d1FD9de8951A2")]))
+	// 	fmt.Fprintf(f1, "\ncommon.AddrToKey_inactive[0xbD08e0cDDEc097DB7901EA819a3d1FD9de8951A2]: %s", common.AddrToKey_inactive[common.HexToAddress("0xbD08e0cDDEc097DB7901EA819a3d1FD9de8951A2")])
+	// } else {
+	// 	fmt.Fprintf(f1, "\nlen(AddrToKey_inactive['0xbD08e0cDDEc097DB7901EA819a3d1FD9de8951A2']): 0")
+	// }
+	// common.CommonMapMutex.Unlock()
+	// common.CommonMapMutex.Lock()
+	// fmt.Fprintf(f1, "\nlen(AddrToKey_inactive): %d", len(common.AddrToKey_inactive))
+	// common.CommonMapMutex.Unlock()
+	// common.CommonMapMutex.Lock()
+	// fmt.Fprintf(f1, "\nlen(AddrToKey): %d", len(common.AddrToKey))
+	// common.CommonMapMutex.Unlock()
+	// fmt.Fprintf(f1, "\n46147 SENDER GetBalance: %d", state.GetBalance(common.HexToAddress("0xA1E4380A3B1f749673E270229993eE55F35663b4")))
+	// fmt.Fprintf(f1, "\n46147 46219 RECEIVER GetBalance: %d", state.GetBalance(common.HexToAddress("0x5DF9B87991262F6BA471F09758CDE1c0FC1De734")))
+	// fmt.Fprintf(f1, "\n46214 RECEIVER GetBalance: %d", state.GetBalance(common.HexToAddress("0xc9D4035F4A9226D50f79b73Aafb5d874a1B6537e")))
 
-	common.IsSecond = false // set false (joonha)
+
 	
+	// set common.DoDeleteLeafNode
+	bn := block.Header().Number.Int64()+1
+	if bn % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-1 && bn != common.DeleteLeafNodeEpoch-1 {
+		common.DoDeleteLeafNode = true
+	} else {
+		common.DoDeleteLeafNode = false
+	}
+
+	// set common.DoInactivateLeafNode
+	if bn % common.InactivateLeafNodeEpoch == common.InactivateLeafNodeEpoch-1 && bn != common.InactivateLeafNodeEpoch-1 {
+		common.DoInactivateLeafNode = true
+	} else {
+		common.DoInactivateLeafNode = false
+	}
+
+	common.CommonMapMutex.Lock()
+	common.FirstKeyToCheck = common.CheckpointKeys[bn-(2*common.InactivateCriterion-1)]
+	common.LastKeyToCheck = common.CheckpointKeys[bn-(common.InactivateCriterion-1)]-1
+	common.CommonMapMutex.Unlock()
+	
+
 	return status, nil
 }
 

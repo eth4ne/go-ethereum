@@ -1506,31 +1506,50 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 		// fmt.Println("[Root]: ", s.stateObjects[addr].data.Root)
 	}
 
-	// apply dirties to common.AddrToKey (jmlee)
-	common.AddrToKeyMapMutex.Lock()
-	for key, value := range s.AddrToKeyDirty {
-		common.AddrToKey[key] = value
+	// delete previous leaf nodes
+	if common.DoDeleteLeafNode { // delete Epoch		
+		keysToDelete := append(common.KeysToDelete, s.KeysToDeleteDirty...) // to include current state's KeysToDeleteDirty
+		s.DeletePreviousLeafNodes(keysToDelete)
+
+		// reset common.KeysToDelete
+		common.KeysToDelete = make([]common.Hash, 0)
 	}
-	common.AddrToKeyMapMutex.Unlock()
+
+	// inactivate inactive leaf nodes
+	if common.DoInactivateLeafNode { // inactivate Epoch
+		inactivatedAccountsNum := s.InactivateLeafNodes(common.FirstKeyToCheck, common.LastKeyToCheck)
+		common.InactiveBoundaryKey += inactivatedAccountsNum
+
+		// delete common.KeysToDelete_restore (previous keys of inactive trie after restoration)
+		s.DeletePreviousLeafNodes(common.KeysToDelete_restore)
+		common.KeysToDelete_restore = make([]common.Hash, 0)
+
+		// reset AlreadyRestored list
+		common.CommonMapMutex.Lock()
+		common.AlreadyRestored = make(map[common.Hash]common.Empty)
+		common.CommonMapMutex.Unlock()
+	}
+
+	// apply dirties to common.AddrToKey (jmlee)
+	for key, value := range s.AddrToKeyDirty {
+		if value == common.NoExistKey {
+			common.AddrToKeyMapMutex.Lock()	
+			delete(common.AddrToKey, key)
+			common.AddrToKeyMapMutex.Unlock()
+		} else {
+			common.AddrToKeyMapMutex.Lock()	
+			common.AddrToKey[key] = value
+			common.AddrToKeyMapMutex.Unlock()
+		}
+	}
 
 	// apply dirties to common.AlreadyRestored (joonha)
 	// fmt.Println("len(s.AlreadyRestoredDirty): ", len(s.AlreadyRestoredDirty))
+	common.CommonMapMutex.Lock()
 	for key, _ := range s.AlreadyRestoredDirty {
 		common.AlreadyRestored[key] = common.Empty{}
 	}
-
-	// apply dirties to common.AddrToKey_inactive (joonha)
-	// fmt.Println("len(s.AddrToKeyDirty_inactive): ", len(s.AddrToKeyDirty_inactive))
-	for key, value := range s.AddrToKeyDirty_inactive {		
-		// // (codes for debugging) export log to file
-		// f1, err := os.OpenFile("joonha dirty addrtokey inactive.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		// // f1, err := os.Create("joonha dirty addrtokey inactive.txt")
-		// checkError(err)
-		// defer f1.Close()
-		// fmt.Fprintf(f1, "(before)addr: %s\nlen(common.AddrToKey_inactive[%s]): %d\n", key, key, len(common.AddrToKey_inactive[key]))
-		common.AddrToKey_inactive[key] = append(common.AddrToKey_inactive[key], value...)
-		// fmt.Fprintf(f1, "(after)addr: %s\nlen(common.AddrToKey_inactive[%s]): %d\n\n", key, key, len(common.AddrToKey_inactive[key]))
-	}
+	common.CommonMapMutex.Unlock()
 
 	// apply dirties to common.KeysToDelete (jmlee)
 	// for i := 0; i < len(s.KeysToDeleteDirty); i++ {
@@ -1761,15 +1780,15 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 		} else {
 
 			// delete from AddrToKey
-			delete(common.AddrToKey, addr)
-			delete(s.AddrToKeyDirty, addr) // maybe unnenecessary (joonha)
+			s.AddrToKeyDirty[addr] = common.NoExistKey
 			
 			// insert to AddrToKey_inactive
-			// applying to dirty doesn't make change so apply directly to common (joonha)
+			// inactivation is implemented just once so apply directly to common (joonha)
 			// s.AddrToKeyDirty_inactive[addr] = append(s.AddrToKeyDirty_inactive[addr], keyToInsert)
+			common.CommonMapMutex.Lock()
 			common.AddrToKey_inactive[addr] = append(common.AddrToKey_inactive[addr], keyToInsert)
+			common.CommonMapMutex.Unlock()
 		}
-
 
 		/*
 		* [Inactive Storage Snapshot]
@@ -1861,6 +1880,7 @@ func (s *StateDB) UpdateAlreadyRestoredDirty(inactiveKey common.Hash) {
 // remove restored account from the list common.AddrToKey_inactive (joonha)
 func (s *StateDB) RemoveRestoredKeyFromAddrToKey_inactive(inactiveAddr common.Address, retrievedKeys []common.Hash) {
 	temp := 0
+	common.CommonMapMutex.Lock()
 	for i := len(common.AddrToKey_inactive[inactiveAddr])-1; i >= 0; i-- {
 		for j := temp; j < len(retrievedKeys); j++ {
 			if common.AddrToKey_inactive[inactiveAddr][i] == retrievedKeys[j] {
@@ -1872,6 +1892,7 @@ func (s *StateDB) RemoveRestoredKeyFromAddrToKey_inactive(inactiveAddr common.Ad
 			}
 		}
 	}
+	common.CommonMapMutex.Unlock()
 	// fmt.Println("\n\nlen(s.AddrToKeyDirty_inactive[inactiveAddr]): ", len(s.AddrToKeyDirty_inactive[inactiveAddr]), "\n\n")
 }
 

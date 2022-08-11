@@ -263,8 +263,9 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		inactiveAddr := common.HexToAddress(inactiveAddrString)
 
 		log.Info("### restoration target", "address", inactiveAddr)
+		common.CommonMapMutex.Lock()
 		log.Info("### len(AddrToKey_inactive)", "len(AddrToKey_inactive)", len(common.AddrToKey_inactive[inactiveAddr]))
-		
+		common.CommonMapMutex.Unlock()
 
 		// (log for Debugging)
 		// lastIndex := len(common.AddrToKey_inactive[inactiveAddr]) - 1

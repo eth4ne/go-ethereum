@@ -65,9 +65,6 @@ func (n *ProofList) Get(key []byte) ([]byte, error) {
 type Empty struct{}
 
 var (
-	// to delete and inactivate the nodes just for once (worker.go) (joonha)
-	IsSecond bool
-
 	// inactive storage snapshot ON/OFF option (joonha)
 	UsingActiveSnapshot bool // true: ON, false: OFF
 	UsingInactiveStorageSnapshot bool // true: ON, false: OFF
@@ -86,6 +83,9 @@ var (
 	// map storing inactive accounts list (joonha)
 	AddrToKey_inactive = make(map[Address][]Hash)
 
+	// to avoid fatal error: "concurrent map read and map write"
+	CommonMapMutex = sync.RWMutex{}
+
 	KeysToDelete = make([]Hash, 0) // store previous leaf nodes' keys to delete later
 	KeysToDelete_restore = make([]Hash, 0) // previous leaf nodes' keys to delete after restoration
 	DeleteLeafNodeEpoch = int64(315) // block epoch to delete previous leaf nodes (from active area to temp area) (const)
@@ -95,6 +95,7 @@ var (
 	InactiveBoundaryKey = int64(0) // inactive accounts have keys smaller than this key
 	InactivateCriterion = int64(315) // inactive accounts were touched more before than this block timestamp (min: 1) (const)
 	CheckpointKeys = make(map[int64]int64) // initial NextKeys of blocks (CheckpointKeys[blockNumber] = initialNextKeyOfTheBlock)
+	DoInactivateLeafNode bool // flag to determine whether to delete leaf nodes or not
 
 	InspectEpoch = int64(315)
 
@@ -114,6 +115,9 @@ var (
 	
 	RestoreMode int64
 	RestoreAmount *big.Int
+
+	FirstKeyToCheck int64
+	LastKeyToCheck int64
 )
 
 // Marshal is a function that marshals the object into an io.Reader.
