@@ -1313,7 +1313,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
 	}
 
-	var distance = 100000
+	var distance = 50000
 
 	// fmt.Println("  state_processor.go", blocknumber, distance, common.GlobalDistance)
 	if common.GlobalBlockNumber%distance == 0 && common.GlobalBlockNumber != 0 {
@@ -1329,7 +1329,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		common.BlockTxList = make(map[int][]common.Hash)
 	}
 
-	if common.GlobalBlockNumber == 1000000 {
+	if common.GlobalBlockNumber == 50000 {
 		os.Exit(0)
 	}
 
@@ -1368,6 +1368,8 @@ func PrintTxSubstate(blocknumber, distance int) {
 			for _, tx := range txlist {
 				s := fmt.Sprintf("TxHash:%v\n", tx)
 				txDetail := common.TxDetail[tx]
+
+				// jhkim: transaction type
 				if txDetail.Types == 1 {
 					s += fmt.Sprintln("  Type:Transfer")
 					// s += fmt.Sprintln("  common.TxInformation: Transfer or Contract call")
@@ -1375,9 +1377,19 @@ func PrintTxSubstate(blocknumber, distance int) {
 					s += fmt.Sprintln("  Type:ContractDeploy")
 				} else if txDetail.Types == 3 {
 					s += fmt.Sprintln("  Type:ContractCall")
-				} else if txDetail.Types == 4 {
+				} else if txDetail.Types == 4 { // never enter this branch
 					s += fmt.Sprintln("  Type:Failed")
+					fmt.Println("txDetail.Types is 4, not changed from default", tx)
+					os.Exit(0)
+				} else if txDetail.Types == 41 {
+					s += fmt.Sprintln("  Type:TransferFailed")
+				} else if txDetail.Types == 42 {
+					s += fmt.Sprintln("  Type:ContractDeployFailed")
+				} else if txDetail.Types == 43 {
+					s += fmt.Sprintln("  Type:ContractCallFailed")
 				} else {
+					fmt.Println("wrong Tx type", tx)
+					os.Exit(0)
 					s += fmt.Sprintln("  Wrong Tx Information")
 				}
 				s += fmt.Sprintf("  From:%v\n", txDetail.From)
@@ -1418,7 +1430,9 @@ func PrintTxSubstate(blocknumber, distance int) {
 					s += fmt.Sprintf("      Nonce:%v\n", stateAccount.Nonce)
 					s += fmt.Sprintf("      Balance:%v\n", stateAccount.Balance)
 					s += fmt.Sprintf("      CodeHash:%v\n", common.BytesToHash(stateAccount.CodeHash))
-					if txDetail.Types == 2 && stateAccount.Code != nil {
+					// if txDetail.Types == 2 && stateAccount.Code != nil {
+					if stateAccount.Code != nil {
+						// fmt.Printf("      Code:%v\n", common.Bytes2Hex(stateAccount.Code))
 						s += fmt.Sprintf("      Code:%v\n", common.Bytes2Hex(stateAccount.Code))
 					}
 					s += fmt.Sprintf("      StorageRoot:%v\n", stateAccount.StorageRoot)

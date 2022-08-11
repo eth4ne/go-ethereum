@@ -9,14 +9,13 @@ import (
 
 var (
 	// GlobalDistance                int     = 0
-	GlobalTxHash                  Hash    = HexToHash("0x0")
-	GlobalTxTo                    Address = HexToAddress("0x0")
-	GlobalTxFrom                  Address = HexToAddress("0x0")
-	GlobalBlockNumber             int     = 0
-	GlobalMutex                   sync.Mutex
-	GlobalBlockMiner              Address = HexToAddress("0x0")
-	GlobalBlockUncles                     = []Address{}
-	GlobalDeployedContractAddress Address = HexToAddress("0x0")
+	GlobalTxHash      Hash    = HexToHash("0x0")
+	GlobalTxTo        Address = HexToAddress("0x0")
+	GlobalTxFrom      Address = HexToAddress("0x0")
+	GlobalBlockNumber int     = 0
+	GlobalMutex       sync.Mutex
+	GlobalBlockMiner  Address = HexToAddress("0x0")
+	GlobalBlockUncles         = []Address{}
 
 	TxDetail = map[Hash]*TxInformation{} // key : TxID, value: struct common.TxInformation
 
@@ -43,14 +42,12 @@ type SimpleAccount struct {
 type SubstateAlloc map[Address]*SubstateAccount
 
 type TxInformation struct {
-	From                    Address
-	To                      Address
-	Types                   int // 1: send, 2: contract creation, 3: contract call, 4: failed, 0: default.
+	From Address
+	To   Address
+
+	//tx type: 1: send, 2: contract creation, 3: contract call, 4: temp failed, 41: transfer fail , 42: contract deploy fail, 43: contract call fail, 0: default.
+	Types                   int
 	DeployedContractAddress Address
-
-	// CA_write_slotHash map[Address]*[]Hash // key: contract address, value: written slothashes in tx
-	// CA_read_slotHash  map[Address]*[]Hash // key: contract address, value: read(touched) slothashes in tx
-
 }
 
 // SubstateAccount is modification of GenesisAccount in core/genesis.go

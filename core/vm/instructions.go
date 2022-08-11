@@ -17,6 +17,8 @@
 package vm
 
 import (
+	"fmt"
+	"os"
 	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -622,10 +624,13 @@ func opCreate(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 	// rule) and treat as an error, if the ruleset is frontier we must
 	// ignore this error and pretend the operation was successful.
 	if interpreter.evm.chainRules.IsHomestead && suberr == ErrCodeStoreOutOfGas {
+		// fmt.Println("@#@#1", common.GlobalTxHash, addr, suberr)
 		stackvalue.Clear()
 	} else if suberr != nil && suberr != ErrCodeStoreOutOfGas {
+		// fmt.Println("@#@#2", common.GlobalTxHash, addr, suberr)
 		stackvalue.Clear()
 	} else {
+		// fmt.Println("@#@#3", common.GlobalTxHash, addr, suberr)
 		stackvalue.SetBytes(addr.Bytes())
 	}
 	scope.Stack.push(&stackvalue)
@@ -640,6 +645,7 @@ func opCreate(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 }
 
 func opCreate2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+
 	if interpreter.readOnly {
 		return nil, ErrWriteProtection
 	}
@@ -663,6 +669,9 @@ func opCreate2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]
 	}
 	res, addr, returnGas, suberr := interpreter.evm.Create2(scope.Contract, input, gas,
 		bigEndowment, &salt)
+
+	fmt.Println("opCreate2", common.GlobalBlockNumber, common.GlobalTxHash, addr)
+	os.Exit(0)
 	// Push item on the stack based on the returned error.
 	if suberr != nil {
 		stackvalue.Clear()

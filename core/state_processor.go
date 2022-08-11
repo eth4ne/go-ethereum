@@ -242,10 +242,6 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	}
 	common.GlobalMutex.Unlock()
 
-	if tx.To() == nil {
-		common.GlobalDeployedContractAddress = crypto.CreateAddress(evm.TxContext.Origin, tx.Nonce()) // jhkim: for cacheing
-	}
-
 	// Update the state with pending changes.
 	var root []byte
 	if config.IsByzantium(blockNumber) {
@@ -260,34 +256,49 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	receipt := &types.Receipt{Type: tx.Type(), PostState: root, CumulativeGasUsed: *usedGas}
 	if result.Failed() {
 		receipt.Status = types.ReceiptStatusFailed
-
-		// fmt.Println("Failed Transaction", common.GlobalBlockNumber, tx.Hash())
-		// delete(common.TxDetail, tx.Hash())
 		common.GlobalMutex.Lock()
-		common.TxDetail[tx.Hash()].Types = 4 // marking failed transaction
-		// fmt.Println("@#@#@#@# who is authour", author)
-		// fmt.Println("@#@#@#@# before", common.TxWriteList[tx.Hash()])
-		tmp := common.SubstateAlloc{}
-		tmp[common.GlobalBlockMiner] = common.TxWriteList[tx.Hash()][common.GlobalBlockMiner]
-		tmp[msg.From()] = common.TxWriteList[tx.Hash()][msg.From()]
-		common.TxWriteList[tx.Hash()] = tmp
-		// fmt.Println("@#@#@#@#", common.GlobalBlockMiner, msg.From())
-		// fmt.Println("@#@#@#@#  after", common.TxWriteList[tx.Hash()])
-		if result.Err == vm.ErrCodeStoreOutOfGas {
-			// fmt.Println("Failed tx/ blocknumber:", common.GlobalBlockNumber, " txhash:", tx.Hash(), "result.err", result.Err) // 나중에 read list만 남기고 write list는 없애야함
-			// fmt.Println("  Failed tx/ErrCodeStoreOutOfGas/block#:", common.GlobalBlockNumber, " txhash:", tx.Hash()) // 나중에 read list만 남기고 write list는 없애야함
-			// fmt.Println()
-		} else if result.Err == vm.ErrOutOfGas {
-			// fmt.Println("  Failed tx/ErrOutOfGas/block#:", common.GlobalBlockNumber, " txhash:", tx.Hash()) // 나중에 read list만 남기고 write list는 없애야함
+
+		// jhkim: ErrCodeStoreOutofGas is error message for only after Homestead
+		// Before Homestead(1150000), txDetail should not mark this tx as failed
+		if !config.IsHomestead(blockNumber) && result.Err == vm.ErrCodeStoreOutOfGas {
+			// jhkim: Do nothing
+		} else {
+
+			//jhkim: classify fail type (ex. transfer fail, contractcall fail, contract deploy fail)
+			t := common.TxDetail[tx.Hash()].Types
+			if t == 1 {
+				common.TxDetail[tx.Hash()].Types = 41 // transfer fail
+			} else if t == 2 {
+				common.TxDetail[tx.Hash()].Types = 42 // contract deploy fail
+			} else if t == 3 {
+				common.TxDetail[tx.Hash()].Types = 43 // contract call fail
+			} else {
+				common.TxDetail[tx.Hash()].Types = 4 // ???? wrong tx?
+			}
+
+			// jhkim: Every failed transaction should have only 2 write list. miner and sender
+			// We have 2 corner cases to conider. First miner is sender, and second miner is receiver
+			// If miner is sender and this tx failed, writelist has only 1 item, miner
+			// If miner is receiver and this tx failed, writelist has 2 items, miner and sender <- same as default
+
+			tmp := common.SubstateAlloc{}
+
+			tmp[common.GlobalBlockMiner] = common.TxWriteList[tx.Hash()][common.GlobalBlockMiner]
+			tmp[msg.From()] = common.TxWriteList[tx.Hash()][msg.From()]
+			common.TxWriteList[tx.Hash()] = tmp
+			// fmt.Println("Failed txwritelist after ", tx.Hash(),common.TxWriteList[tx.Hash()])
+
 		}
-		// tmp := common.TxSubstate[common.GlobalBlockNumber][tx.Hash()]
-		// for k := range tmp {
-		// 	if k != msg.From() && k != common.GlobalBlockMiner { // failed tx에서는 sender와 miner만 남기자
-		// 		delete(tmp, k)
-		// 		// tmp[k] = nil
-		// 	}
+
+		// jhkim: Debugging
+		// if result.Err == vm.ErrCodeStoreOutOfGas {
+		// 	fmt.Println("  Failed tx/ErrCodeStoreOutOfGas/block#:", common.GlobalBlockNumber, " txhash:", tx.Hash())
+		// } else if result.Err == vm.ErrOutOfGas {
+		// 	fmt.Println("  Failed tx/ErrOutOfGas/block#:", common.GlobalBlockNumber, " txhash:", tx.Hash())
+		// } else {
+		// 	fmt.Println("  Failed tx/ELSE/block#:", common.GlobalBlockNumber, " txhash:", tx.Hash(), result.Err)
 		// }
-		common.GlobalMutex.Unlock()
+
 	} else {
 		receipt.Status = types.ReceiptStatusSuccessful
 
@@ -302,6 +313,14 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 		if receipt.Status == types.ReceiptStatusSuccessful {
 			// common.GlobalMutex.Lock()
 			common.TxDetail[tx.Hash()].DeployedContractAddress = receipt.ContractAddress
+
+			// fmt.Println("!@!@!", common.GlobalBlockNumber, tx.Hash(), receipt.ContractAddress, common.Bytes2Hex(statedb.GetCode(receipt.ContractAddress)))
+
+			if statedb.GetCode(receipt.ContractAddress) != nil {
+				common.TxWriteList[tx.Hash()][receipt.ContractAddress].Code = statedb.GetCode(receipt.ContractAddress)
+				// os.Exit(0)
+			}
+
 			// common.GlobalMutex.Unlock()
 		}
 	}

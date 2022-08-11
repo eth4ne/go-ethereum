@@ -1042,6 +1042,7 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 					// if common.GlobalBlockNumber == common.GlobalDistance {
 					// fmt.Println("   TxWriteList not exists", addr)
 					// }
+					// panic(0)
 					mySA := common.NewSubstateAccount(obj.Nonce(), obj.Balance(), obj.Code(s.db))
 					mySA.CodeHash = obj.CodeHash()
 					mySA.StorageRoot = obj.StorageRoot()

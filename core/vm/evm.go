@@ -17,7 +17,9 @@
 package vm
 
 import (
+	"fmt"
 	"math/big"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -490,8 +492,25 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 	// above we revert to the snapshot and consume any gas remaining. Additionally
 	// when we're in homestead this also counts for code storage gas errors.
 	if err != nil && (evm.chainRules.IsHomestead || err != ErrCodeStoreOutOfGas) {
+		// if common.GlobalBlockNumber == 904343 {
+		if err == ErrCodeStoreOutOfGas {
+			fmt.Println("core/vm/evm.go create 1", common.GlobalTxHash, err)
+		}
+		// }
 		evm.StateDB.RevertToSnapshot(snapshot)
+		// if common.GlobalBlockNumber == 904343 {
+		if err == ErrCodeStoreOutOfGas {
+			fmt.Println("core/vm/evm.go create 2", common.GlobalTxHash, err)
+		}
+		// }
 		if err != ErrExecutionReverted {
+			// if common.GlobalBlockNumber == 904343 {
+			if err == ErrCodeStoreOutOfGas {
+				fmt.Println("core/vm/evm.go create 3", common.GlobalTxHash, err)
+				// }
+				fmt.Println("create contract.UseGas/", common.GlobalTxHash, contract.Gas, err)
+				os.Exit(0)
+			}
 			contract.UseGas(contract.Gas)
 		}
 	}
