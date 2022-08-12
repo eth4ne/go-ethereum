@@ -161,7 +161,6 @@ type StateDB struct {
 
 	// divide inactive from active part (joonha)
 	AlreadyRestoredDirty 	map[common.Hash]common.Empty
-	AddrToKeyDirty_inactive	map[common.Address][]common.Hash // dirty cache for common.AddrToKey_inactive
 }
 
 // New creates a new state from a given trie.
@@ -198,7 +197,6 @@ func New(root common.Hash, db Database, snaps *snapshot.Tree) (*StateDB, error) 
 		KeysToDeleteDirty:	 make([]common.Hash, 0),
 		// (joonha)
 		AlreadyRestoredDirty:make(map[common.Hash]common.Empty),
-		AddrToKeyDirty_inactive:make(map[common.Address][]common.Hash),
 	}
 	if sdb.snaps != nil {
 		if sdb.snap = sdb.snaps.Snapshot(root); sdb.snap != nil {
@@ -251,7 +249,6 @@ func New_inactiveSnapshot(root common.Hash, db Database, snaps *snapshot.Tree, s
 		AddrToKeyDirty:	 	 make(map[common.Address]common.Hash),
 		KeysToDeleteDirty:	 make([]common.Hash, 0),
 		AlreadyRestoredDirty:make(map[common.Hash]common.Empty), // (joonha)
-		AddrToKeyDirty_inactive:make(map[common.Address][]common.Hash), // (joonha)
 	}
 	if sdb.snaps != nil {
 		if common.UsingActiveSnapshot {
@@ -1169,7 +1166,6 @@ func (s *StateDB) Copy() *StateDB {
 		KeysToDeleteDirty:	 make([]common.Hash, len(s.KeysToDeleteDirty)),
 		// (joonha)
 		AlreadyRestoredDirty:make(map[common.Hash]common.Empty, len(s.AlreadyRestoredDirty)),
-		AddrToKeyDirty_inactive:	make(map[common.Address][]common.Hash, len(s.AddrToKeyDirty_inactive)),
 
 	}
 
@@ -1181,10 +1177,6 @@ func (s *StateDB) Copy() *StateDB {
 	// (joonha)
 	for key, value := range s.AlreadyRestoredDirty {
 		state.AlreadyRestoredDirty[key] = value
-	}
-	// (joonha)
-	for key, value := range s.AddrToKeyDirty_inactive {		
-		state.AddrToKeyDirty_inactive[key] = value
 	}
 	for i := 0; i < len(s.KeysToDeleteDirty); i++ {
 		state.KeysToDeleteDirty[i] = s.KeysToDeleteDirty[i]
@@ -1784,7 +1776,6 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 			
 			// insert to AddrToKey_inactive
 			// inactivation is implemented just once so apply directly to common (joonha)
-			// s.AddrToKeyDirty_inactive[addr] = append(s.AddrToKeyDirty_inactive[addr], keyToInsert)
 			common.CommonMapMutex.Lock()
 			common.AddrToKey_inactive[addr] = append(common.AddrToKey_inactive[addr], keyToInsert)
 			common.CommonMapMutex.Unlock()
@@ -1884,7 +1875,6 @@ func (s *StateDB) RemoveRestoredKeyFromAddrToKey_inactive(inactiveAddr common.Ad
 	for i := len(common.AddrToKey_inactive[inactiveAddr])-1; i >= 0; i-- {
 		for j := temp; j < len(retrievedKeys); j++ {
 			if common.AddrToKey_inactive[inactiveAddr][i] == retrievedKeys[j] {
-				// fmt.Println("Remove", i, "th elem of AddrToKeyDirty_inactive[", inactiveAddr, "]")
 				// fmt.Println("retrievedKeys[",j,"]: ", retrievedKeys[j])
 				common.AddrToKey_inactive[inactiveAddr] = append(common.AddrToKey_inactive[inactiveAddr][:i], common.AddrToKey_inactive[inactiveAddr][i+1:]...)
 				temp = j
@@ -1893,7 +1883,6 @@ func (s *StateDB) RemoveRestoredKeyFromAddrToKey_inactive(inactiveAddr common.Ad
 		}
 	}
 	common.CommonMapMutex.Unlock()
-	// fmt.Println("\n\nlen(s.AddrToKeyDirty_inactive[inactiveAddr]): ", len(s.AddrToKeyDirty_inactive[inactiveAddr]), "\n\n")
 }
 
 // rebuild a storage trie when restoring using snapshot (joonha)
