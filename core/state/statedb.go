@@ -1870,7 +1870,18 @@ func (s *StateDB) RemoveRestoredKeyFromAddrToKey_inactive(inactiveAddr common.Ad
 
 // rebuild a storage trie when restoring using snapshot (joonha)
 func (s *StateDB) RebuildStorageTrieFromSnapshot(snapRoot common.Hash, addr common.Address, accountHash common.Hash) {
-
+	
+	/*
+	* Retrieved slot keys are already hashed ones.
+	* So we should set state(set storage slot) with no more hashing.
+	* Also committing storage trie should be done here
+	* because different from the original storage trie committing 
+	* rebuilding requires no hashing while committing either.
+	* Once trie commit occurs here, it will not happen again 
+	* when a state is committed since no change is visible.
+	* (commenter: joonha)
+	*/ 
+	
 	// retrieve storage slots from snapshot
 	slotKeyList := s.snaps_inactive.StorageList_ethane(snapRoot, accountHash)
 	// fmt.Println("RESTORING STORAGE LIST: ", slotKeyList)
