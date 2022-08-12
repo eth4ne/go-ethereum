@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"time"
 	"math/big"
-	"strconv"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -290,7 +289,6 @@ func (s *StateDB) DumpToCollector_Ethane(c DumpCollector, conf *DumpConfig) (nex
 				account.CodeHash = prevDumpAccount.CodeHash
 			}
 		}
-		// 현재는 restore 없이 normal tx만 수행되고 있는 건가?
 
 		// write dump
 		c.OnAccount(addr, account)
