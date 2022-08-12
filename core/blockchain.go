@@ -1462,7 +1462,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	common.CommonMapMutex.Unlock()
 	
 	// dump (joonha)
-	if block.Header().Number.Int64() % 10 == 0 {
+	if block.Header().Number.Int64() % 10 == 0 { // TODO (joonha) do this only when deletion occurs
 		f2, err := os.Create("joonha dump Ethane.txt")
 		checkError(err)
 		defer f2.Close()
