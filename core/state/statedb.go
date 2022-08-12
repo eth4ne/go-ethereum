@@ -1073,12 +1073,16 @@ func (s *StateDB) createObject(addr common.Address, blockNum *big.Int) (newobj, 
 		s.journal.append(resetObjectChange{prev: prev, prevdestruct: prevdestruct})
 	}
 
-	// set nonce blocknum * 64 (joonha)
-	if blockNum != nil { // if called by CreateAccount_withBlockNum
-		newNonce := big.NewInt(0)
-		newNonce.Mul(blockNum, big.NewInt(64))
-		newobj.setNonce(newNonce.Uint64())
-	}
+	// // set nonce blocknum * 64 (joonha)
+	// if blockNum != nil { // if called by CreateAccount_withBlockNum
+	// 	newNonce := big.NewInt(0)
+	// 	newNonce.Mul(blockNum, big.NewInt(64))
+	// 	newobj.setNonce(newNonce.Uint64())
+	// }
+
+	// for dump test, set nonce to zero (joonha)
+	newobj.setNonce(0)
+
 
 	s.setStateObject(newobj)
 	if prev != nil && !prev.deleted {

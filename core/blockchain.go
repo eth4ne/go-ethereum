@@ -1461,6 +1461,17 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	common.LastKeyToCheck = common.CheckpointKeys[bn-(common.InactivateCriterion-1)]-1
 	common.CommonMapMutex.Unlock()
 	
+	// dump (joonha)
+	if block.Header().Number.Int64() % 10 == 0 {
+		f2, err := os.Create("joonha dump Ethane.txt")
+		checkError(err)
+		defer f2.Close()
+		if common.UsingActiveSnapshot && common.UsingInactiveStorageSnapshot {
+			fmt.Fprintf(f2, string(state.Dump_bySnapshot_Ethane(nil)))
+		} else {
+			fmt.Fprintf(f2, string(state.Dump_Ethane(nil)))
+		}
+	}
 
 	return status, nil
 }
