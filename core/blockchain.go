@@ -1378,25 +1378,38 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	}
 
 	
-	// (debugging) export log to file (joonha)
-	f1, err := os.Create("joonha AddrToKey_inactive.txt")
-	checkError(err)
-	defer f1.Close()
-	fmt.Fprintf(f1, "\n\n>>> InactiveBoundaryKey: %d", common.InactiveBoundaryKey)
-	_, doExist := common.AddrToKey_inactive[common.HexToAddress("0xA1E4380A3B1f749673E270229993eE55F35663b4")]
-	if doExist {
-		fmt.Fprintf(f1, "\nlen(AddrToKey_inactive['0xA1E4380A3B1f749673E270229993eE55F35663b4']): %d", len(common.AddrToKey_inactive[common.HexToAddress("0xA1E4380A3B1f749673E270229993eE55F35663b4")]))
-		fmt.Fprintf(f1, "\ncommon.AddrToKey_inactive[0xA1E4380A3B1f749673E270229993eE55F35663b4]: %s", common.AddrToKey_inactive[common.HexToAddress("0xA1E4380A3B1f749673E270229993eE55F35663b4")])
+	// // (debugging) export log to file (joonha)
+	// f1, err := os.Create("joonha result.txt")
+	// checkError(err)
+	// defer f1.Close()
+	// fmt.Fprintf(f1, "\n\n>>> InactiveBoundaryKey: %d", common.InactiveBoundaryKey)
+	// _, doExist := common.AddrToKey_inactive[common.HexToAddress("0xA1E4380A3B1f749673E270229993eE55F35663b4")]
+	// if doExist {
+	// 	fmt.Fprintf(f1, "\nlen(AddrToKey_inactive['0xA1E4380A3B1f749673E270229993eE55F35663b4']): %d", len(common.AddrToKey_inactive[common.HexToAddress("0xA1E4380A3B1f749673E270229993eE55F35663b4")]))
+	// 	fmt.Fprintf(f1, "\ncommon.AddrToKey_inactive[0xA1E4380A3B1f749673E270229993eE55F35663b4]: %s", common.AddrToKey_inactive[common.HexToAddress("0xA1E4380A3B1f749673E270229993eE55F35663b4")])
+	// } else {
+	// 	fmt.Fprintf(f1, "\nlen(AddrToKey_inactive['0xA1E4380A3B1f749673E270229993eE55F35663b4']): 0")
+	// }
+	// fmt.Fprintf(f1, "\nlen(AddrToKey_inactive): %d", len(common.AddrToKey_inactive))
+	// fmt.Fprintf(f1, "\nlen(AddrToKey): %d", len(common.AddrToKey))
+	// fmt.Fprintf(f1, "\n46147 SENDER GetBalance: %d", state.GetBalance(common.HexToAddress("0xA1E4380A3B1f749673E270229993eE55F35663b4")))
+	// fmt.Fprintf(f1, "\n46147 46219 RECEIVER GetBalance: %d", state.GetBalance(common.HexToAddress("0x5DF9B87991262F6BA471F09758CDE1c0FC1De734")))
+	// fmt.Fprintf(f1, "\n46214 RECEIVER GetBalance: %d", state.GetBalance(common.HexToAddress("0xc9D4035F4A9226D50f79b73Aafb5d874a1B6537e")))
+	
+	// set common.DoDeleteLeafNode
+	bn := block.Header().Number.Int64()+1
+	if bn % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-1 && bn != common.DeleteLeafNodeEpoch-1 {
+		common.DoDeleteLeafNode = true
 	} else {
-		fmt.Fprintf(f1, "\nlen(AddrToKey_inactive['0xA1E4380A3B1f749673E270229993eE55F35663b4']): 0")
+		common.DoDeleteLeafNode = false
 	}
-	fmt.Fprintf(f1, "\nlen(AddrToKey_inactive): %d", len(common.AddrToKey_inactive))
-	fmt.Fprintf(f1, "\nlen(AddrToKey): %d", len(common.AddrToKey))
-	fmt.Fprintf(f1, "\n46147 SENDER GetBalance: %d", state.GetBalance(common.HexToAddress("0xA1E4380A3B1f749673E270229993eE55F35663b4")))
-	fmt.Fprintf(f1, "\n46147 46219 RECEIVER GetBalance: %d", state.GetBalance(common.HexToAddress("0x5DF9B87991262F6BA471F09758CDE1c0FC1De734")))
-	fmt.Fprintf(f1, "\n46214 RECEIVER GetBalance: %d", state.GetBalance(common.HexToAddress("0xc9D4035F4A9226D50f79b73Aafb5d874a1B6537e")))
 
-	common.IsSecond = false // set false (joonha)
+	// set common.DoInactivateLeafNode
+	if bn % common.InactivateLeafNodeEpoch == common.InactivateLeafNodeEpoch-1 && bn != common.InactivateLeafNodeEpoch-1 {
+		common.DoInactivateLeafNode = true
+	} else {
+		common.DoInactivateLeafNode = false
+	}
 	
 	return status, nil
 }

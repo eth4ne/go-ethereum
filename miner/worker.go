@@ -1195,10 +1195,8 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 
 	/*
 	* [Deletion and Inactivation]
-	* Delete and inactivate only for the second execution.
-	* Placed epoch check inside the IsSecond check because the
-	* delete epoch and the inactivate epoch might be different.
-	* IsSecond is for executing deletion and inactivation just once.
+	* Deletion and Inactivation are executed twice.
+	* So writing to common is done not here but at state.Commit()
 	* (commenter: joonha)
 	*/
 
@@ -1207,47 +1205,33 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 		// fmt.Println("block number is below 2")
 		return 
 	}
-	// fmt.Println("IsSecond: ", common.IsSecond)
 
 	// delete previous leaf nodes (jmlee)
-	if common.IsSecond == true { // 2nd
-		// fmt.Println("this is the second time so skip")
-		return 
-	} else if common.IsSecond == false { // 1st
-		common.IsSecond = true
-		if bn % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-1 { // delete Epoch
-
-			// skip at the first epoch (joonha)
-			if bn == common.DeleteLeafNodeEpoch-1 {
-				return 
-			}
-			
-			keysToDelete := append(common.KeysToDelete, env.state.KeysToDeleteDirty...) // to include current state's KeysToDeleteDirty
-			env.state.DeletePreviousLeafNodes(keysToDelete)
-
-			// reset common.KeysToDelete
-			common.KeysToDelete = make([]common.Hash, 0)
-
+	if bn % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-1 { // delete Epoch
+		// skip at the first epoch (joonha)
+		if bn == common.DeleteLeafNodeEpoch-1 {
+			return 
 		}
-		// inactivate inactive leaf nodes
-		if bn % common.InactivateLeafNodeEpoch == common.InactivateLeafNodeEpoch-1 { // inactivate Epoch
-			// skip at the first epoch (joonha)
-			if bn == common.InactivateLeafNodeEpoch-1 {
-				return 
-			}
-			firstKeyToCheck := common.CheckpointKeys[bn-(2*common.InactivateCriterion-1)]
-			lastKeyToCheck := common.CheckpointKeys[bn-(common.InactivateCriterion-1)]-1
-			inactivatedAccountsNum := env.state.InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck)
-			common.InactiveBoundaryKey += inactivatedAccountsNum
-
-			// delete common.KeysToDelete_restore (previous keys of inactive trie after restoration)
-			env.state.DeletePreviousLeafNodes(common.KeysToDelete_restore)
-			common.KeysToDelete_restore = make([]common.Hash, 0)
-
-			// reset AlreadyRestored list
-			common.AlreadyRestored = make(map[common.Hash]common.Empty)
-		} 
+		
+		keysToDelete := append(common.KeysToDelete, env.state.KeysToDeleteDirty...) // to include current state's KeysToDeleteDirty
+		env.state.DeletePreviousLeafNodes(keysToDelete)
 	}
+	
+	// inactivate inactive leaf nodes
+	if bn % common.InactivateLeafNodeEpoch == common.InactivateLeafNodeEpoch-1 { // inactivate Epoch
+		// skip at the first epoch (joonha)
+		if bn == common.InactivateLeafNodeEpoch-1 {
+			return 
+		}
+		
+		firstKeyToCheck := common.CheckpointKeys[bn-(2*common.InactivateCriterion-1)]
+		lastKeyToCheck := common.CheckpointKeys[bn-(common.InactivateCriterion-1)]-1
+		inactivatedAccountsNum := env.state.InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck)
+		env.state.SetInactiveBoundaryKeyDirty(inactivatedAccountsNum)
+
+		// delete common.KeysToDelete_restore (previous keys of inactive trie after restoration)
+		env.state.DeletePreviousLeafNodes(common.KeysToDelete_restore)
+	} 
 }
 
 // generateWork generates a sealing block based on the given parameters.

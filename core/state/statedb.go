@@ -162,6 +162,7 @@ type StateDB struct {
 	// divide inactive from active part (joonha)
 	AlreadyRestoredDirty 	map[common.Hash]common.Empty
 	AddrToKeyDirty_inactive	map[common.Address][]common.Hash // dirty cache for common.AddrToKey_inactive
+	InactiveBoundaryKeyDirty int64
 }
 
 // New creates a new state from a given trie.
@@ -1186,6 +1187,9 @@ func (s *StateDB) Copy() *StateDB {
 	for key, value := range s.AddrToKeyDirty_inactive {		
 		state.AddrToKeyDirty_inactive[key] = value
 	}
+	// (joonha)
+	state.InactiveBoundaryKeyDirty = s.InactiveBoundaryKeyDirty
+
 	for i := 0; i < len(s.KeysToDeleteDirty); i++ {
 		state.KeysToDeleteDirty[i] = s.KeysToDeleteDirty[i]
 	}
@@ -1532,14 +1536,29 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 		// fmt.Fprintf(f1, "(after)addr: %s\nlen(common.AddrToKey_inactive[%s]): %d\n\n", key, key, len(common.AddrToKey_inactive[key]))
 	}
 
-	// apply dirties to common.KeysToDelete (jmlee)
-	// for i := 0; i < len(s.KeysToDeleteDirty); i++ {
-	// 	fmt.Println("s.KeysToDeleteDirty[",i,"]:", s.KeysToDeleteDirty[i])
-	// }
-	common.KeysToDelete = append(common.KeysToDelete, s.KeysToDeleteDirty...)
-	// for i := 0; i < len(common.KeysToDelete); i++ {
-	// 	fmt.Println("common.KeysToDelete[",i,"]:", common.KeysToDelete[i])
-	// }
+	// At delete epoch, reset common.KeysToDelete
+	if common.DoDeleteLeafNode { // delete Epoch		
+		common.KeysToDelete = make([]common.Hash, 0)
+	} else {
+		// apply dirties to common.KeysToDelete (jmlee)
+		common.KeysToDelete = append(common.KeysToDelete, s.KeysToDeleteDirty...)
+	}
+
+	// At inactivate epoch, set InactiveBoundaryKey and reset KeysToDelete_restore and AlreadyRestored mappings
+	if common.DoInactivateLeafNode { 
+		
+		// update InactiveBoundaryKey
+		common.InactiveBoundaryKey += s.InactiveBoundaryKeyDirty
+
+		// delete common.KeysToDelete_restore (previous keys of inactive trie after restoration)
+		common.KeysToDelete_restore = make([]common.Hash, 0)
+
+		// reset AlreadyRestored list
+		common.CommonMapMutex.Lock()
+		common.AlreadyRestored = make(map[common.Hash]common.Empty)
+		common.CommonMapMutex.Unlock()
+	}
+
 
 	if len(s.stateObjectsDirty) > 0 {
 		s.stateObjectsDirty = make(map[common.Address]struct{})
@@ -1554,16 +1573,6 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 	if metrics.EnabledExpensive {
 		start = time.Now()
 	}
-
-	// // decide whether to delete leaf nodes or not (jmlee) --> commented-out by (joonha) because it occurs an err and the check is already done in fillTransactions()
-	// // this might be needed for full sync
-	// if common.DoDeleteLeafNode {
-	// 	// delete previous leaf nodes from state trie
-	// 	s.DeletePreviousLeafNodes(common.KeysToDelete)
-
-	// 	// reset common.KeysToDelete --> commented-out by (joonha) because it occurs an err and the check is already done in fillTransactions()
-	// 	common.KeysToDelete = make([]common.Hash, 0) // only works at the epoch
-	// }
 
 	// The onleaf func is called _serially_, so we can reuse the same account
 	// for unmarshalling every time.
@@ -1761,13 +1770,10 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 		} else {
 
 			// delete from AddrToKey
-			delete(common.AddrToKey, addr)
-			delete(s.AddrToKeyDirty, addr) // maybe unnenecessary (joonha)
+			delete(s.AddrToKeyDirty, addr)
 			
 			// insert to AddrToKey_inactive
-			// applying to dirty doesn't make change so apply directly to common (joonha)
-			// s.AddrToKeyDirty_inactive[addr] = append(s.AddrToKeyDirty_inactive[addr], keyToInsert)
-			common.AddrToKey_inactive[addr] = append(common.AddrToKey_inactive[addr], keyToInsert)
+			s.AddrToKeyDirty_inactive[addr] = append(s.AddrToKeyDirty_inactive[addr], keyToInsert)
 		}
 
 
@@ -1934,4 +1940,9 @@ func (s *StateDB) DoDirtyCrumbExist(addr common.Address) bool {
 		return true
 	}
 	return false
+}
+
+// SetInactiveBoundaryKeyDirty sets InactiveBoundaryKeyDirty to the parameter num (joonha)
+func (s *StateDB) SetInactiveBoundaryKeyDirty(num int64) {
+	s.InactiveBoundaryKeyDirty = num
 }
