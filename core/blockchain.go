@@ -1313,25 +1313,39 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
 	}
 
-	var distance = 50000
-
-	// fmt.Println("  state_processor.go", blocknumber, distance, common.GlobalDistance)
-	if common.GlobalBlockNumber%distance == 0 && common.GlobalBlockNumber != 0 {
-		PrintTxSubstate(common.GlobalBlockNumber, distance)
+	var epoch = 100000
+	if common.GlobalBlockNumber%epoch == 0 && common.GlobalBlockNumber != 0 {
+		PrintTxSubstate(common.GlobalBlockNumber, epoch)
 		fmt.Println("DONE blocknumber:", common.GlobalBlockNumber)
 
-		// reset TxReadList and TxWriteList
+		// reset TxDetail, TxReadList, TxWriteList, Miner&Uncle list, and Txlist
 		common.TxDetail = make(map[common.Hash]*common.TxInformation)
-		common.TxReadList = make(map[common.Hash]common.SubstateAlloc)
+
+		// common.TxReadList = make(map[common.Hash]common.SubstateAlloc)
+		// common.TxReadList = make(map[common.Hash][]common.Address)
+		common.TxReadList = make(map[common.Hash]map[common.Address]struct{})
+		for k, v := range common.TxWriteList {
+			for _, vv := range v {
+				vv.Storage = nil
+			}
+			delete(common.TxWriteList, k)
+		}
 		common.TxWriteList = make(map[common.Hash]common.SubstateAlloc)
 		common.BlockMinerList = make(map[int]common.SimpleAccount)
+
+		for k := range common.BlockUncleList {
+			delete(common.BlockUncleList, k)
+		}
 		common.BlockUncleList = make(map[int][]common.SimpleAccount)
+		for k := range common.BlockTxList {
+			delete(common.BlockTxList, k)
+		}
 		common.BlockTxList = make(map[int][]common.Hash)
 	}
 
-	if common.GlobalBlockNumber == 50000 {
-		os.Exit(0)
-	}
+	// if common.GlobalBlockNumber == 1000000 {
+	// 	os.Exit(0)
+	// }
 
 	return status, nil
 }
@@ -1382,11 +1396,11 @@ func PrintTxSubstate(blocknumber, distance int) {
 					fmt.Println("txDetail.Types is 4, not changed from default", tx)
 					os.Exit(0)
 				} else if txDetail.Types == 41 {
-					s += fmt.Sprintln("  Type:TransferFailed")
+					s += fmt.Sprintln("  Type:Failed_transfer")
 				} else if txDetail.Types == 42 {
-					s += fmt.Sprintln("  Type:ContractDeployFailed")
+					s += fmt.Sprintln("  Type:Failed_contractdeploy")
 				} else if txDetail.Types == 43 {
-					s += fmt.Sprintln("  Type:ContractCallFailed")
+					s += fmt.Sprintln("  Type:Failed_contractcall")
 				} else {
 					fmt.Println("wrong Tx type", tx)
 					os.Exit(0)
@@ -1396,10 +1410,10 @@ func PrintTxSubstate(blocknumber, distance int) {
 
 				if txDetail.Types == 1 || txDetail.Types == 3 {
 					s += fmt.Sprintf("  To:%v\n", txDetail.To)
-				} else if txDetail.Types == 4 {
-					// Do nothing
-				} else {
+				} else if txDetail.Types == 2 {
 					s += fmt.Sprintf("  DeployedCA:%v\n", txDetail.DeployedContractAddress)
+				} else {
+					// Do nothing
 				}
 				// s += fmt.Sprintln()
 				fmt.Fprintln(f, s)
@@ -1454,8 +1468,11 @@ func PrintTxSubstate(blocknumber, distance int) {
 						}
 					}
 					// s += fmt.Sprintf("      RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSubstateAccount(*stateAccount)))
+
 					fmt.Fprintln(f, s)
+					delete(common.TxWriteList[tx], addr)
 				}
+				delete(common.TxWriteList, tx)
 				// s += fmt.Sprintln()
 				// fmt.Fprintln(f, s)
 			}

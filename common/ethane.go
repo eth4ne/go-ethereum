@@ -19,13 +19,15 @@ var (
 
 	TxDetail = map[Hash]*TxInformation{} // key : TxID, value: struct common.TxInformation
 
-	TxSubstate     = map[int](map[Hash]SubstateAlloc){} // key: block number, value: map(key: tx hash, value: SubstateAlloc)
-	BlockTxList    = map[int][]Hash{}                   // key: block number, value: tx hash
-	BlockMinerList = map[int]SimpleAccount{}            // key: block number, value: Address of block miner
+	// TxSubstate     = map[int](map[Hash]SubstateAlloc){} // key: block number, value: map(key: tx hash, value: SubstateAlloc)
+	BlockTxList    = map[int][]Hash{}        // key: block number, value: tx hash
+	BlockMinerList = map[int]SimpleAccount{} // key: block number, value: Address of block miner
 
 	BlockUncleList = map[int][]SimpleAccount{} // key: block number, value: Addresses of block uncles
 
-	TxReadList  = map[Hash]SubstateAlloc{} // key: tx hash, value: SubstateAlloc(map key:address, value:stateAccount)
+	// TxReadList = map[Hash]SubstateAlloc{} // key: tx hash, value: SubstateAlloc(map key:address, value:stateAccount)
+	// TxReadList  = map[Hash][]Address{}     // key: tx hash, value: SubstateAlloc(map key:address, value:empty)
+	TxReadList  = map[Hash]map[Address]struct{}{}
 	TxWriteList = map[Hash]SubstateAlloc{} // key: tx hash, value: SubstateAlloc(map key:address, value:stateAccount)
 
 )

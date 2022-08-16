@@ -89,7 +89,8 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	common.GlobalBlockNumber = int(block.Number().Int64()) //jhkim
 	common.GlobalBlockMiner = block.Coinbase()
 	if common.TxReadList == nil {
-		common.TxReadList = make(map[common.Hash]common.SubstateAlloc)
+		// common.TxReadList = make(map[common.Hash]common.SubstateAlloc)
+		common.TxReadList = make(map[common.Hash]map[common.Address]struct{})
 		common.TxWriteList = make(map[common.Hash]common.SubstateAlloc)
 	}
 
@@ -107,7 +108,8 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	}
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
-		common.TxReadList[tx.Hash()] = common.SubstateAlloc{}
+		// common.TxReadList[tx.Hash()] = common.SubstateAlloc{}
+		common.TxReadList[tx.Hash()] = map[common.Address]struct{}{}
 		common.TxWriteList[tx.Hash()] = common.SubstateAlloc{}
 
 		common.BlockTxList[common.GlobalBlockNumber] = append(common.BlockTxList[common.GlobalBlockNumber], tx.Hash())
@@ -158,30 +160,6 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 
 }
 
-//jhkim: check contract related tx
-func isContractRelated(tx *types.Transaction, msg types.Message, statedb *state.StateDB) bool {
-	// isContractRelated := false
-	if tx.To() == nil { // contract deploy
-		// isContractRelated = true
-		return true
-	} else {
-		code := statedb.GetCode(*msg.To())
-		if code == nil { // transfer
-			return false
-		} else { // contract call
-			// isContractRelated = true
-
-			if msg.Value() != big.NewInt(0) {
-				// fmt.Println("dumbtx? transfer ether to contract")
-				// fmt.Println("dumb tx/ blocknumber: ", common.GlobalBlockNumber, "txHash:", tx.Hash())
-				// os.Exit(0)
-			}
-			return true
-		}
-	}
-
-}
-
 //jhkim: rlp encoding of common.SubStateAccount
 func RLPEncodeSubstateAccount(sa common.SubstateAccount) []byte {
 	var legacyAccount types.StateAccount
@@ -192,14 +170,6 @@ func RLPEncodeSubstateAccount(sa common.SubstateAccount) []byte {
 	legacyAccount.Root = sa.StorageRoot
 
 	data, _ := rlp.EncodeToBytes(legacyAccount)
-	// fmt.Println("@@@@@@@RLPENCODEING@@@@@@@")
-	// fmt.Println("LEGACY ACCOUNT", legacyAccount)
-	// fmt.Println("nonce", legacyAccount.Nonce)
-	// fmt.Println("balance", legacyAccount.Balance)
-	// fmt.Println("root", legacyAccount.Root)
-	// fmt.Println("codehash", legacyAccount.CodeHash)
-
-	// fmt.Println("@@@@@@@")
 	return data
 }
 func RLPEncodeSimpleAccount(sa common.SimpleAccount) []byte {
@@ -210,14 +180,6 @@ func RLPEncodeSimpleAccount(sa common.SimpleAccount) []byte {
 	legacyAccount.Root = sa.StorageRoot
 
 	data, _ := rlp.EncodeToBytes(legacyAccount)
-	// fmt.Println("@@@@@@@RLPENCODEING@@@@@@@")
-	// fmt.Println("LEGACY ACCOUNT", legacyAccount)
-	// fmt.Println("nonce", legacyAccount.Nonce)
-	// fmt.Println("balance", legacyAccount.Balance)
-	// fmt.Println("root", legacyAccount.Root)
-	// fmt.Println("codehash", legacyAccount.CodeHash)
-
-	// fmt.Println("@@@@@@@")
 	return data
 }
 
@@ -233,14 +195,15 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	}
 
 	//jhkim: write Txdetail
-	common.GlobalMutex.Lock()
+	// common.GlobalMutex.Lock()
 	if _, ok := common.TxDetail[tx.Hash()]; !ok {
 		WriteTxDetail(tx, msg, blockNumber, statedb) //jhkim
 	} else {
 		// fmt.Println("Error: Tx already exist!", tx.Hash(), common.GlobalBlockNumber)
 		// os.Exit(0)
 	}
-	common.GlobalMutex.Unlock()
+
+	// common.GlobalMutex.Unlock()
 
 	// Update the state with pending changes.
 	var root []byte
@@ -256,10 +219,10 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	receipt := &types.Receipt{Type: tx.Type(), PostState: root, CumulativeGasUsed: *usedGas}
 	if result.Failed() {
 		receipt.Status = types.ReceiptStatusFailed
-		common.GlobalMutex.Lock()
+		// common.GlobalMutex.Lock()
 
-		// jhkim: ErrCodeStoreOutofGas is error message for only after Homestead
-		// Before Homestead(1150000), txDetail should not mark this tx as failed
+		// jhkim: ErrCodeStoreOutofGas is error message for only after Homestead.
+		// So before Homestead(1150000), txDetail should not mark this tx as failed
 		if !config.IsHomestead(blockNumber) && result.Err == vm.ErrCodeStoreOutOfGas {
 			// jhkim: Do nothing
 		} else {
@@ -307,21 +270,11 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	// If the transaction created a contract, store the creation address in the receipt.
 	if msg.To() == nil {
 		receipt.ContractAddress = crypto.CreateAddress(evm.TxContext.Origin, tx.Nonce())
-		// if common.GlobalBlockNumber == 54347 && receipt.ContractAddress != common.GlobalContractAddress {
-		// 	fmt.Println("Caching deployed contract address is wrong")
-		// }
-		if receipt.Status == types.ReceiptStatusSuccessful {
-			// common.GlobalMutex.Lock()
+		if receipt.Status == types.ReceiptStatusSuccessful { //jhkim
 			common.TxDetail[tx.Hash()].DeployedContractAddress = receipt.ContractAddress
-
-			// fmt.Println("!@!@!", common.GlobalBlockNumber, tx.Hash(), receipt.ContractAddress, common.Bytes2Hex(statedb.GetCode(receipt.ContractAddress)))
-
 			if statedb.GetCode(receipt.ContractAddress) != nil {
 				common.TxWriteList[tx.Hash()][receipt.ContractAddress].Code = statedb.GetCode(receipt.ContractAddress)
-				// os.Exit(0)
 			}
-
-			// common.GlobalMutex.Unlock()
 		}
 	}
 	receipt.TxHash = tx.Hash()

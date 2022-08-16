@@ -17,8 +17,6 @@
 package vm
 
 import (
-	"fmt"
-	"os"
 	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -541,9 +539,6 @@ func opSstore(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 	}
 	loc := scope.Stack.pop()
 	val := scope.Stack.pop()
-	// fmt.Println("  EVM SSTORE/ blk#:", common.GlobalBlockNumber, "/ hash:", loc.Bytes32(), "/ value:", val.Bytes32())
-	// fmt.Println("opSstore", scope.Contract.Address(), common.Hash(loc.Bytes32()), common.Hash(val.Bytes32())) //jhkim
-	// common.TxWriteList[common.GlobalTxHash][scope.Contract.Address()].Storage[loc.Bytes32()] = val.Bytes32() // 여기서 잡으면 contract call에서 writelist에 sa가 들어가기 전에 먼저 넣음
 	interpreter.evm.StateDB.SetState(scope.Contract.Address(),
 		loc.Bytes32(), val.Bytes32())
 	return nil, nil
@@ -624,13 +619,10 @@ func opCreate(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 	// rule) and treat as an error, if the ruleset is frontier we must
 	// ignore this error and pretend the operation was successful.
 	if interpreter.evm.chainRules.IsHomestead && suberr == ErrCodeStoreOutOfGas {
-		// fmt.Println("@#@#1", common.GlobalTxHash, addr, suberr)
 		stackvalue.Clear()
 	} else if suberr != nil && suberr != ErrCodeStoreOutOfGas {
-		// fmt.Println("@#@#2", common.GlobalTxHash, addr, suberr)
 		stackvalue.Clear()
 	} else {
-		// fmt.Println("@#@#3", common.GlobalTxHash, addr, suberr)
 		stackvalue.SetBytes(addr.Bytes())
 	}
 	scope.Stack.push(&stackvalue)
@@ -669,9 +661,6 @@ func opCreate2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]
 	}
 	res, addr, returnGas, suberr := interpreter.evm.Create2(scope.Contract, input, gas,
 		bigEndowment, &salt)
-
-	fmt.Println("opCreate2", common.GlobalBlockNumber, common.GlobalTxHash, addr)
-	os.Exit(0)
 	// Push item on the stack based on the returned error.
 	if suberr != nil {
 		stackvalue.Clear()
