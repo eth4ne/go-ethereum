@@ -707,14 +707,9 @@ func findShortestPrefixAmongShortNodes(hash common.Hash) ([]string, bool) {
 	return []string{""}, false
 }
 
-func updateTrie(key []byte) error {
-	// encoding value
-	emptyAccount.Nonce++ // to make different leaf node
-	data, _ := rlp.EncodeToBytes(emptyAccount)
-
+func updateTrie(key, value []byte) error {
 	// update state trie
-	// fmt.Println("update trie -> key:", common.BytesToHash(key).Hex(), "/ nonce:", emptyAccount.Nonce)
-	err := normTrie.TryUpdate(key, data)
+	err := normTrie.TryUpdate(key, value)
 	return err
 }
 
@@ -1080,26 +1075,66 @@ func connHandler(conn net.Conn) {
 				newNodesNum, newNodesSize := common.NewNodeStat.GetSum()
 				response = []byte(strconv.FormatUint(newNodesNum, 10) + "," + strconv.FormatUint(newNodesSize, 10))
 
-			case "updateTrie":
+			case "updateTrieSimple":
 				key, err := hex.DecodeString(params[1]) // convert hex string to bytes
 				if err != nil {
 					fmt.Println("ERROR: failed decoding")
 					response = []byte("ERROR: fail decoding while updateTrie")
 				} else {
-					// fmt.Println("execute updateTrie() -> key:", common.Bytes2Hex(key))
-					err = updateTrie(key)
+					// fmt.Println("execute updateTrieSimple() -> key:", common.Bytes2Hex(key))
+					// encoding account
+					emptyAccount.Nonce++ // to make different leaf node
+					data, _ := rlp.EncodeToBytes(emptyAccount)
+					err = updateTrie(key, data)
 					if err == nil {
 						// fmt.Println("success updateTrie -> new root hash:", normTrie.Hash().Hex())
-						response = []byte("success updateTrie")
+						response = []byte("success updateTrieSimple")
 					} else {
 						// this is not normal case, need to fix certain error
-						fmt.Println("ERROR: fail updateTrie:", err, "/ key:", params[1])
+						fmt.Println("ERROR: fail updateTrieSimple:", err, "/ key:", params[1])
 						os.Exit(1)
 					}
 				}
 				normTrie.Hash()
 				// normTrie.Print()
 				// fmt.Println("\n\n")
+
+			case "updateTrie":
+				// get params
+				// fmt.Println("execute updateTrie()")
+				nonce, _ := strconv.ParseUint(params[1], 10, 64)
+				balance := new(big.Int)
+				balance, _ = balance.SetString(params[2], 10)
+				root := common.HexToHash(params[3])
+				codeHash := common.Hex2Bytes(params[4])
+				addr := common.HexToAddress(params[5])
+				addrHash := crypto.Keccak256Hash(addr[:])
+				// fmt.Println("nonce:", nonce)
+				// fmt.Println("balance:", balance)
+				// fmt.Println("root:", root)
+				// fmt.Println("codeHash:", codeHash)
+				// fmt.Println("codeHashHex:", common.Bytes2Hex(codeHash))
+				// fmt.Println("addr:", addr.Hex())
+				// fmt.Println("addrHash:", addrHash.Hex())
+
+				// encoding account
+				var account types.StateAccount
+				account.Nonce = nonce
+				account.Balance = balance
+				account.Root = root
+				account.CodeHash = codeHash
+				data, _ := rlp.EncodeToBytes(account)
+
+				err := updateTrie(addrHash[:], data)
+				if err != nil {
+					fmt.Println("updateTrie() failed:", err)
+					os.Exit(1)
+				}
+				normTrie.Hash()
+				// fmt.Println("print state trie\n")
+				// normTrie.Print()
+
+				response = []byte("success")
 
 			case "rollbackUncommittedUpdates":
 				fmt.Println("execute rollbackUncommittedUpdates()")

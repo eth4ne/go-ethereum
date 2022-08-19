@@ -116,11 +116,30 @@ def flush():
     print("flush result -> # of new trie nodes:", '{:,}'.format(newTrieNodesNum), "/ increased db size:", '{:,}'.format(newTrieNodesSize), "B")
     return flushResult
 
-# update trie (key: keyString, value: account)
-def updateTrie(keyString):
-    cmd = str("updateTrie")
+# update account with meaningless values (using monotonically increasing nonce)
+def updateTrieSimple(keyString):
+    cmd = str("updateTrieSimple")
     cmd += str(",")
     cmd += keyString
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    updateTrieSimpleResult = data.decode()
+    # print("updateTrieSimple result:", updateTrieSimpleResult)
+    return updateTrieSimpleResult
+
+# update account with detailed values
+def updateTrie(nonce, balance, root, codeHash, addr):
+    cmd = str("updateTrie")
+    cmd += str(",")
+    cmd += str(nonce)
+    cmd += str(",")
+    cmd += str(balance)
+    cmd += str(",")
+    cmd += str(root)
+    cmd += str(",")
+    cmd += str(codeHash)
+    cmd += str(",")
+    cmd += str(addr)
     client_socket.send(cmd.encode())
     data = client_socket.recv(1024)
     updateResult = data.decode()
@@ -229,9 +248,9 @@ def generateSampleTrie():
     maxHashToInt = int("0xffffffffffffffffffffffffffffffff", 0)
     interval = int(maxHashToInt / accNumToInsert)
     for i in range(accNumToInsert):
-        # updateTrie(makeRandHashLengthHexString()) # insert random keys
-        updateTrie(intToHashLengthHexString(i)) # insert incremental keys (Ethane)
-        # updateTrie(intToHashLengthHexString(i*interval)) # try to make maximum trie
+        # updateTrieSimple(makeRandHashLengthHexString()) # insert random keys
+        updateTrieSimple(intToHashLengthHexString(i)) # insert incremental keys (Ethane)
+        # updateTrieSimple(intToHashLengthHexString(i*interval)) # try to make maximum trie
         if (i+1) % flushEpoch == 0:
             print("flush! inserted", '{:,}'.format(i+1), "accounts")
             flush()
@@ -351,7 +370,7 @@ def test_ethane(flushEpoch):
     # insert random accounts
     for i in range(totalAccNumToInsert):
         # key = makeRandHashLengthHexString()
-        # updateTrie(key)
+        # updateTrieSimple(key)
         randAddr = intToAddr(addrs[i])
         updateTrieForEthaneSimple(randAddr)
         # printCurrentTrie()

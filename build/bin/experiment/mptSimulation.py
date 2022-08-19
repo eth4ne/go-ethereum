@@ -111,11 +111,30 @@ def flush():
     print("flush result -> # of new trie nodes:", '{:,}'.format(newTrieNodesNum), "/ increased db size:", '{:,}'.format(newTrieNodesSize), "B")
     return flushResult
 
-# update trie (key: keyString, value: account)
-def updateTrie(keyString):
-    cmd = str("updateTrie")
+# update account with meaningless values (using monotonically increasing nonce)
+def updateTrieSimple(keyString):
+    cmd = str("updateTrieSimple")
     cmd += str(",")
     cmd += keyString
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    updateTrieSimpleResult = data.decode()
+    # print("updateTrieSimple result:", updateTrieSimpleResult)
+    return updateTrieSimpleResult
+
+# update account with detailed values
+def updateTrie(nonce, balance, root, codeHash, addr):
+    cmd = str("updateTrie")
+    cmd += str(",")
+    cmd += str(nonce)
+    cmd += str(",")
+    cmd += str(balance)
+    cmd += str(",")
+    cmd += str(root)
+    cmd += str(",")
+    cmd += str(codeHash)
+    cmd += str(",")
+    cmd += str(addr)
     client_socket.send(cmd.encode())
     data = client_socket.recv(1024)
     updateResult = data.decode()
@@ -213,8 +232,8 @@ def generateSampleTrie():
     accNumToInsert = 100
     flushEpoch = 4
     for i in range(accNumToInsert):
-        # updateTrie(makeRandHashLengthHexString()) # insert random keys
-        updateTrie(intToHashLengthHexString(i)) # insert incremental keys (Ethane)
+        # updateTrieSimple(makeRandHashLengthHexString()) # insert random keys
+        updateTrieSimple(intToHashLengthHexString(i)) # insert incremental keys (Ethane)
         if (i+1) % flushEpoch == 0:
             print("flush! inserted", '{:,}'.format(i+1), "accounts")
             flush()
@@ -275,29 +294,34 @@ def strategy_heuristic_splitShortNodes(flushEpoch, attackNumPerBlock, accNumToIn
     while updateCount < accNumToInsert:
         # insert random accounts
         for i in range(flushEpoch-attackNumPerBlock):
-            updateTrie(makeRandHashLengthHexString())
+            updateTrieSimple(makeRandHashLengthHexString())
         randomInsertNum += flushEpoch-attackNumPerBlock
         
         # insert heuristic accounts
-        shortestPrefixes = findShortestPrefixAmongShortNodes(attackNumPerBlock)
-        possibleAttackNum = len(shortestPrefixes)
-        for i in range(possibleAttackNum):
-            prefix = shortestPrefixes[i]
-            prefixLenSum += len(prefix)
-            if doRealComputation:
-                # real computation: find proper address whose hash value has certain prefix
-                addr, addrHash = findAddrHashWithPrefix(prefix)
-            else:
-                # sudo computation: just generate random string with certain prefix
-                addrHash = prefix + makeRandHashLengthHexString()[len(prefix):]
-            # print("prefixes:", shortestPrefixes, "/ addrHash:", addrHash)
-            updateTrie(addrHash)
-        heuristicInsertNum += possibleAttackNum
+        attackNum = 0
+        while attackNum < attackNumPerBlock:
+            shortestPrefixes = findShortestPrefixAmongShortNodes(attackNumPerBlock)
+            possibleAttackNum = len(shortestPrefixes)
+            if possibleAttackNum > attackNumPerBlock - attackNum:
+                possibleAttackNum = attackNumPerBlock - attackNum
+            for i in range(possibleAttackNum):
+                prefix = shortestPrefixes[i]
+                prefixLenSum += len(prefix)
+                if doRealComputation:
+                    # real computation: find proper address whose hash value has certain prefix
+                    addr, addrHash = findAddrHashWithPrefix(prefix)
+                else:
+                    # sudo computation: just generate random string with certain prefix
+                    addrHash = prefix + makeRandHashLengthHexString()[len(prefix):]
+                # print("prefixes:", shortestPrefixes, "/ addrHash:", addrHash)
+                updateTrieSimple(addrHash)
+            heuristicInsertNum += possibleAttackNum
+            attackNum += possibleAttackNum
 
         # insert random accounts (when there is not enough attack space)
-        for i in range(attackNumPerBlock - possibleAttackNum):
-            updateTrie(makeRandHashLengthHexString())
-        randomInsertNum += attackNumPerBlock - possibleAttackNum
+        # for i in range(attackNumPerBlock - possibleAttackNum):
+        #     updateTrieSimple(makeRandHashLengthHexString())
+        # randomInsertNum += attackNumPerBlock - possibleAttackNum
         
         # flush
         updateCount += flushEpoch
@@ -341,7 +365,7 @@ def strategy_random(flushEpoch, totalAccNumToInsert):
     # insert random accounts
     for i in range(totalAccNumToInsert):
         key = makeRandHashLengthHexString()
-        updateTrie(key)
+        updateTrieSimple(key)
         updateCount += 1
         if updateCount % flushEpoch == 0:
             print("flush! inserted", '{:,}'.format(i+1), "accounts / elapsed time:", datetime.now()-startTime)
