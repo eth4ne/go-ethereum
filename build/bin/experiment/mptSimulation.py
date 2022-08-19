@@ -3,6 +3,16 @@ import socket
 import os, binascii
 import sys
 from datetime import datetime
+import pymysql.cursors
+
+# ethereum tx data db options
+db_host = 'localhost'
+db_user = 'ethereum'
+db_pass = '1234' # fill in the MariaDB/MySQL password.
+db_name = 'ethereum' # block 0 ~ 1,000,000
+conn_mariadb = lambda host, user, password, database: pymysql.connect(host=host, user=user, password=password, database=database, cursorclass=pymysql.cursors.DictCursor)
+conn = conn_mariadb(db_host, db_user, db_pass, db_name)
+cursor = conn.cursor()
 
 # simulator server IP address
 SERVER_IP = "localhost"
@@ -15,6 +25,27 @@ maxResponseLen = 4096
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 # connect to the server
 client_socket.connect((SERVER_IP, SERVER_PORT))
+
+# read txs in this block from DB
+def select_txs(cursor, blocknumber):
+  sql = "SELECT * FROM `transactions` WHERE `blocknumber`=%s;"
+  cursor.execute(sql, (blocknumber,))
+  result = cursor.fetchall()
+  return result
+
+# read accounts r/w list in this block from DB
+def select_account_read_write_list(cursor, blocknumber):
+  sql = "SELECT * FROM `states` WHERE `blocknumber`=%s;"
+  cursor.execute(sql, (blocknumber,))
+  result = cursor.fetchall()
+  return result
+
+# read storage trie slots r/w list in this block from DB
+def select_slot_read_write_list(cursor, stateid):
+  sql = "SELECT * FROM `slotlogs` WHERE `stateid`=%s;"
+  cursor.execute(sql, (stateid,))
+  result = cursor.fetchall()
+  return result
 
 # get current block number (i.e., # of flushes)
 def getBlockNum():
@@ -387,8 +418,72 @@ def strategy_random(flushEpoch, totalAccNumToInsert):
 
 
 
+# replay txs in Ethereum with original Ethereum client
+def simulateEthereum(startBlockNum, endBlockNum):
+
+    switchSimulationMode(0) # 0: original geth mode
+
+    # initialize
+    reset()
+    updateCount = 0
+    readCount = 0
+    writeCount = 0
+    startTime = datetime.now()
+
+    # set log file name
+    logFileName = "ethereum_simulate_" + str(startBlockNum) + "_" + str(endBlockNum) + ".txt"
+
+    # insert random accounts
+    for blockNum in range(startBlockNum, endBlockNum+1):
+        # get read/write list from DB
+        rwList = select_account_read_write_list(cursor, blockNum)
+        
+        # replay writes
+        for item in rwList:
+            # print("item:", item)
+            if item['type'] % 2 == 1:
+                writeCount += 1
+
+                addr = item['address'].hex()
+                nonce = item['nonce']
+                balance = item['balance']
+                codeHash = item['codehash'].hex()
+                storageRoot = item['storageroot'].hex()
+
+                print("in block", blockNum, ", find write item", writeCount)
+                # print("write account ->")
+                # print("  addr:", addr)
+                # print("  nonce:", nonce)
+                # print("  balance:", balance)
+                # print("  codeHash:", codeHash)
+                # print("  storageRoot:", storageRoot)
+                # print("\n")
+                updateTrie(nonce, balance, storageRoot, codeHash, addr)
+            else:
+                readCount += 1
+
+        # printCurrentTrie()
+        # flush
+        flush()
+        print("flush finished -> current block num:", blockNum)
+
+    # show final result
+    print("simulateEthereum() finished -> from block", startBlockNum, "to", endBlockNum)
+    print("total elapsed time:", datetime.now()-startTime)
+    print("total writes:", writeCount, "/ total reads:", readCount)
+    # inspectTrie()
+    # printCurrentTrie()
+    inspectDB()
+    printAllStats(logFileName)
+    print("create log file:", logFileName)
+
+
+
+
+
 if __name__ == "__main__":
     print("start")
+    switchSimulationMode(0) # 0: original geth mode
 
     #
     # call APIs to simulate MPT
