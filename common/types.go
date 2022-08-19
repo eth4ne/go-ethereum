@@ -118,6 +118,8 @@ var (
 
 	FirstKeyToCheck int64
 	LastKeyToCheck int64
+
+	DoDump bool
 )
 
 // Marshal is a function that marshals the object into an io.Reader.

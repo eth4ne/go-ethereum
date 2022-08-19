@@ -1608,6 +1608,19 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 		s.AccountUpdated, s.AccountDeleted = 0, 0
 		s.StorageUpdated, s.StorageDeleted = 0, 0
 	}
+
+	// dump - this should be done before s.snap is initialized (joonha)
+	if common.DoDump {
+		f2, err := os.Create("joonha dump Ethane.txt")
+		checkError(err)
+		defer f2.Close()
+		if common.UsingActiveSnapshot && common.UsingInactiveStorageSnapshot {
+			fmt.Fprintf(f2, string(s.Dump_bySnapshot_Ethane(nil)))
+		} else {
+			fmt.Fprintf(f2, string(s.Dump_Ethane(nil)))
+		}
+	}
+
 	// If snapshotting is enabled, update the snapshot tree with this new version
 	if s.snap != nil {
 		if metrics.EnabledExpensive {
