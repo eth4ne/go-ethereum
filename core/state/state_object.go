@@ -205,21 +205,6 @@ func (s *stateObject) GetState(db Database, key common.Hash) common.Hash {
 	return s.GetCommittedState(db, key)
 }
 
-// GetState_hashedKey retrieves a value from the account storage trie with already hashed key (joonha)
-func (s *stateObject) GetState_hashedKey(db Database, key common.Hash) common.Hash {
-	// If the fake storage is set, only lookup the state here(in the debugging mode)
-	if s.fakeStorage != nil {
-		return s.fakeStorage[key]
-	}
-	// If we have a dirty value for this state entry, return it
-	value, dirty := s.dirtyStorage[key]
-	if dirty {
-		return value
-	}
-	// Otherwise return the entry's original value
-	return s.GetCommittedState_hashedKey(db, key)
-}
-
 // GetCommittedState retrieves a value from the committed account storage trie.
 func (s *stateObject) GetCommittedState(db Database, key common.Hash) common.Hash {
 	// If the fake storage is set, only lookup the state here(in the debugging mode)
@@ -245,13 +230,27 @@ func (s *stateObject) GetCommittedState(db Database, key common.Hash) common.Has
 		//   1) resurrect happened, and new slot values were set -- those should
 		//      have been handles via pendingStorage above.
 		//   2) we don't have new values, and can deliver empty response back
-		if _, destructed := s.db.snapDestructs[s.addrHash]; destructed {
-			return common.Hash{}
-		}
-		start := time.Now()
-		enc, err = s.db.snap.Storage(s.addrHash, crypto.Keccak256Hash(key.Bytes()))
-		if metrics.EnabledExpensive {
-			s.db.SnapshotStorageReads += time.Since(start)
+
+		if common.HashToInt64(s.addrHash) < common.InactiveBoundaryKey { // inactive trie (get by counter from inactive trie) (joonha)
+			if _, destructed := s.db.snapDestructs_inactive[s.addrHash]; destructed {
+				return common.Hash{}
+			}
+			start := time.Now()
+			enc, err = s.db.snap_inactive.Storage(s.addrHash, crypto.Keccak256Hash(key.Bytes()))
+			if metrics.EnabledExpensive {
+				s.db.SnapshotStorageReads += time.Since(start)
+			}
+		} else { // active trie (get by hash(addr) from active trie) (joonha)
+			// snapshot key is hash(addr) not a counter (joonha)
+			snapKey := crypto.Keccak256Hash(s.address[:])
+			if _, destructed := s.db.snapDestructs[snapKey]; destructed {
+				return common.Hash{}
+			}
+			start := time.Now()
+			enc, err = s.db.snap.Storage(snapKey, crypto.Keccak256Hash(key.Bytes()))
+			if metrics.EnabledExpensive {
+				s.db.SnapshotStorageReads += time.Since(start)
+			}
 		}
 	}
 
@@ -269,87 +268,6 @@ func (s *stateObject) GetCommittedState(db Database, key common.Hash) common.Has
 			s.db.StorageReads += time.Since(start)
 		}
 		if err != nil {
-			s.setError(err)
-			return common.Hash{}
-		}
-	}
-	var value common.Hash
-	if len(enc) > 0 {
-		_, content, _, err := rlp.Split(enc)
-		if err != nil {
-			s.setError(err)
-		}
-		value.SetBytes(content)
-	}
-	s.originStorage[key] = value
-	return value
-}
-
-// GetCommittedState retrieves a value from the committed account storage trie without key hashing (joonha)
-func (s *stateObject) GetCommittedState_hashedKey(db Database, key common.Hash) common.Hash {
-	// If the fake storage is set, only lookup the state here(in the debugging mode)
-	if s.fakeStorage != nil {
-		return s.fakeStorage[key]
-	}
-	// If we have a pending write or clean cached, return that
-	if value, pending := s.pendingStorage[key]; pending {
-		return value
-	}
-	if value, cached := s.originStorage[key]; cached {
-		return value
-	}
-	// If no live objects are available, attempt to use snapshots
-	var (
-		enc   []byte
-		err   error
-		meter *time.Duration
-	)
-	readStart := time.Now()
-	if metrics.EnabledExpensive {
-		// If the snap is 'under construction', the first lookup may fail. If that
-		// happens, we don't want to double-count the time elapsed. Thus this
-		// dance with the metering.
-		defer func() {
-			if meter != nil {
-				*meter += time.Since(readStart)
-			}
-		}()
-	}
-	if s.db.snap != nil {
-		if metrics.EnabledExpensive {
-			meter = &s.db.SnapshotStorageReads
-		}
-		// If the object was destructed in *this* block (and potentially resurrected),
-		// the storage has been cleared out, and we should *not* consult the previous
-		// snapshot about any storage values. The only possible alternatives are:
-		//   1) resurrect happened, and new slot values were set -- those should
-		//      have been handles via pendingStorage above.
-		//   2) we don't have new values, and can deliver empty response back
-		if _, destructed := s.db.snapDestructs[s.addrHash]; destructed {
-			return common.Hash{}
-		}
-		// enc, err = s.db.snap.Storage(s.addrHash, crypto.Keccak256Hash(key.Bytes())) // --> original code
-		enc, err = s.db.snap.Storage(s.addrHash, key) // (joonha)
-	}
-
-	// no hashing (joonha)
-	if enc, err = s.getTrie(db).TryGet_SetKey(key.Bytes()); err != nil {
-		s.setError(err)
-		return common.Hash{}
-	}
-
-	// If snapshot unavailable or reading from it failed, load from the database
-	if s.db.snap == nil || err != nil {
-		if meter != nil {
-			// If we already spent time checking the snapshot, account for it
-			// and reset the readStart
-			*meter += time.Since(readStart)
-			readStart = time.Now()
-		}
-		if metrics.EnabledExpensive {
-			meter = &s.db.StorageReads
-		}
-		if enc, err = s.getTrie(db).TryGet_SetKey(key.Bytes()); err != nil { // no hashing (joonha)
 			s.setError(err)
 			return common.Hash{}
 		}
@@ -395,16 +313,11 @@ func (s *stateObject) SetState_hashedKey(db Database, key, value common.Hash) {
 		s.fakeStorage[key] = value
 		return
 	}
-	// If the new value is the same as old, don't set
-	prev := s.GetState_hashedKey(db, key) // get value of hash(key) (joonha)
-	if prev == value {
-		return
-	}
-	// New value is different, update and journal the change
+	// update and journal the change
 	s.db.journal.append(storageChange{
 		account:  &s.address,
 		key:      key,
-		prevalue: prev,
+		// prevalue: prev,
 	})
 	s.setState(key, value)
 }
@@ -456,10 +369,12 @@ func (s *stateObject) finalise(prefetch bool) {
 
 // updateTrie writes cached storage modifications into the object's storage trie.
 // It will return nil if the trie has not been loaded and no changes have been made
+// Updating storage trie occurs only at the active trie, so snapshot key is hash(addr) not a counter (joonha)
+// Rebuilding storage trie doesn't occur here, but at updateTrie_hashedKey() because the key is already hashed (joonha) 
 func (s *stateObject) updateTrie(db Database) Trie {
 	// Make sure all dirty slots are finalized into the pending storage area
 	s.finalise(false) // Don't prefetch anymore, pull directly if need be
-	if len(s.pendingStorage) == 0 {
+	if len(s.pendingStorage) == 0 { // --> no storage update (EOA or inactive CA) (joonha)
 		return s.trie
 	}
 	// Track the amount of time wasted on updating the storage trie
@@ -475,7 +390,7 @@ func (s *stateObject) updateTrie(db Database) Trie {
 	usedStorage := make([][]byte, 0, len(s.pendingStorage))
 	for key, value := range s.pendingStorage {
 
-		// hk := crypto.HashData(hasher, key[:]) // hash the key (joonha)
+		// hk := crypto.HashData(hasher, key[:]) // (code for debugging) hash the key (joonha)
 
 		// Skip noop changes, persist actual changes
 		if value == s.originStorage[key] {
@@ -492,17 +407,21 @@ func (s *stateObject) updateTrie(db Database) Trie {
 			// Encoding []byte cannot fail, ok to ignore the error.
 			v, _ = rlp.EncodeToBytes(common.TrimLeftZeroes(value[:]))
 			s.setError(tr.TryUpdate(key[:], v)) // --> original code 
-			// s.setError(tr.TryUpdate_SetKey(hk[:], v)) // TryUpdate's hashKey is modified for compactMPT so we use already hashed key to update trie (joonha)
+			// s.setError(tr.TryUpdate_SetKey(hk[:], v)) // (code for debugging) TryUpdate's hashKey is modified for compactMPT so we use already hashed key to update trie (joonha)
 			// maybe related to storage trie update? (jmlee)
 			s.db.StorageUpdated += 1
 		}
+
 		// If state snapshotting is active, cache the data til commit
 		if s.db.snap != nil {
 			if storage == nil {
+				// snapshot key is hash(addr) not a counter in active trie (joonha)
+				snapKey := crypto.Keccak256Hash(s.address[:])
+
 				// Retrieve the old storage map, if available, create a new one otherwise
-				if storage = s.db.snapStorage[s.addrHash]; storage == nil {
+				if storage = s.db.snapStorage[snapKey]; storage == nil {
 					storage = make(map[common.Hash][]byte)
-					s.db.snapStorage[s.addrHash] = storage
+					s.db.snapStorage[snapKey] = storage
 				}
 			}
 			storage[crypto.HashData(hasher, key[:])] = v // v will be nil if it's deleted
@@ -557,9 +476,13 @@ func (s *stateObject) updateTrie_hashedKey(db Database) Trie {
 		if s.db.snap != nil {
 			if storage == nil { 
 				// Retrieve the old storage map, if available, create a new one otherwise
-				if storage = s.db.snapStorage[s.addrHash]; storage == nil {
+
+				// snapshot key is hash(addr) not a counter in active trie (joonha)
+				snapKey := crypto.Keccak256Hash(s.address[:])
+
+				if storage = s.db.snapStorage[snapKey]; storage == nil { // not snapStorage_inactive but snapStorage is right because this is for rebuilding active storage trie (joonha)
 					storage = make(map[common.Hash][]byte)
-					s.db.snapStorage[s.addrHash] = storage
+					s.db.snapStorage[snapKey] = storage
 				}
 			} 
 			storage[key] = v

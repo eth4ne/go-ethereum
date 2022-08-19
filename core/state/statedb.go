@@ -749,9 +749,6 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 	// 	s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
 	// }
 
-	// to delete prev snapshot (joonha)
-	prevAddrHash := obj.addrHash
-
 	data, err := rlp.EncodeToBytes(obj)
 	if err != nil {
 		panic(fmt.Errorf("can't encode object at %x: %v", addr[:], err))
@@ -829,21 +826,10 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 			// fmt.Println("(USO) Root: ", obj.data.Root)
 			// fmt.Println("(USO) CodeHash: ", obj.data.CodeHash)
 
-			s.snapAccounts[obj.addrHash] = snapshot.SlimAccountRLP(obj.data.Nonce, obj.data.Balance, obj.data.Root, obj.data.CodeHash, addr)
+			// snapshot key is hash(addr) not a counter (joonha)
+			snapKey := crypto.Keccak256Hash(addr[:])
+			s.snapAccounts[snapKey] = snapshot.SlimAccountRLP(obj.data.Nonce, obj.data.Balance, obj.data.Root, obj.data.CodeHash, addr)
 			// fmt.Println("\n>>> snapshot.SlimAccountRLP( ): ", s.snapAccounts[obj.addrHash], "\n")
-
-			// snapshot update (joonha)
-			if obj.addrHash != prevAddrHash { // key has been changed
-				temp := make(map[common.Hash][]byte)
-				for kk, vv := range s.snapStorage[prevAddrHash] {
-					temp[kk] = vv
-				}
-				s.snapStorage[obj.addrHash] = temp
-
-				s.snapDestructs[prevAddrHash] = struct{}{} // add this to snapshot's delete list
-				delete(s.snapAccounts, prevAddrHash) // delete this from snapshot's update list
-				delete(s.snapStorage, prevAddrHash) // delete this from snapshot's update list
-			}
 		}
 	}
 }
@@ -946,7 +932,9 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 		// fmt.Println("Try to find account at the snapshot -> addr:", addr.Hex(), "/ key:", key.Hex())
 
 		// get key's object
-		if acc, err = s.snap.Account(key); err == nil {
+		// snapshot key is hash(addr) not a counter
+		snapKey := crypto.Keccak256Hash(addr[:])
+		if acc, err = s.snap.Account(snapKey); err == nil {
 			// if acc, err = s.snap.Account(crypto.HashData(s.hasher, addr.Bytes())); err == nil { // -> original code
 			if acc == nil {
 				// fmt.Println("cannot find the address at the snapshot")
@@ -1053,16 +1041,11 @@ func (s *StateDB) createObject(addr common.Address, blockNum *big.Int) (newobj, 
 
 	var prevdestruct bool
 	if s.snap != nil && prev != nil {
-		// _, prevdestruct = s.snapDestructs[prev.addrHash]
-		// if !prevdestruct {
-		// 	s.snapDestructs[prev.addrHash] = struct{}{}
-		// }
-
-		// check the snapshot option (joonha)
 		if common.UsingActiveSnapshot {
-			_, prevdestruct = s.snapDestructs[prev.addrHash]
+			snapKey := crypto.Keccak256Hash(prev.address[:])
+			_, prevdestruct = s.snapDestructs[snapKey]
 			if !prevdestruct {
-				s.snapDestructs[prev.addrHash] = struct{}{}
+				s.snapDestructs[snapKey] = struct{}{}
 			}
 		}
 	}
@@ -1343,9 +1326,11 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 			// transactions within the same block might self destruct and then
 			// ressurrect an account; but the snapshotter needs both events.
 			if s.snap != nil {
-				s.snapDestructs[obj.addrHash] = struct{}{} // We need to maintain account deletions explicitly (will remain set indefinitely)
-				delete(s.snapAccounts, obj.addrHash)       // Clear out any previously updated account data (may be recreated via a ressurrect)
-				delete(s.snapStorage, obj.addrHash)        // Clear out any previously updated storage data (may be recreated via a ressurrect)
+				// snapshot key is hash(addr) not a counter (joonha)
+				snapKey := crypto.Keccak256Hash(addr[:])
+				s.snapDestructs[snapKey] = struct{}{} // We need to maintain account deletions explicitly (will remain set indefinitely)
+				delete(s.snapAccounts, snapKey)       // Clear out any previously updated account data (may be recreated via a ressurrect)
+				delete(s.snapStorage, snapKey)        // Clear out any previously updated storage data (may be recreated via a ressurrect)
 			}
 		} else {
 			obj.finalise(true) // Prefetch slots in the background
@@ -1669,7 +1654,7 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 				// }
 
 				if parent_inactive := s.snap_inactive.Root(); parent_inactive != root {
-					// here, snapAccounts_inactive might be nil (joonha)
+					// here, snapAccounts_inactive might be nil (joonha) // --> modified to using inactive account snapshot (joonha)
 					if err := s.snaps_inactive.Update(root, parent_inactive, s.snapDestructs_inactive, s.snapAccounts_inactive, s.snapStorage_inactive); err != nil {
 						log.Warn("Failed to update snapshot tree", "from", parent_inactive, "to", root, "err", err)
 					}
@@ -1806,12 +1791,15 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 		* the snapshot.
 		* (commenter: joonha)
 		*/
+
+		// get active snapshot with hash(addr) and put it into inactive snapshot with counter
+		snapKey := crypto.Keccak256Hash(addr[:])
 	
-		// // [Inactive Account Snapshot]
-		// // We don't need inactive account snapshot, but in case of storage depending on the account, move accounts to inactive snapshot Tree.
-		// // If commenting this part out doesn't occur err, comment out for storage optimization.
-		// acc, _ := s.snap.AccountRLP(key)
-		// s.snapAccounts_inactive[keyToInsert] = acc
+		// [Inactive Account Snapshot]
+		// We don't need inactive account snapshot, but in case of storage depending on the account, move accounts to inactive snapshot Tree.
+		// If commenting this part out doesn't occur err, comment out for storage optimization. // --> modified to using inactive account snapshot
+		acc, _ := s.snap.AccountRLP(key)
+		s.snapAccounts_inactive[snapKey] = acc
 
 		if common.UsingInactiveStorageSnapshot {
 			// accountList := s.snaps.AccountList_ethane(snapRoot)
@@ -1820,9 +1808,11 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 			if common.UsingActiveSnapshot { // when activeSnapshot is on, get slotKeyList from actvie snapshot
 				snapRoot := s.snap.Root()
 
+				
+
 				// get slotKeyList from active snapshot
 				// if EOA, slotKeyList is nil
-				slotKeyList := s.snaps.StorageList_ethane(snapRoot, key) // active snapshot's storage list
+				slotKeyList := s.snaps.StorageList_ethane(snapRoot, snapKey) // active snapshot's storage list
 				// fmt.Println("slotKeyList: ", slotKeyList)
 				temp := make(map[common.Hash][]byte)
 				for _, slotKey := range slotKeyList {
@@ -1834,9 +1824,9 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 				s.snapStorage_inactive[keyToInsert] = temp
 
 				// delete previous active snapshot 
-				s.snapDestructs[key] = struct{}{}
-				delete(s.snapAccounts, key)
-				delete(s.snapStorage, key)
+				s.snapDestructs[snapKey] = struct{}{}
+				delete(s.snapAccounts, snapKey)
+				delete(s.snapStorage, snapKey)
 
 			} else { // get slotKeyList from object's storage trie
 				obj := s.getStateObject(addr)
@@ -1854,10 +1844,13 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 				}
 			}
 		} else if common.UsingActiveSnapshot {
+			// get active snapshot with hash(addr) and put it into inactive snapshot with counter
+			snapKey := crypto.Keccak256Hash(addr[:])
+
 			// delete previous active snapshot 
-			s.snapDestructs[key] = struct{}{}
-			delete(s.snapAccounts, key)
-			delete(s.snapStorage, key)
+			s.snapDestructs[snapKey] = struct{}{}
+			delete(s.snapAccounts, snapKey)
+			delete(s.snapStorage, snapKey)
 		}
 		
 		// delete account from trie
@@ -1904,36 +1897,46 @@ func (s *StateDB) RemoveRestoredKeyFromAddrToKey_inactive(inactiveAddr common.Ad
 
 // rebuild a storage trie when restoring using snapshot (joonha)
 func (s *StateDB) RebuildStorageTrieFromSnapshot(snapRoot common.Hash, addr common.Address, accountHash common.Hash) {
-
+	
+	/*
+	* Retrieved slot keys are already hashed ones.
+	* So we should set state(set storage slot) with no more hashing.
+	* Also committing storage trie should be done here
+	* because different from the original storage trie committing 
+	* rebuilding requires no hashing while committing either.
+	* Once trie commit occurs here, it will not happen again 
+	* when a state is committed since no change is visible.
+	* (commenter: joonha)
+	*/ 
+	
 	// retrieve storage slots from snapshot
 	slotKeyList := s.snaps_inactive.StorageList_ethane(snapRoot, accountHash)
 	// fmt.Println("RESTORING STORAGE LIST: ", slotKeyList)
 
 	// rebuild storage trie
-	temp := make(map[common.Hash][]byte)
+	// temp := make(map[common.Hash][]byte)
+	snapKey := crypto.Keccak256Hash(addr[:]) // active snapshot key is hash(addr)
 	for _, slotKey := range slotKeyList {
 		// fmt.Println("slotKey is ", slotKey)
-		v, _ := s.snap_inactive.Storage(accountHash, slotKey)
+		v, _ := s.snap_inactive.Storage(snapKey, slotKey)
 		// fmt.Println("v is", v)
 
 		s.SetState_hashedKey(addr, slotKey, common.BytesToHash(v))
-		temp[slotKey] = v
+		// temp[slotKey] = v
 	}
 
-	// commit changed storage trie
+	// commit changed storage trie 
+	// Ethane needs to early commit because this update must be done with an already hashed key 
+	// different from a normal commit with hashing within.
 	obj := s.getStateObject(addr)
 	if obj != nil {
 		obj.CommitTrie_hashedKey(s.db)
 	}
 
-	// create active storage snapshot
-	if common.UsingActiveSnapshot {
-		addrKey, doExist := s.AddrToKeyDirty[addr]
-		if !doExist {
-			addrKey = common.AddrToKey[addr]
-		}
-		s.snapStorage[addrKey] = temp
-	}
+	// // create active storage snapshot // --> this is done by Commit() >> CommitTrie()
+	// s.snapStorage[snapKey] = temp
+	
+	// creating active account snapshot is done in updateStateObject()
 
 	// delete inactive snapshot
 	delete(s.snapStorage_inactive, accountHash)
