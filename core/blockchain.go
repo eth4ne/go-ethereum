@@ -1463,14 +1463,9 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	
 	// dump (joonha)
 	if block.Header().Number.Int64() % 10 == 0 { // TODO (joonha) do this only when deletion occurs
-		f2, err := os.Create("joonha dump Ethane.txt")
-		checkError(err)
-		defer f2.Close()
-		if common.UsingActiveSnapshot && common.UsingInactiveStorageSnapshot {
-			fmt.Fprintf(f2, string(state.Dump_bySnapshot_Ethane(nil)))
-		} else {
-			fmt.Fprintf(f2, string(state.Dump_Ethane(nil)))
-		}
+		common.DoDump = true
+	} else {
+		common.DoDump = false
 	}
 
 	return status, nil
