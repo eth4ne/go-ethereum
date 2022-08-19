@@ -660,14 +660,14 @@ func findShortestPrefixAmongShortNodes(hash common.Hash) ([]string, bool) {
 	nodeInfo, exist := common.TrieNodeInfosDirty[hash]
 	if !exist {
 		nodeInfo, exist = common.TrieNodeInfos[hash]
-	}
-	if !exist {
-		// fmt.Println("  this node do not exist")
-		return []string{""}, false
+		if !exist {
+			// fmt.Println("  this node do not exist")
+			return []string{""}, false
+		}
 	}
 
 	// find shortest prefix
-	if nodeInfo.IsShortNode {
+	if nodeInfo.IsShortNode || nodeInfo.IsLeafNode {
 		// this node is short node
 		// fmt.Println("  this node is short node")
 		return []string{""}, true
