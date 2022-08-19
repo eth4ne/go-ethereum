@@ -1792,23 +1792,27 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 		* (commenter: joonha)
 		*/
 
-		// get active snapshot with hash(addr) and put it into inactive snapshot with counter
-		snapKey := crypto.Keccak256Hash(addr[:])
-	
 		// [Inactive Account Snapshot]
 		// We don't need inactive account snapshot, but in case of storage depending on the account, move accounts to inactive snapshot Tree.
 		// If commenting this part out doesn't occur err, comment out for storage optimization. // --> modified to using inactive account snapshot
-		acc, _ := s.snap.AccountRLP(key)
-		s.snapAccounts_inactive[snapKey] = acc
+		if common.UsingActiveSnapshot {
+			// get active snapshot with hash(addr) and put it into inactive snapshot with counter
+			snapKey := crypto.Keccak256Hash(addr[:])
+
+			acc, _ := s.snap.AccountRLP(key)
+			s.snapAccounts_inactive[snapKey] = acc
+		}
 
 		if common.UsingInactiveStorageSnapshot {
 			// accountList := s.snaps.AccountList_ethane(snapRoot)
 			// fmt.Println("accountList: ", accountList) // key
 
 			if common.UsingActiveSnapshot { // when activeSnapshot is on, get slotKeyList from actvie snapshot
-				snapRoot := s.snap.Root()
-
 				
+				// get active snapshot with hash(addr) and put it into inactive snapshot with counter
+				snapKey := crypto.Keccak256Hash(addr[:])
+
+				snapRoot := s.snap.Root()				
 
 				// get slotKeyList from active snapshot
 				// if EOA, slotKeyList is nil
