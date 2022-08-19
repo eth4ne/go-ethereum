@@ -148,16 +148,14 @@ func reset() {
 	common.CurrentBlockNum = 0
 
 	// reset Ethane related vars
-	if common.IsEthane {
-		common.AddrToKeyActive = make(map[common.Address]common.Hash)
-		common.AddrToKeyInactive = make(map[common.Address][]common.Hash)
-		common.NextKey = uint64(0)
-		common.CheckpointKey = uint64(0)
-		common.KeysToDelete = make([]common.Hash, 0)
-		common.InactiveBoundaryKey = uint64(0)
-		common.CheckpointKeys = make(map[uint64]uint64)
-		common.RestoredKeys = make([]common.Hash, 0)
-	}
+	common.AddrToKeyActive = make(map[common.Address]common.Hash)
+	common.AddrToKeyInactive = make(map[common.Address][]common.Hash)
+	common.NextKey = uint64(0)
+	common.CheckpointKey = uint64(0)
+	common.KeysToDelete = make([]common.Hash, 0)
+	common.InactiveBoundaryKey = uint64(0)
+	common.CheckpointKeys = make(map[uint64]uint64)
+	common.RestoredKeys = make([]common.Hash, 0)
 
 	// set genesis block (with empty state trie)
 	flushTrieNodes()
@@ -290,9 +288,6 @@ func flushTrieNodes() {
 		bn := common.CurrentBlockNum
 		common.CheckpointKeys[bn] = common.CheckpointKey
 		common.CheckpointKey = common.NextKey
-		for index, key := range common.CheckpointKeys {
-			fmt.Println("blocknum:", index, "/ check point key:", key)
-		}
 
 		// delete
 		if (bn+1)%common.DeleteEpoch == 0 {
@@ -734,20 +729,20 @@ func updateTrieForEthane(addr common.Address, rlpedAccount []byte) error {
 	addrKey, exist := common.AddrToKeyActive[addr]
 	if !exist {
 		// this is new address or crumb account
-		fmt.Println("this is new address or crumb account")
+		// fmt.Println("this is new address or crumb account")
 		addrKey = common.HexToHash(strconv.FormatUint(common.NextKey, 16))
 		// fmt.Println("make new account -> addr:", addr.Hex(), "/ keyHash:", newAddrKey)
 		common.AddrToKeyActive[addr] = addrKey
 		common.NextKey++
 	}
 	addrKeyUint := common.HashToUint64(addrKey)
-	fmt.Println("addr:", addr.Hex(), "/ addrKey:", addrKey.Big().Int64())
+	// fmt.Println("addr:", addr.Hex(), "/ addrKey:", addrKey.Big().Int64())
 
 	// update state trie
 	if addrKeyUint >= common.CheckpointKey {
 		// newly created address or already moved address in this block
 		// do not change its addrKey, just update
-		fmt.Println("insert -> key:", addrKey.Hex(), "/ addr:", addr.Hex())
+		// fmt.Println("insert -> key:", addrKey.Hex(), "/ addr:", addr.Hex())
 		if err := normTrie.TryUpdate(addrKey[:], rlpedAccount); err != nil {
 			fmt.Println("ERROR: updateTrieForEthane() failed to update trie 1 -> addr:", addr.Hex(), "/ addrKey:", addrKey)
 			os.Exit(1)
@@ -757,17 +752,17 @@ func updateTrieForEthane(addr common.Address, rlpedAccount []byte) error {
 		// this address is already in the trie, so move the previous leaf node to the right side
 		// but do not delete now, this useless previous leaf node will be deleted at every delete epoch
 		common.KeysToDelete = append(common.KeysToDelete, addrKey)
-		fmt.Println("add KeysToDelete:", addrKey.Big().Int64())
+		// fmt.Println("add KeysToDelete:", addrKey.Big().Int64())
 
 		// insert new leaf node at next key position
 		newAddrHash := common.HexToHash(strconv.FormatUint(common.NextKey, 16))
 		common.AddrToKeyActive[addr] = newAddrHash
-		fmt.Println("insert -> key:", newAddrHash.Hex(), "/ addr:", addr.Hex())
+		// fmt.Println("insert -> key:", newAddrHash.Hex(), "/ addr:", addr.Hex())
 		if err := normTrie.TryUpdate(newAddrHash[:], rlpedAccount); err != nil {
 			fmt.Println("ERROR: updateTrieForEthane() failed to update trie 2 -> addr:", addr[:], "/ addrKey:", addrKey)
 			os.Exit(1)
 		}
-		fmt.Println("move leaf node to right -> addr:", addr.Hex(), "/ keyHash:", newAddrHash)
+		// fmt.Println("move leaf node to right -> addr:", addr.Hex(), "/ keyHash:", newAddrHash)
 
 		// increase next key for future trie updates
 		common.NextKey++
@@ -789,7 +784,7 @@ func deletePrevLeafNodes() {
 
 	// delete all keys in trie
 	for _, keyToDelete := range common.KeysToDelete {
-		fmt.Println("  key to delete:", keyToDelete.Big().Int64())
+		// fmt.Println("  key to delete:", keyToDelete.Big().Int64())
 		err := normTrie.TryDelete(keyToDelete[:])
 		if err != nil {
 			fmt.Println("ERROR deletePrevLeafNodes(): trie.TryDelete ->", err)
@@ -1290,7 +1285,7 @@ func connHandler(conn net.Conn) {
 
 			case "updateTrieForEthane":
 				// get params
-				fmt.Println("execute updateTrieForEthane()")
+				// fmt.Println("execute updateTrieForEthane()")
 				nonce, _ := strconv.ParseUint(params[1], 10, 64)
 				balance := new(big.Int)
 				balance, _ = balance.SetString(params[2], 10)
@@ -1322,7 +1317,7 @@ func connHandler(conn net.Conn) {
 
 			case "updateTrieForEthaneSimple":
 				// get params
-				fmt.Println("execute updateTrieForEthaneSimple()")
+				// fmt.Println("execute updateTrieForEthaneSimple()")
 				addr := common.HexToAddress(params[1])
 				fmt.Println("addr:", addr.Hex())
 
