@@ -330,6 +330,9 @@ func flushTrieNodes() {
 
 			}
 		}
+
+		// store inactive boundary key in this block
+		common.InactiveBoundaryKeys[bn] = common.InactiveBoundaryKey
 	}
 
 	// reset db stats before flush
@@ -864,86 +867,107 @@ func restoreAccount(restoreAddr common.Address) {
 	updateTrieForEthane(restoreAddr, data)
 }
 
+// InspectTrieWithinRange prints trie stats (size, node num, node types, depths) within range
+func InspectTrieWithinRange(stateRoot common.Hash, startKey, endKey []byte) string {
+	// fmt.Println("stateRoot:", stateRoot.Hex(), startKey, endKey)
+
+	leafNodeDepths := []uint{}
+	trieNodeStat := inspectTrieWithinRange(stateRoot, 0, &leafNodeDepths, "", startKey, endKey)
+
+	// deal with depths
+	var avgDepth float64
+	minDepth := uint(100)
+	maxDepth := uint(0)
+	depthSum := uint(0)
+	for _, depth := range leafNodeDepths {
+		depthSum += depth
+		if maxDepth < depth {
+			maxDepth = depth
+		}
+		if minDepth > depth {
+			minDepth = depth
+		}
+	}
+	if len(leafNodeDepths) != 0 {
+		avgDepth = float64(depthSum) / float64(len(leafNodeDepths))
+		fmt.Println("avg depth:", avgDepth, "( min:", minDepth, "/ max:", maxDepth, ")")
+	} else {
+		minDepth = 0
+		avgDepth = 0
+		maxDepth = 0
+		fmt.Println("avg depth: there is no leaf node")
+	}
+
+	// print result
+	trieNodeStat.Print()
+	result := trieNodeStat.ToString(" ") + strconv.FormatUint(uint64(minDepth), 10) + " " + fmt.Sprintf("%f", avgDepth) + " " + strconv.FormatUint(uint64(maxDepth), 10)
+	fmt.Println(result)
+	fmt.Println()
+	return result
+}
+
+func inspectEthaneTries(blockNum uint64) {
+	fmt.Println("inspectEthaneTries() at block", blockNum)
+	stateRoot := common.Blocks[blockNum].Root
+	inactiveBoundaryKey := common.InactiveBoundaryKeys[blockNum]
+
+	//
+	// print trie stats (size, node num, node types, depths)
+	//
+	startKey := trie.KeybytesToHex(common.HexToHash("0x0").Bytes())
+	inactiveBoundary := trie.KeybytesToHex(common.Uint64ToHash(inactiveBoundaryKey).Bytes())
+	inactiveBoundarySubOne := trie.KeybytesToHex(common.Uint64ToHash(inactiveBoundaryKey - 1).Bytes())
+	endKey := trie.KeybytesToHex(common.HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff").Bytes())
+
+	// total trie
+	fmt.Println()
+	fmt.Println("print total trie")
+	totalResult := InspectTrieWithinRange(stateRoot, startKey, endKey)
+
+	// active trie
+	fmt.Println()
+	fmt.Println("print active trie")
+	activeResult := InspectTrieWithinRange(stateRoot, inactiveBoundary, endKey)
+
+	// inactive trie
+	fmt.Println()
+	fmt.Println("print inactive trie")
+	inactiveResult := InspectTrieWithinRange(stateRoot, startKey, inactiveBoundarySubOne)
+
+	fmt.Println(totalResult, activeResult, inactiveResult)
+}
+
 // print Ethane related stats
 func printEthaneState() {
+
+	fmt.Println("current block num:", common.CurrentBlockNum)
+
+	// print options
+	fmt.Println("delete epoch:", common.DeleteEpoch, "/ inactivate epoch:", common.InactivateEpoch, "/ inactivate criterion:", common.InactivateCriterion)
+
+	fmt.Println("remained keys to delete:", len(common.KeysToDelete))
 
 	// active addresses
 	fmt.Println("active accounts:", len(common.AddrToKeyActive))
 
 	// inactive addresses
-	fmt.Println("inactive accounts:", len(common.AddrToKeyInactive))
+	fmt.Println("inactive addresses:", len(common.AddrToKeyInactive))
 	fmt.Println("inactive boundary key:", common.InactiveBoundaryKey)
 
 	// current NextKey = # of state trie updates
 	fmt.Println("current NextKey:", common.NextKey, "/ NextKey(hex):", common.Uint64ToHash(common.NextKey).Hex())
 
-	//
-	// print active trie stats (size, node num, node types, depths)
-	//
-	startKey := trie.KeybytesToHex(common.HexToHash("0x0").Bytes())
-	inactiveBoundary := trie.KeybytesToHex(common.Uint64ToHash(common.InactiveBoundaryKey).Bytes())
-	inactiveBoundarySubOne := trie.KeybytesToHex(common.Uint64ToHash(common.InactiveBoundaryKey - 1).Bytes())
-	endKey := trie.KeybytesToHex(common.HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff").Bytes())
-	activeLeafNodeDepths := []uint{}
-	inactiveLeafNodeDepths := []uint{}
-	totalLeafNodeDepths := []uint{}
-	fmt.Println("inactive boundary:", common.InactiveBoundaryKey)
-	activeTrieNodeStat := inspectTrieWithinRange(normTrie.Hash(), 0, &activeLeafNodeDepths, "", inactiveBoundary, endKey)
-	fmt.Println("print active trie")
-	activeMinDepth := uint(100)
-	activeMaxDepth := uint(0)
-	activeDepthSum := uint(0)
-	for _, depth := range activeLeafNodeDepths {
-		activeDepthSum += depth
-		if activeMaxDepth < depth {
-			activeMaxDepth = depth
-		}
-		if activeMinDepth > depth {
-			activeMinDepth = depth
-		}
-	}
-	fmt.Println("avg depth:", activeDepthSum/uint(len(activeLeafNodeDepths)), "( min:", activeMinDepth, "/ max:", activeMaxDepth, ")")
-	activeTrieNodeStat.Print()
+	// print total/active/inactive trie stats (size, node num, node types, depths)
+	inspectEthaneTries(common.CurrentBlockNum)
+	latestCheckpointBlockNum := common.CurrentBlockNum - (common.CurrentBlockNum % common.InactivateEpoch) - 1
+	inspectEthaneTries(latestCheckpointBlockNum)     // relatively small state trie after delete/inactivate
+	inspectEthaneTries(latestCheckpointBlockNum - 1) // relatively large state trie before delete/inactivate
+}
 
-	//
-	// print active trie stats (size, node num, node types, depths)
-	//
-	inactiveTrieNodeStat := inspectTrieWithinRange(normTrie.Hash(), 0, &inactiveLeafNodeDepths, "", startKey, inactiveBoundarySubOne)
-	fmt.Println("print inactive trie")
-	inactiveMinDepth := uint(100)
-	inactiveMaxDepth := uint(0)
-	inactiveDepthSum := uint(0)
-	for _, depth := range inactiveLeafNodeDepths {
-		inactiveDepthSum += depth
-		if inactiveMaxDepth < depth {
-			inactiveMaxDepth = depth
-		}
-		if inactiveMinDepth > depth {
-			inactiveMinDepth = depth
-		}
-	}
-	fmt.Println("avg depth:", inactiveDepthSum/uint(len(inactiveLeafNodeDepths)), "( min:", inactiveMinDepth, "/ max:", inactiveMaxDepth, ")")
-	inactiveTrieNodeStat.Print()
-
-	//
-	// print total trie stats (size, node num, node types, depths)
-	//
-	totalTrieNodeStat := inspectTrieWithinRange(normTrie.Hash(), 0, &totalLeafNodeDepths, "", startKey, endKey)
-	fmt.Println("print total trie")
-	totalMinDepth := uint(100)
-	totalMaxDepth := uint(0)
-	totalDepthSum := uint(0)
-	for _, depth := range totalLeafNodeDepths {
-		totalDepthSum += depth
-		if totalMaxDepth < depth {
-			totalMaxDepth = depth
-		}
-		if totalMinDepth > depth {
-			totalMinDepth = depth
-		}
-	}
-	fmt.Println("avg depth:", totalDepthSum/uint(len(totalLeafNodeDepths)), "( min:", totalMinDepth, "/ max:", totalMaxDepth, ")")
-	totalTrieNodeStat.Print()
+func setEthaneOptions(deleteEpoch, inactivateEpoch, inactivateCriterion uint64) {
+	common.DeleteEpoch = deleteEpoch
+	common.InactivateEpoch = inactivateEpoch
+	common.InactivateCriterion = inactivateCriterion
 }
 
 func getTrieLastKey() {
@@ -1024,6 +1048,20 @@ func connHandler(conn net.Conn) {
 				nodeInfo.SubTrieNodeStat.Print()
 
 				response = []byte(rootHash.Hex() + "," + nodeInfo.SubTrieNodeStat.ToString(","))
+
+			case "inspectTrieWithinRange":
+				fmt.Println("execute InspectTrieWithinRange()")
+				rootHash := normTrie.Hash()
+				fmt.Println("root hash:", rootHash.Hex())
+
+				startKey := trie.KeybytesToHex(common.HexToHash("0x0").Bytes())
+				endKey := trie.KeybytesToHex(common.HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff").Bytes())
+				result := InspectTrieWithinRange(rootHash, startKey, endKey)
+
+				fmt.Println("print InspectTrieWithinRange result")
+				fmt.Println(result)
+
+				response = []byte("success")
 
 			case "inspectSubTrie":
 				inspectDB(diskdb)
@@ -1307,6 +1345,14 @@ func connHandler(conn net.Conn) {
 			case "getTrieLastKey":
 				normTrie.Print()
 				getTrieLastKey()
+				response = []byte("success")
+
+			case "setEthaneOptions":
+				deleteEpoch, _ := strconv.ParseUint(params[1], 10, 64)
+				inactivateEpoch, _ := strconv.ParseUint(params[2], 10, 64)
+				inactivateCriterion, _ := strconv.ParseUint(params[3], 10, 64)
+				setEthaneOptions(deleteEpoch, inactivateEpoch, inactivateCriterion)
+
 				response = []byte("success")
 
 			default:

@@ -161,6 +161,15 @@ def trieToGraph():
     print("trieToGraph result -> root hash:", rootHash)
     return rootHash
 
+# inspect trie within range (without params, just inspect current trie)
+def inspectTrieWithinRange():
+    cmd = str("inspectTrieWithinRange")
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    inspectTrieWithinRangeResult = data.decode()
+    print("inspectTrieWithinRangeResult result:", inspectTrieWithinRangeResult)
+    return inspectTrieWithinRangeResult
+
 # select simulation mode (0: Geth, 1: Ethane)
 def switchSimulationMode(mode):
     cmd = str("switchSimulationMode")
@@ -280,6 +289,21 @@ def getTrieLastKey():
     result = data.decode()
     # print("result:", result)
     return result
+
+# set Ethane's options
+def setEthaneOptions(deleteEpoch, inactivateEpoch, inactivateCriterion):
+    cmd = str("setEthaneOptions")
+    cmd += str(",")
+    cmd += str(deleteEpoch)
+    cmd += str(",")
+    cmd += str(inactivateEpoch)
+    cmd += str(",")
+    cmd += str(inactivateCriterion)
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    setOptionResult = data.decode()
+    # print("setOptionResult result:", setOptionResult)
+    return setOptionResult
 
 # -----------------------------------------------------
 
