@@ -148,9 +148,10 @@ type NodeStat struct {
 
 // BlockInfo stores block related information
 type BlockInfo struct {
-	Root              Hash   // root hash of trie
-	FlushedNodeHashes []Hash // hashes of flushed nodes
-	MaxAccountNonce   uint64 // biggest nonce amoung accounts (just to regenerate same state root, not essential field)
+	Root              Hash     // root hash of trie
+	FlushedNodeHashes []Hash   // hashes of flushed nodes
+	MaxAccountNonce   uint64   // biggest nonce amoung accounts (just to regenerate same state root, not essential field)
+	NewNodeStat       NodeStat // stats for newly flushed nodes in this block
 
 }
 

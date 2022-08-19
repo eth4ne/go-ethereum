@@ -347,6 +347,7 @@ func flushTrieNodes() {
 	blockInfo, _ := common.Blocks[common.CurrentBlockNum]
 	blockInfo.Root = normTrie.Hash()
 	blockInfo.MaxAccountNonce = emptyAccount.Nonce
+	blockInfo.NewNodeStat = common.NewNodeStat
 	common.Blocks[common.CurrentBlockNum] = blockInfo
 	// delete too old block to store
 	blockNumToDelete := common.CurrentBlockNum - common.MaxBlocksToStore - 1
