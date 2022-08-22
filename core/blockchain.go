@@ -1462,7 +1462,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	common.CommonMapMutex.Unlock()
 	
 	// dump (joonha)
-	if common.UsingActiveSnapshot && common.UsingInactiveStorageSnapshot { // snap dump
+	if common.UsingActiveSnapshot && common.UsingInactiveAccountSnapshot { // snap dump
 		if bn % common.DeleteLeafNodeEpoch == 0 {
 			common.DoDump = true
 		} else {

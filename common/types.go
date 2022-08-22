@@ -65,9 +65,10 @@ func (n *ProofList) Get(key []byte) ([]byte, error) {
 type Empty struct{}
 
 var (
-	// inactive storage snapshot ON/OFF option (joonha)
+	// snapshot ON/OFF option (joonha)
 	UsingActiveSnapshot bool // true: ON, false: OFF
 	UsingInactiveStorageSnapshot bool // true: ON, false: OFF
+	UsingInactiveAccountSnapshot bool // true: ON, false: OFF
 
 	// check if it is already restored (for storage optimization, use empty struct as a value) (joonha)
 	AlreadyRestored = make(map[Hash]Empty) 

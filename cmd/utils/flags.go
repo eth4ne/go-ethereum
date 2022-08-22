@@ -119,6 +119,11 @@ var (
 		Name:  "inactiveStorageSnapshot",
 		Usage: `[Ethane] Enables snapshot-database mode in inactive storage trie (default = enable)`,
 	}
+	// to turn on/off inactive storage snapshot (joonha)
+	InactiveAccountSnapshotFlag = cli.BoolTFlag{
+		Name:  "inactiveAccountSnapshot",
+		Usage: `[Ethane] Enables snapshot-database mode in inactive trie (default = enable)`,
+	}
 	// General settings
 	DataDirFlag = DirectoryFlag{
 		Name:  "datadir",
@@ -1530,6 +1535,10 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	// get inactive storage snapshot option input and set it to common's variables (joonha)
 	if ctx.GlobalIsSet(InactiveStorageSnapshotFlag.Name) {
 		common.UsingInactiveStorageSnapshot = ctx.GlobalBool(InactiveStorageSnapshotFlag.Name)
+	}
+	// get inactive account snapshot option input and set it to common's variables (joonha)
+	if ctx.GlobalIsSet(InactiveAccountSnapshotFlag.Name) {
+		common.UsingInactiveAccountSnapshot = ctx.GlobalBool(InactiveAccountSnapshotFlag.Name)
 	}
 
 	if ctx.GlobalIsSet(SyncModeFlag.Name) {

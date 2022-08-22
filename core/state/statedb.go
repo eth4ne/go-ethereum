@@ -261,7 +261,7 @@ func New_inactiveSnapshot(root common.Hash, db Database, snaps *snapshot.Tree, s
 	}
 	// inactive storage snapshot (joonha)
 	if sdb.snaps_inactive != nil {
-		if common.UsingInactiveStorageSnapshot {
+		if common.UsingInactiveStorageSnapshot || common.UsingInactiveAccountSnapshot {
 			sdb.snap_inactive = sdb.snaps_inactive.Snapshot(root)
 			sdb.snapDestructs_inactive = make(map[common.Hash]struct{})
 			sdb.snapAccounts_inactive = make(map[common.Hash][]byte)
@@ -507,10 +507,14 @@ func (s *StateDB) GetProof(addr common.Address) ([][]byte, error) {
 		for i := 0; i < len(common.AddrToKey_inactive[addr]); i++ {
 			key := common.AddrToKey_inactive[addr][i]
 			// balance
-			enc, _ := s.trie.TryGet_SetKey(key[:])
-			// var data *types.StateAccount
-			data := new(types.StateAccount) //...?
-			rlp.DecodeBytes(enc, data)
+			data := new(types.StateAccount)
+			if common.UsingInactiveAccountSnapshot { // get account from inactive account snapshot
+				acc, _ := s.snap.AccountRLP(key)
+				rlp.DecodeBytes(acc, data)
+			} else { // get account from trie
+				enc, _ := s.trie.TryGet_SetKey(key[:])
+				rlp.DecodeBytes(enc, data)
+			}
 			// fmt.Println("Balance of ", i, " is ", data.Balance)
 			var myData myDataType
 			myData.index = i
@@ -1588,7 +1592,7 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 		f2, err := os.Create("joonha dump Ethane.txt")
 		checkError(err)
 		defer f2.Close()
-		if common.UsingActiveSnapshot && common.UsingInactiveStorageSnapshot {
+		if common.UsingActiveSnapshot && common.UsingInactiveAccountSnapshot {
 			fmt.Fprintf(f2, string(s.Dump_bySnapshot_Ethane(nil)))
 		} else {
 			fmt.Fprintf(f2, string(s.Dump_Ethane(nil)))
@@ -1628,7 +1632,7 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 
 	// update inactive storage snapshot (joonha)
 	if s.snap_inactive != nil {
-		if common.UsingInactiveStorageSnapshot {
+		if common.UsingInactiveStorageSnapshot || common.UsingInactiveAccountSnapshot {
 			// s.snap_inactive = s.snaps_inactive.Snapshot(root)
 			if s.snap_inactive != nil {
 
@@ -1773,25 +1777,42 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 		}
 
 		/*
-		* [Inactive Storage Snapshot]
-		* Storing inactive storage snapshot to use them to rebuild 
-		* storage trie when restoring CA. If active snapshot is on, 
-		* copy it. Else, traverse the storage trie and manually make 
-		* the snapshot.
+		* [Inactive Snapshot]
+		* Make inactive account snapshots to use to get inactive state.
+		* This can also be used during optimized restoration to know the inactive balances.
+		* Make inactive storage snapshots to use to rebuild storage trie when restoring CA. 
+		* If the active snapshot is on, copy. 
+		* Else, traverse the storage trie and manually make snapshots.
 		* (commenter: joonha)
 		*/
 
-		// [Inactive Account Snapshot]
-		// We don't need inactive account snapshot, but in case of storage depending on the account, move accounts to inactive snapshot Tree.
-		// If commenting this part out doesn't occur err, comment out for storage optimization. // --> modified to using inactive account snapshot
-		if common.UsingActiveSnapshot {
-			// get active snapshot with hash(addr) and put it into inactive snapshot with counter
-			snapKey := crypto.Keccak256Hash(addr[:])
+		// Inactive Account Snapshot
+		if common.UsingInactiveAccountSnapshot {
+			if common.UsingActiveSnapshot { //  temporarily, we make inactive account snapshot when inactiveStorageSnapshot is on
+				// get active snapshot with hash(addr) and put it into inactive snapshot with counter
+				snapKey := crypto.Keccak256Hash(addr[:])
+				acc, _ := s.snap.AccountRLP(key)
+				s.snapAccounts_inactive[snapKey] = acc
 
-			acc, _ := s.snap.AccountRLP(key)
-			s.snapAccounts_inactive[snapKey] = acc
+				// delete previous active snapshot 
+				s.snapDestructs[snapKey] = struct{}{}
+				delete(s.snapAccounts, snapKey)
+				delete(s.snapStorage, snapKey)
+			} else {
+				snapKey := crypto.Keccak256Hash(addr[:])
+				enc, err := s.trie.TryGet_SetKey(key[:])
+				if err != nil {
+					s.setError(fmt.Errorf("InactivateLeafNodes (%x) error: %v", addr.Bytes(), err))
+				}
+				data := new(types.StateAccount)
+				if err := rlp.DecodeBytes(enc, data); err != nil {
+					log.Error("Failed to decode state object", "addr", addr, "err", err)
+				}
+				s.snapAccounts_inactive[snapKey] = snapshot.SlimAccountRLP(data.Nonce, data.Balance, data.Root, data.CodeHash, addr)
+			}
 		}
-
+		
+		// Inactive Storage Snapshot
 		if common.UsingInactiveStorageSnapshot {
 			// accountList := s.snaps.AccountList_ethane(snapRoot)
 			// fmt.Println("accountList: ", accountList) // key
@@ -1836,14 +1857,18 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 
 				}
 			}
-		} else if common.UsingActiveSnapshot {
-			// get active snapshot with hash(addr) and put it into inactive snapshot with counter
-			snapKey := crypto.Keccak256Hash(addr[:])
-
-			// delete previous active snapshot 
-			s.snapDestructs[snapKey] = struct{}{}
-			delete(s.snapAccounts, snapKey)
-			delete(s.snapStorage, snapKey)
+		} 
+		
+		if !common.UsingInactiveAccountSnapshot && !common.UsingInactiveStorageSnapshot {
+			if common.UsingActiveSnapshot {
+				// get active snapshot with hash(addr) and put it into inactive snapshot with counter
+				snapKey := crypto.Keccak256Hash(addr[:])
+	
+				// delete previous active snapshot 
+				s.snapDestructs[snapKey] = struct{}{}
+				delete(s.snapAccounts, snapKey)
+				delete(s.snapStorage, snapKey)
+			}
 		}
 		
 		// delete account from trie
@@ -1873,6 +1898,9 @@ func (s *StateDB) UpdateAlreadyRestoredDirty(inactiveKey common.Hash) {
 
 // remove restored account from the list common.AddrToKey_inactive (joonha)
 func (s *StateDB) RemoveRestoredKeyFromAddrToKey_inactive(inactiveAddr common.Address, retrievedKeys []common.Hash) {
+	// directly removing from common
+	// Q. 엇 근데 restore이 두 번 실행이 된다면 common에서 바로 삭제한 것이 에러를 뿜을 텐데,
+	// 에러가 없음. 왜 그렇지? 왜 되지? 
 	temp := 0
 	common.CommonMapMutex.Lock()
 	for i := len(common.AddrToKey_inactive[inactiveAddr])-1; i >= 0; i-- {
