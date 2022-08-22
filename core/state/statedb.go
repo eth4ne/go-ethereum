@@ -1487,10 +1487,18 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 		// fmt.Println("[Root]: ", s.stateObjects[addr].data.Root)
 	}
 
+	// apply dirties to common.KeysToDelete (jmlee)
+	// for i := 0; i < len(s.KeysToDeleteDirty); i++ {
+	// 	fmt.Println("s.KeysToDeleteDirty[",i,"]:", s.KeysToDeleteDirty[i])
+	// }
+	common.KeysToDelete = append(common.KeysToDelete, s.KeysToDeleteDirty...)
+	// for i := 0; i < len(common.KeysToDelete); i++ {
+	// 	fmt.Println("common.KeysToDelete[",i,"]:", common.KeysToDelete[i])
+	// }
+
 	// delete previous leaf nodes
-	if common.DoDeleteLeafNode { // delete Epoch		
-		keysToDelete := append(common.KeysToDelete, s.KeysToDeleteDirty...) // to include current state's KeysToDeleteDirty
-		s.DeletePreviousLeafNodes(keysToDelete)
+	if common.DoDeleteLeafNode { // delete Epoch
+		s.DeletePreviousLeafNodes(common.KeysToDelete)
 
 		// reset common.KeysToDelete
 		common.KeysToDelete = make([]common.Hash, 0)
@@ -1532,15 +1540,6 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 	}
 	common.CommonMapMutex.Unlock()
 
-	// apply dirties to common.KeysToDelete (jmlee)
-	// for i := 0; i < len(s.KeysToDeleteDirty); i++ {
-	// 	fmt.Println("s.KeysToDeleteDirty[",i,"]:", s.KeysToDeleteDirty[i])
-	// }
-	common.KeysToDelete = append(common.KeysToDelete, s.KeysToDeleteDirty...)
-	// for i := 0; i < len(common.KeysToDelete); i++ {
-	// 	fmt.Println("common.KeysToDelete[",i,"]:", common.KeysToDelete[i])
-	// }
-
 	if len(s.stateObjectsDirty) > 0 {
 		s.stateObjectsDirty = make(map[common.Address]struct{})
 	}
@@ -1554,16 +1553,6 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 	if metrics.EnabledExpensive {
 		start = time.Now()
 	}
-
-	// // decide whether to delete leaf nodes or not (jmlee) --> commented-out by (joonha) because it occurs an err and the check is already done in fillTransactions()
-	// // this might be needed for full sync
-	// if common.DoDeleteLeafNode {
-	// 	// delete previous leaf nodes from state trie
-	// 	s.DeletePreviousLeafNodes(common.KeysToDelete)
-
-	// 	// reset common.KeysToDelete --> commented-out by (joonha) because it occurs an err and the check is already done in fillTransactions()
-	// 	common.KeysToDelete = make([]common.Hash, 0) // only works at the epoch
-	// }
 
 	// The onleaf func is called _serially_, so we can reuse the same account
 	// for unmarshalling every time.
