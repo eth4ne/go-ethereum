@@ -1442,7 +1442,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 
 	
 	// set common.DoDeleteLeafNode
-	bn := block.Header().Number.Int64()+1
+	bn := block.Header().Number.Int64()+1 // next block
 	if bn % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-1 && bn != common.DeleteLeafNodeEpoch-1 {
 		common.DoDeleteLeafNode = true
 	} else {
@@ -1462,10 +1462,18 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	common.CommonMapMutex.Unlock()
 	
 	// dump (joonha)
-	if block.Header().Number.Int64() % 10 == 0 { // TODO (joonha) do this only when deletion occurs
-		common.DoDump = true
-	} else {
-		common.DoDump = false
+	if common.UsingActiveSnapshot && common.UsingInactiveStorageSnapshot { // snap dump
+		if bn % common.DeleteLeafNodeEpoch == 0 { ////-------------------> 동작 확인함.
+			common.DoDump = true
+		} else {
+			common.DoDump = false
+		}
+	} else { // trie dump
+		if bn % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-1 { // TODO (joonha) do this only when deletion occurs
+			common.DoDump = true
+		} else {
+			common.DoDump = false
+		}
 	}
 
 	return status, nil
