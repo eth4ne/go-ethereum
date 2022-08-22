@@ -1899,8 +1899,6 @@ func (s *StateDB) UpdateAlreadyRestoredDirty(inactiveKey common.Hash) {
 // remove restored account from the list common.AddrToKey_inactive (joonha)
 func (s *StateDB) RemoveRestoredKeyFromAddrToKey_inactive(inactiveAddr common.Address, retrievedKeys []common.Hash) {
 	// directly removing from common
-	// Q. 엇 근데 restore이 두 번 실행이 된다면 common에서 바로 삭제한 것이 에러를 뿜을 텐데,
-	// 에러가 없음. 왜 그렇지? 왜 되지? 
 	temp := 0
 	common.CommonMapMutex.Lock()
 	for i := len(common.AddrToKey_inactive[inactiveAddr])-1; i >= 0; i-- {
