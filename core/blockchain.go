@@ -1463,13 +1463,13 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	
 	// dump (joonha)
 	if common.UsingActiveSnapshot && common.UsingInactiveStorageSnapshot { // snap dump
-		if bn % common.DeleteLeafNodeEpoch == 0 { ////-------------------> 동작 확인함.
+		if bn % common.DeleteLeafNodeEpoch == 0 {
 			common.DoDump = true
 		} else {
 			common.DoDump = false
 		}
 	} else { // trie dump
-		if bn % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-1 { // TODO (joonha) do this only when deletion occurs
+		if bn % common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-1 {
 			common.DoDump = true
 		} else {
 			common.DoDump = false
