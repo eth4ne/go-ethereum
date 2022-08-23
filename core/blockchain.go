@@ -1313,7 +1313,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
 	}
 
-	var epoch = 100000
+	var epoch = 10000
 	if common.GlobalBlockNumber%epoch == 0 && common.GlobalBlockNumber != 0 {
 		PrintTxSubstate(common.GlobalBlockNumber, epoch)
 		fmt.Println("DONE blocknumber:", common.GlobalBlockNumber)
@@ -1439,42 +1439,54 @@ func PrintTxSubstate(blocknumber, distance int) {
 				// s = fmt.Sprintln("  WriteList")
 				fmt.Fprintln(f, "  WriteList")
 				for addr, stateAccount := range writelist {
-
-					s = fmt.Sprintf("    address:%v\n", addr)
-					s += fmt.Sprintf("      Nonce:%v\n", stateAccount.Nonce)
-					s += fmt.Sprintf("      Balance:%v\n", stateAccount.Balance)
-					s += fmt.Sprintf("      CodeHash:%v\n", common.BytesToHash(stateAccount.CodeHash))
-					// if txDetail.Types == 2 && stateAccount.Code != nil {
-					if stateAccount.Code != nil {
-						// fmt.Printf("      Code:%v\n", common.Bytes2Hex(stateAccount.Code))
-						s += fmt.Sprintf("      Code:%v\n", common.Bytes2Hex(stateAccount.Code))
-					}
-					s += fmt.Sprintf("      StorageRoot:%v\n", stateAccount.StorageRoot)
-					if len(stateAccount.Storage) != 0 {
-						s += fmt.Sprintln("        Storage:")
-						for _, v := range stateAccount.Storage {
-							for kk, vv := range v {
-								s += fmt.Sprint("          slot:", kk, ",value:")
-								tmp := common.TrimLeftZeroes(vv[:])
+					if stateAccount != nil {
+						s = fmt.Sprintf("    address:%v\n", addr)
+						s += fmt.Sprintf("      Nonce:%v\n", stateAccount.Nonce)
+						s += fmt.Sprintf("      Balance:%v\n", stateAccount.Balance)
+						s += fmt.Sprintf("      CodeHash:%v\n", common.BytesToHash(stateAccount.CodeHash))
+						if txDetail.Types == 2 && stateAccount.Code != nil { // write hex contract code only deploy transaction
+							// if stateAccount.Code != nil {
+							// fmt.Printf("      Code:%v\n", common.Bytes2Hex(stateAccount.Code))
+							s += fmt.Sprintf("      Code:%v\n", common.Bytes2Hex(stateAccount.Code))
+						} else if contains(txDetail.InternalDeployedAddress, addr) {
+							s += fmt.Sprintf("      Code:%v\n", common.Bytes2Hex(stateAccount.Code))
+						}
+						s += fmt.Sprintf("      StorageRoot:%v\n", stateAccount.StorageRoot)
+						if len(stateAccount.Storage) != 0 {
+							s += fmt.Sprintln("        Storage:")
+							for k, v := range stateAccount.Storage {
+								// slice version
+								s += fmt.Sprint("          slot:", k, ",value:")
+								tmp := common.TrimLeftZeroes(v[:])
 								if len(tmp) != 0 {
 									s += fmt.Sprintf("0x%v\n", common.Bytes2Hex(tmp))
 								} else {
 									s += fmt.Sprintln("0x0")
 								}
+								// // map version
+								// for kk, vv := range v {
+								// 	s += fmt.Sprint("          slot:", kk, ",value:")
+								// 	tmp := common.TrimLeftZeroes(vv[:])
+								// 	if len(tmp) != 0 {
+								// 		s += fmt.Sprintf("0x%v\n", common.Bytes2Hex(tmp))
+								// 	} else {
+								// 		s += fmt.Sprintln("0x0")
+								// 	}
+								// }
 
+								// s += fmt.Sprintln()
 							}
-
-							// s += fmt.Sprintln()
 						}
-					}
-					// s += fmt.Sprintf("      RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSubstateAccount(*stateAccount)))
+						// s += fmt.Sprintf("      RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSubstateAccount(*stateAccount)))
 
-					fmt.Fprintln(f, s)
-					delete(common.TxWriteList[tx], addr)
+						fmt.Fprintln(f, s)
+						delete(common.TxWriteList[tx], addr)
+					}
 				}
 				delete(common.TxWriteList, tx)
 				// s += fmt.Sprintln()
 				// fmt.Fprintln(f, s)
+
 			}
 
 		}
@@ -1513,6 +1525,15 @@ func PrintTxSubstate(blocknumber, distance int) {
 
 	common.BlockTxList = map[int][]common.Hash{}
 
+}
+
+func contains(list []common.Address, addr common.Address) bool {
+	for _, v := range list {
+		if v == addr {
+			return true
+		}
+	}
+	return false
 }
 
 // addFutureBlock checks if the block is within the max allowed window to get

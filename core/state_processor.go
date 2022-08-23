@@ -243,6 +243,8 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 			// We have 2 corner cases to conider. First miner is sender, and second miner is receiver
 			// If miner is sender and this tx failed, writelist has only 1 item, miner
 			// If miner is receiver and this tx failed, writelist has 2 items, miner and sender <- same as default
+			// ** some dumb miners accept 0 fee transactions like 0x98970bfb525897505fa0c6b32ea306554761138319d34e01b19691f438557a09,
+			// so "Every failed transaction should have only 2 write list. miner and sender" is wrong
 
 			tmp := common.SubstateAlloc{}
 

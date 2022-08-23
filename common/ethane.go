@@ -50,16 +50,17 @@ type TxInformation struct {
 	//tx type: 1: send, 2: contract creation, 3: contract call, 4: temp failed, 41: transfer fail , 42: contract deploy fail, 43: contract call fail, 0: default.
 	Types                   int
 	DeployedContractAddress Address
+	InternalDeployedAddress []Address
 }
 
 // SubstateAccount is modification of GenesisAccount in core/genesis.go
 type SubstateAccount struct {
 	Nonce   uint64
 	Balance *big.Int
-	// Storage map[Hash]Hash
+	Storage map[Hash]Hash
 	// Storage map[Hash][]Hash // To keep tracking changes of slot values, use hash list rather than hash
-	Storage [](map[Hash]Hash) // make order of changes of slot values, list of maps (key: slot, value: hex value)
-	Code    []byte
+	// Storage [](map[Hash]Hash) // make order of changes of slot values, list of maps (key: slot, value: hex value)
+	Code []byte
 
 	StorageRoot Hash
 	// CodeHash    Hash
@@ -70,10 +71,10 @@ func NewSubstateAccount(nonce uint64, balance *big.Int, code []byte) *SubstateAc
 	return &SubstateAccount{
 		Nonce:   nonce,
 		Balance: new(big.Int).Set(balance),
-		// Storage: make(map[Hash]Hash),
+		Storage: make(map[Hash]Hash),
 		// Storage: make(map[Hash][]Hash),
-		Storage: [](map[Hash]Hash){},
-		Code:    code,
+		// Storage: [](map[Hash]Hash){},
+		Code: code,
 	}
 }
 

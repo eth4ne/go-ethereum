@@ -455,12 +455,22 @@ func (s *StateDB) SetState(addr common.Address, key, value common.Hash) {
 	if stateObject != nil {
 		if sa, exist := common.TxWriteList[common.GlobalTxHash][addr]; !exist {
 			common.TxWriteList[common.GlobalTxHash][addr] = common.NewSubstateAccount(stateObject.Nonce(), stateObject.Balance(), stateObject.code)
-			tmp := map[common.Hash]common.Hash{key: value}
-			common.TxWriteList[common.GlobalTxHash][addr].Storage = []map[common.Hash]common.Hash{tmp}
+
+			// // SubstateAccount.Storage []map[Hash]Hash version
+			// tmp := map[common.Hash]common.Hash{key: value}
+			// common.TxWriteList[common.GlobalTxHash][addr].Storage = []map[common.Hash]common.Hash{tmp}
+
+			// // SubstateAccount.Storage map[Hash]Hash version
+			common.TxWriteList[common.GlobalTxHash][addr].Storage = map[common.Hash]common.Hash{key: value}
 		} else {
-			tmp := map[common.Hash]common.Hash{key: value}
-			sa.Storage = append(sa.Storage, tmp)
-			common.TxWriteList[common.GlobalTxHash][addr].Storage = sa.Storage
+			// // SubstateAccount.Storage []map[Hash]Hash version
+			// tmp := map[common.Hash]common.Hash{key: value}
+			// sa.Storage = append(sa.Storage, tmp)
+			// common.TxWriteList[common.GlobalTxHash][addr].Storage = sa.Storage
+
+			// // SubstateAccount.Storage map[Hash]Hash version
+			sa.Storage[key] = value
+			common.TxWriteList[common.GlobalTxHash][addr] = sa
 		}
 		stateObject.SetState(s.db, key, value)
 	}
@@ -930,10 +940,12 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 			if common.GlobalBlockNumber > 0 && common.GlobalTxHash != common.HexToHash("0x0") {
 
 				if sa, exist := common.TxWriteList[common.GlobalTxHash][addr]; !exist {
+					// fmt.Println("SA not exists/txhash:", common.GlobalTxHash, "addr:", addr, "codehash:", common.Bytes2Hex(obj.CodeHash()))
 					mySA := common.NewSubstateAccount(obj.Nonce(), obj.Balance(), obj.Code(s.db))
 					mySA.CodeHash = obj.CodeHash()
 					mySA.StorageRoot = obj.StorageRoot()
-					mySA.Storage = []map[common.Hash]common.Hash{}
+					// mySA.Storage = []map[common.Hash]common.Hash{}
+					mySA.Storage = map[common.Hash]common.Hash{}
 					for key := range obj.ResearchTouchedWrite {
 						val := obj.GetState(s.db, key)
 						fmt.Println("      never enter this branch")
@@ -943,11 +955,22 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 					}
 					common.TxWriteList[common.GlobalTxHash][addr] = mySA
 				} else {
-					sa.CodeHash = obj.CodeHash()
-					sa.StorageRoot = s.GetStorageTrieHash(addr)
-					sa.Code = obj.Code(s.db)
 
-					common.TxWriteList[common.GlobalTxHash][addr] = sa
+					// fmt.Println("obj:", obj)
+					if sa != nil {
+						// fmt.Println("sa exists/txhash:", common.GlobalTxHash, "addr:", addr, "codehash:", common.Bytes2Hex(obj.CodeHash()))
+						sa.CodeHash = obj.CodeHash()
+						sa.StorageRoot = s.GetStorageTrieHash(addr)
+						sa.Code = obj.Code(s.db)
+						common.TxWriteList[common.GlobalTxHash][addr] = sa
+					} else {
+						// fmt.Println("sa exists but nil/txhash:", common.GlobalTxHash, "addr:", addr, "codehash:", common.Bytes2Hex(obj.CodeHash()))
+
+						delete(common.TxWriteList[common.GlobalTxHash], addr)
+						// fmt.Println(common.TxWriteList[common.GlobalTxHash])
+						// panic(0)
+					}
+
 				}
 
 			}

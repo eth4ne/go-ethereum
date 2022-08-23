@@ -492,6 +492,14 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 			evm.Config.Tracer.CaptureExit(ret, gas-contract.Gas, err)
 		}
 	}
+
+	// jhkim: caching internally created address
+	if common.TxDetail[common.GlobalTxHash].InternalDeployedAddress == nil {
+		common.TxDetail[common.GlobalTxHash].InternalDeployedAddress = []common.Address{address}
+	} else {
+		common.TxDetail[common.GlobalTxHash].InternalDeployedAddress = append(common.TxDetail[common.GlobalTxHash].InternalDeployedAddress, address)
+	}
+
 	return ret, address, contract.Gas, err
 }
 
