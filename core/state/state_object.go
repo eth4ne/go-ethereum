@@ -290,6 +290,7 @@ func (s *stateObject) SetState(db Database, key, value common.Hash) {
 	}
 
 	if prev == value {
+		// delete(common.TxWriteList[common.GlobalTxHash][s.address].Storage, key) // jhkim
 		return
 	}
 

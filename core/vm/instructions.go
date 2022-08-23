@@ -614,6 +614,16 @@ func opCreate(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 	}
 
 	res, addr, returnGas, suberr := interpreter.evm.Create(scope.Contract, input, gas, bigVal) // contract deploy by internal tx?
+
+	// jhkim: caching internally created address
+	//fmt.Println("!@!@1", common.GlobalBlockNumber, common.GlobalTxHash, common.TxDetail[common.GlobalTxHash])
+	//fmt.Println("!@!@1", common.TxDetail[common.GlobalTxHash].InternalDeployedAddress)
+	if len(common.TxDetail[common.GlobalTxHash].InternalDeployedAddress) == 0 {
+		common.TxDetail[common.GlobalTxHash].InternalDeployedAddress = []common.Address{addr}
+	} else {
+		common.TxDetail[common.GlobalTxHash].InternalDeployedAddress = append(common.TxDetail[common.GlobalTxHash].InternalDeployedAddress, addr)
+	}
+	//panic(0)
 	// Push item on the stack based on the returned error. If the ruleset is
 	// homestead we must check for CodeStoreOutOfGasError (homestead only
 	// rule) and treat as an error, if the ruleset is frontier we must
@@ -661,6 +671,16 @@ func opCreate2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]
 	}
 	res, addr, returnGas, suberr := interpreter.evm.Create2(scope.Contract, input, gas,
 		bigEndowment, &salt)
+
+	// jhkim: caching internally created address
+	//fmt.Println("!@!@2", common.GlobalBlockNumber, common.GlobalTxHash, common.TxDetail[common.GlobalTxHash])
+	//fmt.Println("!@!@2", common.TxDetail[common.GlobalTxHash].InternalDeployedAddress)
+	if len(common.TxDetail[common.GlobalTxHash].InternalDeployedAddress) == 0 {
+		common.TxDetail[common.GlobalTxHash].InternalDeployedAddress = []common.Address{addr}
+	} else {
+		common.TxDetail[common.GlobalTxHash].InternalDeployedAddress = append(common.TxDetail[common.GlobalTxHash].InternalDeployedAddress, addr)
+	}
+	//panic(0)
 	// Push item on the stack based on the returned error.
 	if suberr != nil {
 		stackvalue.Clear()

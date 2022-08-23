@@ -1313,7 +1313,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
 	}
 
-	var epoch = 10000
+	var epoch = 100000
 	if common.GlobalBlockNumber%epoch == 0 && common.GlobalBlockNumber != 0 {
 		PrintTxSubstate(common.GlobalBlockNumber, epoch)
 		fmt.Println("DONE blocknumber:", common.GlobalBlockNumber)
@@ -1440,10 +1440,20 @@ func PrintTxSubstate(blocknumber, distance int) {
 				fmt.Fprintln(f, "  WriteList")
 				for addr, stateAccount := range writelist {
 					if stateAccount != nil {
-						s = fmt.Sprintf("    address:%v\n", addr)
+						s = ""
+						if !contains(txDetail.InternalDeployedAddress, addr) {
+							s += fmt.Sprintf("    address:%v\n", addr)
+						} else {
+							s += fmt.Sprintf("    Deployedaddress:%v\n", addr)
+						}
+
 						s += fmt.Sprintf("      Nonce:%v\n", stateAccount.Nonce)
 						s += fmt.Sprintf("      Balance:%v\n", stateAccount.Balance)
-						s += fmt.Sprintf("      CodeHash:%v\n", common.BytesToHash(stateAccount.CodeHash))
+						if emptyCodeHash != common.BytesToHash(stateAccount.CodeHash) {
+							s += fmt.Sprintf("      CodeHash:%v\n", common.BytesToHash(stateAccount.CodeHash))
+						} else {
+							s += fmt.Sprintf("      CodeHash:empty\n")
+						}
 						if txDetail.Types == 2 && stateAccount.Code != nil { // write hex contract code only deploy transaction
 							// if stateAccount.Code != nil {
 							// fmt.Printf("      Code:%v\n", common.Bytes2Hex(stateAccount.Code))
@@ -1451,11 +1461,16 @@ func PrintTxSubstate(blocknumber, distance int) {
 						} else if contains(txDetail.InternalDeployedAddress, addr) {
 							s += fmt.Sprintf("      Code:%v\n", common.Bytes2Hex(stateAccount.Code))
 						}
-						s += fmt.Sprintf("      StorageRoot:%v\n", stateAccount.StorageRoot)
+						if types.EmptyRootHash != stateAccount.StorageRoot {
+							s += fmt.Sprintf("      StorageRoot:%v\n", stateAccount.StorageRoot)
+						} else {
+							s += fmt.Sprintf("      StorageRoot:empty\n")
+						}
 						if len(stateAccount.Storage) != 0 {
 							s += fmt.Sprintln("        Storage:")
 							for k, v := range stateAccount.Storage {
 								// slice version
+
 								s += fmt.Sprint("          slot:", k, ",value:")
 								tmp := common.TrimLeftZeroes(v[:])
 								if len(tmp) != 0 {
@@ -1463,6 +1478,7 @@ func PrintTxSubstate(blocknumber, distance int) {
 								} else {
 									s += fmt.Sprintln("0x0")
 								}
+
 								// // map version
 								// for kk, vv := range v {
 								// 	s += fmt.Sprint("          slot:", kk, ",value:")
@@ -1496,8 +1512,18 @@ func PrintTxSubstate(blocknumber, distance int) {
 		s = fmt.Sprintf("Miner:%v\n", minerSA.Addr)
 		s += fmt.Sprintf("  Nonce:%v\n", minerSA.Nonce)
 		s += fmt.Sprintf("  Balance:%v\n", minerSA.Balance)
-		s += fmt.Sprintf("  Codehash:%v\n", minerSA.Codehash)
-		s += fmt.Sprintf("  StorageRoot:%v\n", minerSA.StorageRoot)
+		if emptyCodeHash != minerSA.Codehash {
+			s += fmt.Sprintf("  Codehash:%v\n", minerSA.Codehash)
+		} else {
+			s += fmt.Sprintf("      CodeHash:empty\n")
+		}
+
+		if types.EmptyRootHash != minerSA.StorageRoot {
+			s += fmt.Sprintf("  StorageRoot:%v\n", minerSA.StorageRoot)
+		} else {
+			s += fmt.Sprintf("      StorageRoot:empty\n")
+		}
+
 		// s += fmt.Sprintf("  RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSimpleAccount(minerSA)))
 		fmt.Fprintln(f, s)
 		// s = fmt.Sprintln("Miner:", common.BlockMinerList[i].Addr, ",Balance:", common.BlockMinerList[i].Balance)
@@ -1507,8 +1533,18 @@ func PrintTxSubstate(blocknumber, distance int) {
 				s = fmt.Sprintf("Uncle:%v\n", uncle.Addr)
 				s += fmt.Sprintf("  Nonce:%v\n", uncle.Nonce)
 				s += fmt.Sprintf("  Balance:%v\n", uncle.Balance)
-				s += fmt.Sprintf("  Codehash:%v\n", uncle.Codehash)
-				s += fmt.Sprintf("  StorageRoot:%v\n", uncle.StorageRoot)
+				if emptyCodeHash != uncle.Codehash {
+					s += fmt.Sprintf("  Codehash:%v\n", uncle.Codehash)
+				} else {
+					s += fmt.Sprintf("      CodeHash:empty\n")
+				}
+
+				if types.EmptyRootHash != uncle.StorageRoot {
+					s += fmt.Sprintf("  StorageRoot:%v\n", uncle.StorageRoot)
+				} else {
+					s += fmt.Sprintf("      StorageRoot:empty\n")
+				}
+
 				// s += fmt.Sprintf("  RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSimpleAccount(uncle)))
 				fmt.Fprintln(f, s)
 			}

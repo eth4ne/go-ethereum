@@ -455,7 +455,8 @@ func (s *StateDB) SetState(addr common.Address, key, value common.Hash) {
 	if stateObject != nil {
 		if sa, exist := common.TxWriteList[common.GlobalTxHash][addr]; !exist {
 			common.TxWriteList[common.GlobalTxHash][addr] = common.NewSubstateAccount(stateObject.Nonce(), stateObject.Balance(), stateObject.code)
-
+			common.TxWriteList[common.GlobalTxHash][addr].CodeHash = stateObject.CodeHash()
+			common.TxWriteList[common.GlobalTxHash][addr].StorageRoot = s.GetStorageTrieHash(addr)
 			// // SubstateAccount.Storage []map[Hash]Hash version
 			// tmp := map[common.Hash]common.Hash{key: value}
 			// common.TxWriteList[common.GlobalTxHash][addr].Storage = []map[common.Hash]common.Hash{tmp}
@@ -944,6 +945,10 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 					mySA := common.NewSubstateAccount(obj.Nonce(), obj.Balance(), obj.Code(s.db))
 					mySA.CodeHash = obj.CodeHash()
 					mySA.StorageRoot = obj.StorageRoot()
+					if obj.StorageRoot() == common.HexToHash("0x0") {
+						fmt.Println("Why 0x0 storageroot?/ statedb.go Finalise1", common.GlobalBlockNumber, common.GlobalTxHash, addr)
+						panic(0)
+					}
 					// mySA.Storage = []map[common.Hash]common.Hash{}
 					mySA.Storage = map[common.Hash]common.Hash{}
 					for key := range obj.ResearchTouchedWrite {
@@ -959,9 +964,16 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 					// fmt.Println("obj:", obj)
 					if sa != nil {
 						// fmt.Println("sa exists/txhash:", common.GlobalTxHash, "addr:", addr, "codehash:", common.Bytes2Hex(obj.CodeHash()))
+						sa.Balance = obj.Balance()
+						sa.Nonce = obj.Nonce()
 						sa.CodeHash = obj.CodeHash()
 						sa.StorageRoot = s.GetStorageTrieHash(addr)
+						if s.GetStorageTrieHash(addr) == common.HexToHash("0x0") {
+							fmt.Println("Why 0x0 storageroot?/ statedb.go Finalise2", common.GlobalBlockNumber, common.GlobalTxHash, addr)
+							panic(0)
+						}
 						sa.Code = obj.Code(s.db)
+
 						common.TxWriteList[common.GlobalTxHash][addr] = sa
 					} else {
 						// fmt.Println("sa exists but nil/txhash:", common.GlobalTxHash, "addr:", addr, "codehash:", common.Bytes2Hex(obj.CodeHash()))
@@ -1045,15 +1057,7 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 			s.updateStateObject(obj)
 			s.AccountUpdated += 1
 		}
-		// for _, v := range lst {
-		// 	if v.deleted {
-		// 		s.deleteStateObject(&v)
-		// 		s.AccountDeleted += 1
-		// 	} else {
-		// 		s.updateStateObject(&v)
-		// 		s.AccountUpdated += 1
-		// 	}
-		// }
+
 		usedAddrs = append(usedAddrs, common.CopyBytes(addr[:])) // Copy needed for closure
 	}
 	if prefetcher != nil {

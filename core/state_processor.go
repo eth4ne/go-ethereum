@@ -132,6 +132,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		common.GlobalTxFrom = common.Address{}
 
 	}
+	common.GlobalTxHash = common.HexToHash("0x0")
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles())
 	common.BlockMinerList[blocknumber] = common.SimpleAccount{Addr: block.Coinbase(),
@@ -154,7 +155,6 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		}
 
 	}
-	common.GlobalTxHash = common.Hash{}
 
 	return receipts, allLogs, *usedGas, nil
 
@@ -189,12 +189,8 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	evm.Reset(txContext, statedb)
 	common.GlobalTxHash = tx.Hash() // jhkim: set global variable
 	// Apply the transaction to the current state (included in the env).
-	result, err := ApplyMessage(evm, msg, gp)
-	if err != nil {
-		return nil, err
-	}
 
-	//jhkim: write Txdetail
+	//jhkim: write Txdetail before applymessage for test
 	// common.GlobalMutex.Lock()
 	if _, ok := common.TxDetail[tx.Hash()]; !ok {
 		WriteTxDetail(tx, msg, blockNumber, statedb) //jhkim
@@ -202,6 +198,20 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 		// fmt.Println("Error: Tx already exist!", tx.Hash(), common.GlobalBlockNumber)
 		// os.Exit(0)
 	}
+
+	result, err := ApplyMessage(evm, msg, gp)
+	if err != nil {
+		return nil, err
+	}
+
+	//jhkim: write Txdetail
+	// common.GlobalMutex.Lock()
+	//	if _, ok := common.TxDetail[tx.Hash()]; !ok {
+	//		WriteTxDetail(tx, msg, blockNumber, statedb) //jhkim
+	//	} else {
+	//		// fmt.Println("Error: Tx already exist!", tx.Hash(), common.GlobalBlockNumber)
+	//		// os.Exit(0)
+	//	}
 
 	// common.GlobalMutex.Unlock()
 
@@ -317,6 +327,7 @@ func WriteTxDetail(tx *types.Transaction, msg types.Message, number *big.Int, st
 	// txInform.Internal = []common.Address{}
 	// txInform.InternalCA = []common.Address{}
 	txInform.DeployedContractAddress = common.Address{}
+	txInform.InternalDeployedAddress = make([]common.Address, 0)
 	// txInform.AccountBalance = map[common.Address]uint64{}
 
 	if tx.To() == nil {
