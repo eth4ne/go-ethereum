@@ -1350,7 +1350,8 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	return status, nil
 }
 
-var path = "/home/jhkim/go/src/github.com/ethereum/go-ethereum-substate/txDetail/" // used absolute path
+// var path = "/home/jhkim/go/src/github.com/ethereum/go-ethereum-substate/txDetail/" // used absolute path
+var path = "/shared/jhkim/" // used absolute path
 var _ = os.MkdirAll(path, 0777)
 
 func PrintTxSubstate(blocknumber, distance int) {
@@ -1515,13 +1516,13 @@ func PrintTxSubstate(blocknumber, distance int) {
 		if emptyCodeHash != minerSA.Codehash {
 			s += fmt.Sprintf("  Codehash:%v\n", minerSA.Codehash)
 		} else {
-			s += fmt.Sprintf("      CodeHash:empty\n")
+			s += fmt.Sprintf("  CodeHash:empty\n")
 		}
 
 		if types.EmptyRootHash != minerSA.StorageRoot {
 			s += fmt.Sprintf("  StorageRoot:%v\n", minerSA.StorageRoot)
 		} else {
-			s += fmt.Sprintf("      StorageRoot:empty\n")
+			s += fmt.Sprintf("  StorageRoot:empty\n")
 		}
 
 		// s += fmt.Sprintf("  RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSimpleAccount(minerSA)))
@@ -1536,13 +1537,13 @@ func PrintTxSubstate(blocknumber, distance int) {
 				if emptyCodeHash != uncle.Codehash {
 					s += fmt.Sprintf("  Codehash:%v\n", uncle.Codehash)
 				} else {
-					s += fmt.Sprintf("      CodeHash:empty\n")
+					s += fmt.Sprintf("  CodeHash:empty\n")
 				}
 
 				if types.EmptyRootHash != uncle.StorageRoot {
 					s += fmt.Sprintf("  StorageRoot:%v\n", uncle.StorageRoot)
 				} else {
-					s += fmt.Sprintf("      StorageRoot:empty\n")
+					s += fmt.Sprintf("  StorageRoot:empty\n")
 				}
 
 				// s += fmt.Sprintf("  RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSimpleAccount(uncle)))
@@ -1555,11 +1556,16 @@ func PrintTxSubstate(blocknumber, distance int) {
 	}
 
 	elapsed := time.Since(start)
-	ss += fmt.Sprintln(" in", elapsed.Seconds(), "seconds")
+	ss += fmt.Sprintln(" in", elapsed.Seconds(), "seconds/file:", filepath)
 	fmt.Print(ss)
 	fmt.Println("# of Txs written in block", strconv.FormatInt(int64(blocknumber-distance+1), 10)+"-"+strconv.FormatInt(int64(blocknumber), 10), ":", txcounter)
 
 	common.BlockTxList = map[int][]common.Hash{}
+	common.TxDetail = make(map[common.Hash]*common.TxInformation)
+	common.TxReadList = make(map[common.Hash]map[common.Address]struct{})
+	common.TxWriteList = make(map[common.Hash]common.SubstateAlloc)
+	common.BlockMinerList = make(map[int]common.SimpleAccount)
+	common.BlockUncleList = make(map[int][]common.SimpleAccount)
 
 }
 
