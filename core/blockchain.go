@@ -1345,7 +1345,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 
 	if common.GlobalBlockNumber != 0 && common.GlobalBlockNumber%1000000 == 0 {
 		rawdb.MyInspectDatabase(bc.db, nil, nil)
-		os.Exit(0)
+		// os.Exit(0)
 	}
 
 	return status, nil
