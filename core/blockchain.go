@@ -1312,17 +1312,16 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	} else {
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
 	}
-
 	var epoch = 100000
+	if common.GlobalBlockNumber > 11000000 {
+		epoch = 10000
+	}
 	if common.GlobalBlockNumber%epoch == 0 && common.GlobalBlockNumber != 0 {
 		PrintTxSubstate(common.GlobalBlockNumber, epoch)
 		fmt.Println("DONE blocknumber:", common.GlobalBlockNumber)
 
 		// reset TxDetail, TxReadList, TxWriteList, Miner&Uncle list, and Txlist
 		common.TxDetail = make(map[common.Hash]*common.TxInformation)
-
-		// common.TxReadList = make(map[common.Hash]common.SubstateAlloc)
-		// common.TxReadList = make(map[common.Hash][]common.Address)
 		common.TxReadList = make(map[common.Hash]map[common.Address]struct{})
 		for k, v := range common.TxWriteList {
 			for _, vv := range v {
@@ -1341,22 +1340,24 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 			delete(common.BlockTxList, k)
 		}
 		common.BlockTxList = make(map[int][]common.Hash)
+
 	}
 
-	// if common.GlobalBlockNumber == 1000000 {
-	// 	os.Exit(0)
-	// }
+	if common.GlobalBlockNumber != 0 && common.GlobalBlockNumber%1000000 == 0 {
+		rawdb.MyInspectDatabase(bc.db, nil, nil)
+		os.Exit(0)
+	}
 
 	return status, nil
 }
 
-// var path = "/home/jhkim/go/src/github.com/ethereum/go-ethereum-substate/txDetail/" // used absolute path
-var path = "/shared/jhkim/" // used absolute path
-var _ = os.MkdirAll(path, 0777)
+// var Path = "/home/jhkim/go/src/github.com/ethereum/go-ethereum-substate/txDetail/" // used absolute path
+// var path = "/shared/jhkim/" // used absolute path
+var _ = os.MkdirAll(common.Path, 0777)
 
 func PrintTxSubstate(blocknumber, distance int) {
 	ss := fmt.Sprintf("Write TxSubstate %d-%d in txt file", blocknumber-distance, blocknumber)
-	filepath := path + "TxSubstate" + strconv.FormatInt(int64(blocknumber-distance+1), 10) + "-" + strconv.FormatInt(int64(blocknumber), 10) + ".txt"
+	filepath := common.Path + "TxSubstate" + strconv.FormatInt(int64(blocknumber-distance+1), 10) + "-" + strconv.FormatInt(int64(blocknumber), 10) + ".txt"
 	// filepath := "/shared/jhkim/TxSubstate" + strconv.FormatInt(int64(blocknumber-distance+1), 10) + "-" + strconv.FormatInt(int64(blocknumber), 10) + ".txt"
 
 	f, err := os.Create(filepath)
@@ -1376,53 +1377,53 @@ func PrintTxSubstate(blocknumber, distance int) {
 			fmt.Println("Writing file.. Block #:", i, "elapsed", elapsed.Seconds(), "s")
 		}
 
-		s := fmt.Sprintf("/Block:%v\n", i)
-		fmt.Fprintln(f, s)
+		s := fmt.Sprintf("\n/Block:%v\n", i)
+		fmt.Fprint(f, s)
 		if txlist, exist := common.BlockTxList[i]; exist {
 			txcounter += len(common.BlockTxList[i])
 			for _, tx := range txlist {
-				s := fmt.Sprintf("TxHash:%v\n", tx)
+				s := fmt.Sprintf("!TxHash:%v\n", tx)
 				txDetail := common.TxDetail[tx]
 
 				// jhkim: transaction type
 				if txDetail.Types == 1 {
-					s += fmt.Sprintln("  Type:Transfer")
+					s += fmt.Sprintln("Type:Transfer")
 					// s += fmt.Sprintln("  common.TxInformation: Transfer or Contract call")
 				} else if txDetail.Types == 2 {
-					s += fmt.Sprintln("  Type:ContractDeploy")
+					s += fmt.Sprintln("Type:ContractDeploy")
 				} else if txDetail.Types == 3 {
-					s += fmt.Sprintln("  Type:ContractCall")
+					s += fmt.Sprintln("Type:ContractCall")
 				} else if txDetail.Types == 4 { // never enter this branch
-					s += fmt.Sprintln("  Type:Failed")
+					s += fmt.Sprintln("Type:Failed")
 					fmt.Println("txDetail.Types is 4, not changed from default", tx)
 					os.Exit(0)
 				} else if txDetail.Types == 41 {
-					s += fmt.Sprintln("  Type:Failed_transfer")
+					s += fmt.Sprintln("Type:Failed_transfer")
 				} else if txDetail.Types == 42 {
-					s += fmt.Sprintln("  Type:Failed_contractdeploy")
+					s += fmt.Sprintln("Type:Failed_contractdeploy")
 				} else if txDetail.Types == 43 {
-					s += fmt.Sprintln("  Type:Failed_contractcall")
+					s += fmt.Sprintln("Type:Failed_contractcall")
 				} else {
 					fmt.Println("wrong Tx type", tx)
 					os.Exit(0)
-					s += fmt.Sprintln("  Wrong Tx Information")
+					s += fmt.Sprintln("Wrong Tx Information")
 				}
-				s += fmt.Sprintf("  From:%v\n", txDetail.From)
+				s += fmt.Sprintf("From:%v\n", txDetail.From)
 
 				if txDetail.Types == 1 || txDetail.Types == 3 {
-					s += fmt.Sprintf("  To:%v\n", txDetail.To)
+					s += fmt.Sprintf("To:%v\n", txDetail.To)
 				} else if txDetail.Types == 2 {
-					s += fmt.Sprintf("  DeployedCA:%v\n", txDetail.DeployedContractAddress)
+					s += fmt.Sprintf("DeployedCA:%v\n", txDetail.DeployedContractAddress)
 				} else {
 					// Do nothing
 				}
 				// s += fmt.Sprintln()
-				fmt.Fprintln(f, s)
+				fmt.Fprint(f, s)
 				readlist := common.TxReadList[tx]
 				// fmt.Println("blocknumber", i, "readlist", readlist)
-				s = fmt.Sprintln("  ReadList")
+				s = fmt.Sprintln("@ReadList")
 				for addr := range readlist {
-					s += fmt.Sprintf("    address:%v\n", addr)
+					s += fmt.Sprintf(".address:%v\n", addr)
 					// s += fmt.Sprintln("      Nonce:", stateAccount.Nonce)
 					// s += fmt.Sprintln("      Balance:", stateAccount.Balance)
 					// s += fmt.Sprintln("      CodeHash:", common.BytesToHash(stateAccount.CodeHash))
@@ -1435,44 +1436,44 @@ func PrintTxSubstate(blocknumber, distance int) {
 					// s += fmt.Sprintln()
 				}
 				// s += fmt.Sprintln()
-				fmt.Fprintln(f, s)
+				fmt.Fprint(f, s)
 				writelist := common.TxWriteList[tx]
 				// s = fmt.Sprintln("  WriteList")
-				fmt.Fprintln(f, "  WriteList")
+				fmt.Fprintln(f, "#WriteList")
 				for addr, stateAccount := range writelist {
 					if stateAccount != nil {
 						s = ""
 						if !contains(txDetail.InternalDeployedAddress, addr) {
-							s += fmt.Sprintf("    address:%v\n", addr)
+							s += fmt.Sprintf(".address:%v\n", addr)
 						} else {
-							s += fmt.Sprintf("    Deployedaddress:%v\n", addr)
+							s += fmt.Sprintf("Deployedaddress:%v\n", addr)
 						}
 
-						s += fmt.Sprintf("      Nonce:%v\n", stateAccount.Nonce)
-						s += fmt.Sprintf("      Balance:%v\n", stateAccount.Balance)
+						s += fmt.Sprintf("Nonce:%v\n", stateAccount.Nonce)
+						s += fmt.Sprintf("Balance:%v\n", stateAccount.Balance)
 						if emptyCodeHash != common.BytesToHash(stateAccount.CodeHash) {
-							s += fmt.Sprintf("      CodeHash:%v\n", common.BytesToHash(stateAccount.CodeHash))
+							s += fmt.Sprintf("CodeHash:%v\n", common.BytesToHash(stateAccount.CodeHash))
 						} else {
-							s += fmt.Sprintf("      CodeHash:empty\n")
+							s += fmt.Sprintf("CodeHash:empty\n")
 						}
 						if txDetail.Types == 2 && stateAccount.Code != nil { // write hex contract code only deploy transaction
 							// if stateAccount.Code != nil {
 							// fmt.Printf("      Code:%v\n", common.Bytes2Hex(stateAccount.Code))
-							s += fmt.Sprintf("      Code:%v\n", common.Bytes2Hex(stateAccount.Code))
+							s += fmt.Sprintf("Code:%v\n", common.Bytes2Hex(stateAccount.Code))
 						} else if contains(txDetail.InternalDeployedAddress, addr) {
-							s += fmt.Sprintf("      Code:%v\n", common.Bytes2Hex(stateAccount.Code))
+							s += fmt.Sprintf("Code:%v\n", common.Bytes2Hex(stateAccount.Code))
 						}
 						if types.EmptyRootHash != stateAccount.StorageRoot {
-							s += fmt.Sprintf("      StorageRoot:%v\n", stateAccount.StorageRoot)
+							s += fmt.Sprintf("StorageRoot:%v\n", stateAccount.StorageRoot)
 						} else {
-							s += fmt.Sprintf("      StorageRoot:empty\n")
+							s += fmt.Sprintf("StorageRoot:empty\n")
 						}
 						if len(stateAccount.Storage) != 0 {
-							s += fmt.Sprintln("        Storage:")
+							s += fmt.Sprintln("Storage:")
 							for k, v := range stateAccount.Storage {
 								// slice version
 
-								s += fmt.Sprint("          slot:", k, ",value:")
+								s += fmt.Sprint("slot:", k, ",value:")
 								tmp := common.TrimLeftZeroes(v[:])
 								if len(tmp) != 0 {
 									s += fmt.Sprintf("0x%v\n", common.Bytes2Hex(tmp))
@@ -1496,7 +1497,7 @@ func PrintTxSubstate(blocknumber, distance int) {
 						}
 						// s += fmt.Sprintf("      RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSubstateAccount(*stateAccount)))
 
-						fmt.Fprintln(f, s)
+						fmt.Fprint(f, s)
 						delete(common.TxWriteList[tx], addr)
 					}
 				}
@@ -1510,44 +1511,44 @@ func PrintTxSubstate(blocknumber, distance int) {
 
 		// s += fmt.Sprintln("##########################################################################")
 		minerSA := common.BlockMinerList[i]
-		s = fmt.Sprintf("Miner:%v\n", minerSA.Addr)
-		s += fmt.Sprintf("  Nonce:%v\n", minerSA.Nonce)
-		s += fmt.Sprintf("  Balance:%v\n", minerSA.Balance)
+		s = fmt.Sprintf("$Miner:%v\n", minerSA.Addr)
+		s += fmt.Sprintf("Nonce:%v\n", minerSA.Nonce)
+		s += fmt.Sprintf("Balance:%v\n", minerSA.Balance)
 		if emptyCodeHash != minerSA.Codehash {
-			s += fmt.Sprintf("  Codehash:%v\n", minerSA.Codehash)
+			s += fmt.Sprintf("Codehash:%v\n", minerSA.Codehash)
 		} else {
-			s += fmt.Sprintf("  CodeHash:empty\n")
+			s += fmt.Sprintf("CodeHash:empty\n")
 		}
 
 		if types.EmptyRootHash != minerSA.StorageRoot {
-			s += fmt.Sprintf("  StorageRoot:%v\n", minerSA.StorageRoot)
+			s += fmt.Sprintf("StorageRoot:%v\n", minerSA.StorageRoot)
 		} else {
-			s += fmt.Sprintf("  StorageRoot:empty\n")
+			s += fmt.Sprintf("StorageRoot:empty\n")
 		}
 
 		// s += fmt.Sprintf("  RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSimpleAccount(minerSA)))
-		fmt.Fprintln(f, s)
+		fmt.Fprint(f, s)
 		// s = fmt.Sprintln("Miner:", common.BlockMinerList[i].Addr, ",Balance:", common.BlockMinerList[i].Balance)
 		uncles := common.BlockUncleList[i]
 		if len(uncles) != 0 {
 			for _, uncle := range uncles {
-				s = fmt.Sprintf("Uncle:%v\n", uncle.Addr)
-				s += fmt.Sprintf("  Nonce:%v\n", uncle.Nonce)
-				s += fmt.Sprintf("  Balance:%v\n", uncle.Balance)
+				s = fmt.Sprintf("^Uncle:%v\n", uncle.Addr)
+				s += fmt.Sprintf("Nonce:%v\n", uncle.Nonce)
+				s += fmt.Sprintf("Balance:%v\n", uncle.Balance)
 				if emptyCodeHash != uncle.Codehash {
-					s += fmt.Sprintf("  Codehash:%v\n", uncle.Codehash)
+					s += fmt.Sprintf("Codehash:%v\n", uncle.Codehash)
 				} else {
-					s += fmt.Sprintf("  CodeHash:empty\n")
+					s += fmt.Sprintf("CodeHash:empty\n")
 				}
 
 				if types.EmptyRootHash != uncle.StorageRoot {
-					s += fmt.Sprintf("  StorageRoot:%v\n", uncle.StorageRoot)
+					s += fmt.Sprintf("StorageRoot:%v\n", uncle.StorageRoot)
 				} else {
-					s += fmt.Sprintf("  StorageRoot:empty\n")
+					s += fmt.Sprintf("StorageRoot:empty\n")
 				}
 
 				// s += fmt.Sprintf("  RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSimpleAccount(uncle)))
-				fmt.Fprintln(f, s)
+				fmt.Fprint(f, s)
 			}
 
 		}
@@ -1556,7 +1557,8 @@ func PrintTxSubstate(blocknumber, distance int) {
 	}
 
 	elapsed := time.Since(start)
-	ss += fmt.Sprintln(" in", elapsed.Seconds(), "seconds/file:", filepath)
+	ss += fmt.Sprintln(" in", elapsed.Seconds(), "seconds")
+	ss += fmt.Sprintln("file:", filepath)
 	fmt.Print(ss)
 	fmt.Println("# of Txs written in block", strconv.FormatInt(int64(blocknumber-distance+1), 10)+"-"+strconv.FormatInt(int64(blocknumber), 10), ":", txcounter)
 

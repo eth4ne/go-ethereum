@@ -7,6 +7,7 @@ import (
 	"sync"
 )
 
+var Path = "/home/jhkim/go/src/github.com/ethereum/go-ethereum-substate/txDetail/" // used absolute path
 var (
 	// GlobalDistance                int     = 0
 	GlobalTxHash      Hash    = HexToHash("0x0")
