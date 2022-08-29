@@ -1395,8 +1395,8 @@ func PrintTxSubstate(blocknumber, distance int) {
 					fmt.Fprintf(f, "Type:ContractDeploy")
 					// s += fmt.Sprintln("Type:ContractDeploy")
 				} else if txDetail.Types == 3 {
-					fmt.Fprintf(f, "Type:ContractDeploy")
-					// s += fmt.Sprintln("Type:ContractDeploy")
+					fmt.Fprintf(f, "Type:ContractCall")
+					// s += fmt.Sprintln("Type:ContractCall")
 				} else if txDetail.Types == 4 { // never enter this branch
 					fmt.Fprintf(f, "Type:Failed")
 					// s += fmt.Sprintln("Type:Failed")
@@ -1477,7 +1477,7 @@ func PrintTxSubstate(blocknumber, distance int) {
 							fmt.Fprintf(f, "CodeHash:empty\n")
 							// s += fmt.Sprintf("CodeHash:empty\n")
 						}
-						if txDetail.Types == 2 && stateAccount.Code != nil { // write hex contract code only deploy transaction
+						if txDetail.Types == 2 && txDetail.DeployedContractAddress == addr && stateAccount.Code != nil { // write hex contract code only deploy transaction
 							// if stateAccount.Code != nil {
 							// fmt.Printf("      Code:%v\n", common.Bytes2Hex(stateAccount.Code))
 							fmt.Fprintf(f, "Code:%v\n", common.Bytes2Hex(stateAccount.Code))
