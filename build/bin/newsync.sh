@@ -1,7 +1,7 @@
 echo "***WARNING***"
 echo "***WARNING***"
 echo "***WARNING***"
-echo "This script should be used for already synced geth"
+echo "This script should be used for not synced geth"
 sleep 5
 
 cd ../..

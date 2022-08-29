@@ -1353,7 +1353,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 
 // var Path = "/home/jhkim/go/src/github.com/ethereum/go-ethereum-substate/txDetail/" // used absolute path
 // var path = "/shared/jhkim/" // used absolute path
-var _ = os.MkdirAll(common.Path, 0777)
+// var _ = os.MkdirAll(common.Path, 0777)
 
 func PrintTxSubstate(blocknumber, distance int) {
 	ss := fmt.Sprintf("Write TxSubstate %d-%d in txt file", blocknumber-distance, blocknumber)
@@ -1377,53 +1377,67 @@ func PrintTxSubstate(blocknumber, distance int) {
 			fmt.Println("Writing file.. Block #:", i, "elapsed", elapsed.Seconds(), "s")
 		}
 
-		s := fmt.Sprintf("\n/Block:%v\n", i)
-		fmt.Fprint(f, s)
+		// s := fmt.Sprintf("\n/Block:%v\n", i)
+		fmt.Fprintf(f, "\n/Block:%v", i)
 		if txlist, exist := common.BlockTxList[i]; exist {
 			txcounter += len(common.BlockTxList[i])
 			for _, tx := range txlist {
-				s := fmt.Sprintf("!TxHash:%v\n", tx)
+				// s := fmt.Sprintf("!TxHash:%v\n", tx)
+				fmt.Fprintf(f, "!TxHash:%v\n", tx)
 				txDetail := common.TxDetail[tx]
 
 				// jhkim: transaction type
 				if txDetail.Types == 1 {
-					s += fmt.Sprintln("Type:Transfer")
+					fmt.Fprintf(f, "Type:Transfer")
+					// s += fmt.Sprintln("Type:Transfer")
 					// s += fmt.Sprintln("  common.TxInformation: Transfer or Contract call")
 				} else if txDetail.Types == 2 {
-					s += fmt.Sprintln("Type:ContractDeploy")
+					fmt.Fprintf(f, "Type:ContractDeploy")
+					// s += fmt.Sprintln("Type:ContractDeploy")
 				} else if txDetail.Types == 3 {
-					s += fmt.Sprintln("Type:ContractCall")
+					fmt.Fprintf(f, "Type:ContractDeploy")
+					// s += fmt.Sprintln("Type:ContractDeploy")
 				} else if txDetail.Types == 4 { // never enter this branch
-					s += fmt.Sprintln("Type:Failed")
+					fmt.Fprintf(f, "Type:Failed")
+					// s += fmt.Sprintln("Type:Failed")
 					fmt.Println("txDetail.Types is 4, not changed from default", tx)
 					os.Exit(0)
 				} else if txDetail.Types == 41 {
-					s += fmt.Sprintln("Type:Failed_transfer")
+					fmt.Fprintf(f, "Type:Failed_transfer")
+					// s += fmt.Sprintln("Type:Failed_transfer")
 				} else if txDetail.Types == 42 {
-					s += fmt.Sprintln("Type:Failed_contractdeploy")
+					fmt.Fprintf(f, "Type:Failed_contractdeploy")
+					// s += fmt.Sprintln("Type:Failed_contractdeploy")
 				} else if txDetail.Types == 43 {
-					s += fmt.Sprintln("Type:Failed_contractcall")
+					fmt.Fprintf(f, "Type:Failed_contractcall")
+					// s += fmt.Sprintln("Type:Failed_contractcall")
 				} else {
 					fmt.Println("wrong Tx type", tx)
 					os.Exit(0)
-					s += fmt.Sprintln("Wrong Tx Information")
+					fmt.Fprintf(f, "Wrong Tx Information")
+					// s += fmt.Sprintln("Wrong Tx Information")
 				}
-				s += fmt.Sprintf("From:%v\n", txDetail.From)
+				fmt.Fprintf(f, "From:%v\n", txDetail.From)
+				// s += fmt.Sprintf("From:%v\n", txDetail.From)
 
 				if txDetail.Types == 1 || txDetail.Types == 3 {
-					s += fmt.Sprintf("To:%v\n", txDetail.To)
+					fmt.Fprintf(f, "To:%v\n", txDetail.To)
+					// s += fmt.Sprintf("To:%v\n", txDetail.To)
 				} else if txDetail.Types == 2 {
-					s += fmt.Sprintf("DeployedCA:%v\n", txDetail.DeployedContractAddress)
+					fmt.Fprintf(f, "DeployedCA:%v\n", txDetail.DeployedContractAddress)
+					// s += fmt.Sprintf("DeployedCA:%v\n", txDetail.DeployedContractAddress)
 				} else {
 					// Do nothing
 				}
 				// s += fmt.Sprintln()
-				fmt.Fprint(f, s)
+				// fmt.Fprint(f, s)
+
 				readlist := common.TxReadList[tx]
 				// fmt.Println("blocknumber", i, "readlist", readlist)
-				s = fmt.Sprintln("@ReadList")
+				fmt.Fprintf(f, "@ReadList\n")
 				for addr := range readlist {
-					s += fmt.Sprintf(".address:%v\n", addr)
+					fmt.Fprintf(f, ".address:%v\n", addr)
+					// s += fmt.Sprintf(".address:%v\n", addr)
 					// s += fmt.Sprintln("      Nonce:", stateAccount.Nonce)
 					// s += fmt.Sprintln("      Balance:", stateAccount.Balance)
 					// s += fmt.Sprintln("      CodeHash:", common.BytesToHash(stateAccount.CodeHash))
@@ -1436,49 +1450,64 @@ func PrintTxSubstate(blocknumber, distance int) {
 					// s += fmt.Sprintln()
 				}
 				// s += fmt.Sprintln()
-				fmt.Fprint(f, s)
+				// fmt.Fprint(f, s)
 				writelist := common.TxWriteList[tx]
 				// s = fmt.Sprintln("  WriteList")
 				fmt.Fprintln(f, "#WriteList")
 				for addr, stateAccount := range writelist {
+
 					if stateAccount != nil {
-						s = ""
+						// s = ""
 						if !contains(txDetail.InternalDeployedAddress, addr) {
-							s += fmt.Sprintf(".address:%v\n", addr)
+							fmt.Fprintf(f, ".address:%v\n", addr)
+							// s += fmt.Sprintf(".address:%v\n", addr)
 						} else {
-							s += fmt.Sprintf("Deployedaddress:%v\n", addr)
+							fmt.Fprintf(f, "Deployedaddress:%v\n", addr)
+							// s += fmt.Sprintf("Deployedaddress:%v\n", addr)
 						}
 
-						s += fmt.Sprintf("Nonce:%v\n", stateAccount.Nonce)
-						s += fmt.Sprintf("Balance:%v\n", stateAccount.Balance)
+						fmt.Fprintf(f, "Nonce:%v\n", stateAccount.Nonce)
+						// s += fmt.Sprintf("Nonce:%v\n", stateAccount.Nonce)
+						fmt.Fprintf(f, "Balance:%v\n", stateAccount.Balance)
+						// s += fmt.Sprintf("Balance:%v\n", stateAccount.Balance)
 						if emptyCodeHash != common.BytesToHash(stateAccount.CodeHash) {
-							s += fmt.Sprintf("CodeHash:%v\n", common.BytesToHash(stateAccount.CodeHash))
+							fmt.Fprintf(f, "CodeHash:%v\n", common.BytesToHash(stateAccount.CodeHash))
+							// s += fmt.Sprintf("CodeHash:%v\n", common.BytesToHash(stateAccount.CodeHash))
 						} else {
-							s += fmt.Sprintf("CodeHash:empty\n")
+							fmt.Fprintf(f, "CodeHash:empty\n")
+							// s += fmt.Sprintf("CodeHash:empty\n")
 						}
 						if txDetail.Types == 2 && stateAccount.Code != nil { // write hex contract code only deploy transaction
 							// if stateAccount.Code != nil {
 							// fmt.Printf("      Code:%v\n", common.Bytes2Hex(stateAccount.Code))
-							s += fmt.Sprintf("Code:%v\n", common.Bytes2Hex(stateAccount.Code))
+							fmt.Fprintf(f, "Code:%v\n", common.Bytes2Hex(stateAccount.Code))
+							// s += fmt.Sprintf("Code:%v\n", common.Bytes2Hex(stateAccount.Code))
 						} else if contains(txDetail.InternalDeployedAddress, addr) {
-							s += fmt.Sprintf("Code:%v\n", common.Bytes2Hex(stateAccount.Code))
+							fmt.Fprintf(f, "Code:%v\n", common.Bytes2Hex(stateAccount.Code))
+							// s += fmt.Sprintf("Code:%v\n", common.Bytes2Hex(stateAccount.Code))
 						}
 						if types.EmptyRootHash != stateAccount.StorageRoot {
-							s += fmt.Sprintf("StorageRoot:%v\n", stateAccount.StorageRoot)
+							fmt.Fprintf(f, "StorageRoot:%v\n", stateAccount.StorageRoot)
+							// s += fmt.Sprintf("StorageRoot:%v\n", stateAccount.StorageRoot)
 						} else {
-							s += fmt.Sprintf("StorageRoot:empty\n")
+							fmt.Fprintf(f, "StorageRoot:empty\n")
+							// s += fmt.Sprintf("StorageRoot:empty\n")
 						}
 						if len(stateAccount.Storage) != 0 {
-							s += fmt.Sprintln("Storage:")
+							fmt.Fprintf(f, "Storage:\n")
+							// s += fmt.Sprintln("Storage:")
 							for k, v := range stateAccount.Storage {
 								// slice version
 
-								s += fmt.Sprint("slot:", k, ",value:")
+								fmt.Fprint(f, "slot:", k, ",value:")
+								// s += fmt.Sprint("slot:", k, ",value:")
 								tmp := common.TrimLeftZeroes(v[:])
 								if len(tmp) != 0 {
-									s += fmt.Sprintf("0x%v\n", common.Bytes2Hex(tmp))
+									fmt.Fprintf(f, "0x%v\n", common.Bytes2Hex(tmp))
+									// s += fmt.Sprintf("0x%v\n", common.Bytes2Hex(tmp))
 								} else {
-									s += fmt.Sprintln("0x0")
+									fmt.Fprintln(f, "0x0")
+									// s += fmt.Sprintln("0x0")
 								}
 
 								// // map version
@@ -1495,9 +1524,10 @@ func PrintTxSubstate(blocknumber, distance int) {
 								// s += fmt.Sprintln()
 							}
 						}
+
 						// s += fmt.Sprintf("      RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSubstateAccount(*stateAccount)))
 
-						fmt.Fprint(f, s)
+						// fmt.Fprint(f, s)
 						delete(common.TxWriteList[tx], addr)
 					}
 				}
@@ -1511,44 +1541,58 @@ func PrintTxSubstate(blocknumber, distance int) {
 
 		// s += fmt.Sprintln("##########################################################################")
 		minerSA := common.BlockMinerList[i]
-		s = fmt.Sprintf("$Miner:%v\n", minerSA.Addr)
-		s += fmt.Sprintf("Nonce:%v\n", minerSA.Nonce)
-		s += fmt.Sprintf("Balance:%v\n", minerSA.Balance)
+		fmt.Fprintf(f, "$Miner:%v\n", minerSA.Addr)
+		// s = fmt.Sprintf("$Miner:%v\n", minerSA.Addr)
+		fmt.Fprintf(f, "Nonce:%v\n", minerSA.Nonce)
+		// s += fmt.Sprintf("Nonce:%v\n", minerSA.Nonce)
+		fmt.Fprintf(f, "Balance:%v\n", minerSA.Balance)
+		// s += fmt.Sprintf("Balance:%v\n", minerSA.Balance)
 		if emptyCodeHash != minerSA.Codehash {
-			s += fmt.Sprintf("Codehash:%v\n", minerSA.Codehash)
+			fmt.Fprintf(f, "Codehash:%v\n", minerSA.Codehash)
+			// s += fmt.Sprintf("Codehash:%v\n", minerSA.Codehash)
 		} else {
-			s += fmt.Sprintf("CodeHash:empty\n")
+			fmt.Fprintf(f, "CodeHash:empty\n")
+			// s += fmt.Sprintf("CodeHash:empty\n")
 		}
 
 		if types.EmptyRootHash != minerSA.StorageRoot {
-			s += fmt.Sprintf("StorageRoot:%v\n", minerSA.StorageRoot)
+			fmt.Fprintf(f, "StorageRoot:%v\n", minerSA.StorageRoot)
+			// s += fmt.Sprintf("StorageRoot:%v\n", minerSA.StorageRoot)
 		} else {
-			s += fmt.Sprintf("StorageRoot:empty\n")
+			fmt.Fprintf(f, "StorageRoot:empty\n")
+			// s += fmt.Sprintf("StorageRoot:empty\n")
 		}
 
 		// s += fmt.Sprintf("  RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSimpleAccount(minerSA)))
-		fmt.Fprint(f, s)
+		// fmt.Fprint(f, s)
 		// s = fmt.Sprintln("Miner:", common.BlockMinerList[i].Addr, ",Balance:", common.BlockMinerList[i].Balance)
 		uncles := common.BlockUncleList[i]
 		if len(uncles) != 0 {
 			for _, uncle := range uncles {
-				s = fmt.Sprintf("^Uncle:%v\n", uncle.Addr)
-				s += fmt.Sprintf("Nonce:%v\n", uncle.Nonce)
-				s += fmt.Sprintf("Balance:%v\n", uncle.Balance)
+				fmt.Fprintf(f, "^Uncle:%v\n", uncle.Addr)
+				// s = fmt.Sprintf("^Uncle:%v\n", uncle.Addr)
+				fmt.Fprintf(f, "Nonce:%v\n", uncle.Nonce)
+				// s += fmt.Sprintf("Nonce:%v\n", uncle.Nonce)
+				fmt.Fprintf(f, "Balance:%v\n", uncle.Balance)
+				// s += fmt.Sprintf("Balance:%v\n", uncle.Balance)
 				if emptyCodeHash != uncle.Codehash {
-					s += fmt.Sprintf("Codehash:%v\n", uncle.Codehash)
+					fmt.Fprintf(f, "Codehash:%v\n", uncle.Codehash)
+					// s += fmt.Sprintf("Codehash:%v\n", uncle.Codehash)
 				} else {
-					s += fmt.Sprintf("CodeHash:empty\n")
+					fmt.Fprintf(f, "CodeHash:empty\n")
+					// s += fmt.Sprintf("CodeHash:empty\n")
 				}
 
 				if types.EmptyRootHash != uncle.StorageRoot {
-					s += fmt.Sprintf("StorageRoot:%v\n", uncle.StorageRoot)
+					fmt.Fprintf(f, "StorageRoot:%v\n", uncle.StorageRoot)
+					// s += fmt.Sprintf("StorageRoot:%v\n", uncle.StorageRoot)
 				} else {
-					s += fmt.Sprintf("StorageRoot:empty\n")
+					fmt.Fprintf(f, "StorageRoot:empty\n")
+					// s += fmt.Sprintf("StorageRoot:empty\n")
 				}
 
 				// s += fmt.Sprintf("  RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSimpleAccount(uncle)))
-				fmt.Fprint(f, s)
+				// fmt.Fprint(f, s)
 			}
 
 		}
@@ -1568,7 +1612,6 @@ func PrintTxSubstate(blocknumber, distance int) {
 	common.TxWriteList = make(map[common.Hash]common.SubstateAlloc)
 	common.BlockMinerList = make(map[int]common.SimpleAccount)
 	common.BlockUncleList = make(map[int][]common.SimpleAccount)
-
 }
 
 func contains(list []common.Address, addr common.Address) bool {
