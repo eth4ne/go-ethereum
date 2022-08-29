@@ -17,8 +17,6 @@
 package vm
 
 import (
-	"os"
-	"strconv"
 	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -689,9 +687,9 @@ func opCreate2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]
 	} else {
 		common.TxDetail[common.GlobalTxHash].InternalDeployedAddress = append(common.TxDetail[common.GlobalTxHash].InternalDeployedAddress, addr)
 	}
-	path := common.Path + "create2/Create2_" + strconv.Itoa(common.GlobalBlockNumber) + "_" + common.GlobalTxHash.Hex()
-	f, _ := os.Create(path)
-	defer f.Close()
+	// path := common.Path + "create2/Create2_" + strconv.Itoa(common.GlobalBlockNumber) + "_" + common.GlobalTxHash.Hex()
+	// f, _ := os.Create(path)
+	// defer f.Close()
 	//panic(0)
 	// Push item on the stack based on the returned error.
 	if suberr != nil {
