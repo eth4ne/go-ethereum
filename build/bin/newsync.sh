@@ -1,3 +1,4 @@
+#!/bin/sh
 echo "***WARNING***"
 echo "***WARNING***"
 echo "***WARNING***"

@@ -1378,7 +1378,7 @@ func PrintTxSubstate(blocknumber, distance int) {
 		}
 
 		// s := fmt.Sprintf("\n/Block:%v\n", i)
-		fmt.Fprintf(f, "\n/Block:%v", i)
+		fmt.Fprintf(f, "\n/Block:%v\n", i)
 		if txlist, exist := common.BlockTxList[i]; exist {
 			txcounter += len(common.BlockTxList[i])
 			for _, tx := range txlist {
@@ -1388,28 +1388,28 @@ func PrintTxSubstate(blocknumber, distance int) {
 
 				// jhkim: transaction type
 				if txDetail.Types == 1 {
-					fmt.Fprintf(f, "Type:Transfer")
+					fmt.Fprintf(f, "Type:Transfer\n")
 					// s += fmt.Sprintln("Type:Transfer")
 					// s += fmt.Sprintln("  common.TxInformation: Transfer or Contract call")
 				} else if txDetail.Types == 2 {
-					fmt.Fprintf(f, "Type:ContractDeploy")
+					fmt.Fprintf(f, "Type:ContractDeploy\n")
 					// s += fmt.Sprintln("Type:ContractDeploy")
 				} else if txDetail.Types == 3 {
-					fmt.Fprintf(f, "Type:ContractCall")
+					fmt.Fprintf(f, "Type:ContractCall\n")
 					// s += fmt.Sprintln("Type:ContractCall")
 				} else if txDetail.Types == 4 { // never enter this branch
-					fmt.Fprintf(f, "Type:Failed")
+					fmt.Fprintf(f, "Type:Failed\n")
 					// s += fmt.Sprintln("Type:Failed")
 					fmt.Println("txDetail.Types is 4, not changed from default", tx)
 					os.Exit(0)
 				} else if txDetail.Types == 41 {
-					fmt.Fprintf(f, "Type:Failed_transfer")
+					fmt.Fprintf(f, "Type:Failed_transfer\n")
 					// s += fmt.Sprintln("Type:Failed_transfer")
 				} else if txDetail.Types == 42 {
-					fmt.Fprintf(f, "Type:Failed_contractdeploy")
+					fmt.Fprintf(f, "Type:Failed_contractdeploy\n")
 					// s += fmt.Sprintln("Type:Failed_contractdeploy")
 				} else if txDetail.Types == 43 {
-					fmt.Fprintf(f, "Type:Failed_contractcall")
+					fmt.Fprintf(f, "Type:Failed_contractcall\n")
 					// s += fmt.Sprintln("Type:Failed_contractcall")
 				} else {
 					fmt.Println("wrong Tx type", tx)
@@ -1462,7 +1462,7 @@ func PrintTxSubstate(blocknumber, distance int) {
 							fmt.Fprintf(f, ".address:%v\n", addr)
 							// s += fmt.Sprintf(".address:%v\n", addr)
 						} else {
-							fmt.Fprintf(f, "Deployedaddress:%v\n", addr)
+							fmt.Fprintf(f, ".Deployedaddress:%v\n", addr)
 							// s += fmt.Sprintf("Deployedaddress:%v\n", addr)
 						}
 

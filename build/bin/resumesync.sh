@@ -1,3 +1,4 @@
+#!/bin/sh
 cd ../..
 make geth
 cd build/bin
