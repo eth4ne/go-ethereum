@@ -1406,13 +1406,14 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) []*types.Trans
 		if list == nil {
 			continue // Just in case someone calls with a non existing account
 		}
-		// Drop all transactions that are deemed too old (low nonce)
-		forwards := list.Forward(pool.currentState.GetNonce(addr))
-		for _, tx := range forwards {
-			hash := tx.Hash()
-			pool.all.Remove(hash)
-		}
-		log.Trace("Removed old queued transactions", "count", len(forwards))
+		// // Drop all transactions that are deemed too old (low nonce) // (joonha)
+		// forwards := list.Forward(pool.currentState.GetNonce(addr))
+		// for _, tx := range forwards {
+		// 	hash := tx.Hash()
+		// 	pool.all.Remove(hash)
+		// }
+		// log.Trace("Removed old queued transactions", "count", len(forwards))
+		
 		// Drop all transactions that are too costly (low balance or out of gas)
 		// Remove the logic to drop unpayable transactions
 		//drops, _ := list.Filter(pool.currentState.GetBalance(addr), pool.currentMaxGas)
@@ -1446,12 +1447,13 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) []*types.Trans
 			}
 			queuedRateLimitMeter.Mark(int64(len(caps)))
 		}
-		// Mark all the items dropped as removed
-		pool.priced.Removed(len(forwards) + /*len(drops) +*/ len(caps))
-		queuedGauge.Dec(int64(len(forwards) + /*len(drops) +*/ len(caps)))
-		if pool.locals.contains(addr) {
-			localGauge.Dec(int64(len(forwards) + /*len(drops) +*/ len(caps)))
-		}
+		// // Mark all the items dropped as removed // commneted out by (joonha)
+		// pool.priced.Removed(len(forwards) + /*len(drops) +*/ len(caps))
+		// queuedGauge.Dec(int64(len(forwards) + /*len(drops) +*/ len(caps)))
+		// if pool.locals.contains(addr) {
+		// 	localGauge.Dec(int64(len(forwards) + /*len(drops) +*/ len(caps)))
+		// }
+
 		// Delete the entire queue entry if it became empty.
 		if list.Empty() {
 			delete(pool.queue, addr)
@@ -1714,7 +1716,10 @@ func (as *accountSet) add(addr common.Address) {
 // addTx adds the sender of tx into the set.
 func (as *accountSet) addTx(tx *types.Transaction) {
 	if addr, err := types.Sender(as.signer, tx); err == nil {
+		// fmt.Println(">>> addTx is successfully done here (joonha)")
 		as.add(addr)
+	} else {
+		// fmt.Println(">>> addTx error (joonha)")
 	}
 }
 

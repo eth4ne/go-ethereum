@@ -65,6 +65,8 @@ func (n *ProofList) Get(key []byte) ([]byte, error) {
 type Empty struct{}
 
 var (
+	IsSecond = make(map[int64]int64) // block number to first or second time to appear // (joonha)
+
 	// snapshot ON/OFF option (joonha)
 	UsingActiveSnapshot bool // true: ON, false: OFF
 	UsingInactiveStorageSnapshot bool // true: ON, false: OFF

@@ -595,6 +595,9 @@ func (w *worker) mainLoop() {
 			}
 
 		case ev := <-w.txsCh:
+			
+			continue // (joonha)
+
 			// Apply transactions to the pending state if we're not sealing
 			//
 			// Note all transactions received may not be continuous with transactions
@@ -952,7 +955,9 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 		// If we don't have enough gas for any further transactions then we're done
 		if env.gasPool.Gas() < params.TxGas {
 			log.Trace("Not enough gas for further transactions", "have", env.gasPool, "want", params.TxGas)
-			break
+			// break
+		} else { // (joonha)
+			log.Trace("successfully levied gas")
 		}
 		
 		// Retrieve the next transaction and abort if all done
@@ -1165,6 +1170,14 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 // into the given sealing block. The transaction selection and ordering strategy can
 // be customized with the plugin in the future.
 func (w *worker) fillTransactions(interrupt *int32, env *environment) {
+
+	// (joonha)
+	bn := env.header.Number.Int64()
+	if common.IsSecond[bn] == 0 { // first
+		common.IsSecond[bn] = 1
+		return 
+	}
+	
 	// Split the pending transactions into locals and remotes
 	// fmt.Println("split the pending transactions into locals and remotes") // (jmlee)
 	// Fill the block with all available pending transactions.
