@@ -1357,8 +1357,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 
 func PrintTxSubstate(blocknumber, distance int) {
 	ss := fmt.Sprintf("Write TxSubstate %d-%d in txt file", blocknumber-distance, blocknumber)
-	filepath := common.Path + "TxSubstate" + strconv.FormatInt(int64(blocknumber-distance+1), 10) + "-" + strconv.FormatInt(int64(blocknumber), 10) + ".txt"
-	// filepath := "/shared/jhkim/TxSubstate" + strconv.FormatInt(int64(blocknumber-distance+1), 10) + "-" + strconv.FormatInt(int64(blocknumber), 10) + ".txt"
+	filepath := common.Path + "TxSubstate" + fmt.Sprintf("%08d", blocknumber-distance+1) + "-" + fmt.Sprintf("%08d", blocknumber) + ".txt"
 
 	f, err := os.Create(filepath)
 	if err != nil {
@@ -1454,10 +1453,15 @@ func PrintTxSubstate(blocknumber, distance int) {
 				writelist := common.TxWriteList[tx]
 				// s = fmt.Sprintln("  WriteList")
 				fmt.Fprintln(f, "#WriteList")
+				for _, v := range txDetail.DeletedAddress {
+					fmt.Fprintf(f, ".deletedaddress:%v\n", v)
+				}
+
 				for addr, stateAccount := range writelist {
 
 					if stateAccount != nil {
 						// s = ""
+
 						if !contains(txDetail.InternalDeployedAddress, addr) {
 							fmt.Fprintf(f, ".address:%v\n", addr)
 							// s += fmt.Sprintf(".address:%v\n", addr)
@@ -1529,6 +1533,9 @@ func PrintTxSubstate(blocknumber, distance int) {
 
 						// fmt.Fprint(f, s)
 						delete(common.TxWriteList[tx], addr)
+
+					} else {
+						fmt.Fprintf(f, ".deletedaddress:%v\n", addr)
 					}
 				}
 				delete(common.TxWriteList, tx)
@@ -1540,61 +1547,62 @@ func PrintTxSubstate(blocknumber, distance int) {
 		}
 
 		// s += fmt.Sprintln("##########################################################################")
-		minerSA := common.BlockMinerList[i]
-		fmt.Fprintf(f, "$Miner:%v\n", minerSA.Addr)
-		// s = fmt.Sprintf("$Miner:%v\n", minerSA.Addr)
-		fmt.Fprintf(f, "Nonce:%v\n", minerSA.Nonce)
-		// s += fmt.Sprintf("Nonce:%v\n", minerSA.Nonce)
-		fmt.Fprintf(f, "Balance:%v\n", minerSA.Balance)
-		// s += fmt.Sprintf("Balance:%v\n", minerSA.Balance)
-		if emptyCodeHash != minerSA.Codehash {
-			fmt.Fprintf(f, "Codehash:%v\n", minerSA.Codehash)
-			// s += fmt.Sprintf("Codehash:%v\n", minerSA.Codehash)
-		} else {
-			fmt.Fprintf(f, "CodeHash:empty\n")
-			// s += fmt.Sprintf("CodeHash:empty\n")
-		}
+		if minerSA, exist := common.BlockMinerList[i]; exist {
+			fmt.Fprintf(f, "$Miner:%v\n", minerSA.Addr)
+			// s = fmt.Sprintf("$Miner:%v\n", minerSA.Addr)
+			fmt.Fprintf(f, "Nonce:%v\n", minerSA.Nonce)
+			// s += fmt.Sprintf("Nonce:%v\n", minerSA.Nonce)
+			fmt.Fprintf(f, "Balance:%v\n", minerSA.Balance)
+			// s += fmt.Sprintf("Balance:%v\n", minerSA.Balance)
+			if emptyCodeHash != minerSA.Codehash {
+				fmt.Fprintf(f, "Codehash:%v\n", minerSA.Codehash)
+				// s += fmt.Sprintf("Codehash:%v\n", minerSA.Codehash)
+			} else {
+				fmt.Fprintf(f, "CodeHash:empty\n")
+				// s += fmt.Sprintf("CodeHash:empty\n")
+			}
 
-		if types.EmptyRootHash != minerSA.StorageRoot {
-			fmt.Fprintf(f, "StorageRoot:%v\n", minerSA.StorageRoot)
-			// s += fmt.Sprintf("StorageRoot:%v\n", minerSA.StorageRoot)
-		} else {
-			fmt.Fprintf(f, "StorageRoot:empty\n")
-			// s += fmt.Sprintf("StorageRoot:empty\n")
+			if types.EmptyRootHash != minerSA.StorageRoot {
+				fmt.Fprintf(f, "StorageRoot:%v\n", minerSA.StorageRoot)
+				// s += fmt.Sprintf("StorageRoot:%v\n", minerSA.StorageRoot)
+			} else {
+				fmt.Fprintf(f, "StorageRoot:empty\n")
+				// s += fmt.Sprintf("StorageRoot:empty\n")
+			}
 		}
-
 		// s += fmt.Sprintf("  RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSimpleAccount(minerSA)))
 		// fmt.Fprint(f, s)
 		// s = fmt.Sprintln("Miner:", common.BlockMinerList[i].Addr, ",Balance:", common.BlockMinerList[i].Balance)
-		uncles := common.BlockUncleList[i]
-		if len(uncles) != 0 {
-			for _, uncle := range uncles {
-				fmt.Fprintf(f, "^Uncle:%v\n", uncle.Addr)
-				// s = fmt.Sprintf("^Uncle:%v\n", uncle.Addr)
-				fmt.Fprintf(f, "Nonce:%v\n", uncle.Nonce)
-				// s += fmt.Sprintf("Nonce:%v\n", uncle.Nonce)
-				fmt.Fprintf(f, "Balance:%v\n", uncle.Balance)
-				// s += fmt.Sprintf("Balance:%v\n", uncle.Balance)
-				if emptyCodeHash != uncle.Codehash {
-					fmt.Fprintf(f, "Codehash:%v\n", uncle.Codehash)
-					// s += fmt.Sprintf("Codehash:%v\n", uncle.Codehash)
-				} else {
-					fmt.Fprintf(f, "CodeHash:empty\n")
-					// s += fmt.Sprintf("CodeHash:empty\n")
+		if uncles, exist := common.BlockUncleList[i]; exist {
+			if len(uncles) != 0 {
+				for _, uncle := range uncles {
+					fmt.Fprintf(f, "^Uncle:%v\n", uncle.Addr)
+					// s = fmt.Sprintf("^Uncle:%v\n", uncle.Addr)
+					fmt.Fprintf(f, "Nonce:%v\n", uncle.Nonce)
+					// s += fmt.Sprintf("Nonce:%v\n", uncle.Nonce)
+					fmt.Fprintf(f, "Balance:%v\n", uncle.Balance)
+					// s += fmt.Sprintf("Balance:%v\n", uncle.Balance)
+					if emptyCodeHash != uncle.Codehash {
+						fmt.Fprintf(f, "Codehash:%v\n", uncle.Codehash)
+						// s += fmt.Sprintf("Codehash:%v\n", uncle.Codehash)
+					} else {
+						fmt.Fprintf(f, "CodeHash:empty\n")
+						// s += fmt.Sprintf("CodeHash:empty\n")
+					}
+
+					if types.EmptyRootHash != uncle.StorageRoot {
+						fmt.Fprintf(f, "StorageRoot:%v\n", uncle.StorageRoot)
+						// s += fmt.Sprintf("StorageRoot:%v\n", uncle.StorageRoot)
+					} else {
+						fmt.Fprintf(f, "StorageRoot:empty\n")
+						// s += fmt.Sprintf("StorageRoot:empty\n")
+					}
+
+					// s += fmt.Sprintf("  RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSimpleAccount(uncle)))
+					// fmt.Fprint(f, s)
 				}
 
-				if types.EmptyRootHash != uncle.StorageRoot {
-					fmt.Fprintf(f, "StorageRoot:%v\n", uncle.StorageRoot)
-					// s += fmt.Sprintf("StorageRoot:%v\n", uncle.StorageRoot)
-				} else {
-					fmt.Fprintf(f, "StorageRoot:empty\n")
-					// s += fmt.Sprintf("StorageRoot:empty\n")
-				}
-
-				// s += fmt.Sprintf("  RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSimpleAccount(uncle)))
-				// fmt.Fprint(f, s)
 			}
-
 		}
 		// s += fmt.Sprintln("##########################################################################")
 		// fmt.Fprintln(f, s)

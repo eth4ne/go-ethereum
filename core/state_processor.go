@@ -160,7 +160,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 
 }
 
-//jhkim: rlp encoding of common.SubStateAccount
+// jhkim: rlp encoding of common.SubStateAccount
 func RLPEncodeSubstateAccount(sa common.SubstateAccount) []byte {
 	var legacyAccount types.StateAccount
 
@@ -282,8 +282,9 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	// If the transaction created a contract, store the creation address in the receipt.
 	if msg.To() == nil {
 		receipt.ContractAddress = crypto.CreateAddress(evm.TxContext.Origin, tx.Nonce())
+		common.TxDetail[tx.Hash()].DeployedContractAddress = receipt.ContractAddress
 		if receipt.Status == types.ReceiptStatusSuccessful { //jhkim
-			common.TxDetail[tx.Hash()].DeployedContractAddress = receipt.ContractAddress
+
 			if statedb.GetCode(receipt.ContractAddress) != nil {
 				common.TxWriteList[tx.Hash()][receipt.ContractAddress].Code = statedb.GetCode(receipt.ContractAddress)
 			}
@@ -328,6 +329,7 @@ func WriteTxDetail(tx *types.Transaction, msg types.Message, number *big.Int, st
 	// txInform.InternalCA = []common.Address{}
 	txInform.DeployedContractAddress = common.Address{}
 	txInform.InternalDeployedAddress = make([]common.Address, 0)
+	txInform.DeletedAddress = make([]common.Address, 0)
 	// txInform.AccountBalance = map[common.Address]uint64{}
 
 	if tx.To() == nil {

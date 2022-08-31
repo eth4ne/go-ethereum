@@ -378,7 +378,7 @@ func (s *StateDB) StorageTrie(addr common.Address) Trie {
 	return cpy.getTrie(s.db)
 }
 
-//jhkim
+// jhkim
 func (s *StateDB) GetStorageTrieHash(addr common.Address) common.Hash {
 	stateObject := s.getStateObject(addr)
 	if stateObject == nil {
@@ -462,6 +462,7 @@ func (s *StateDB) SetState(addr common.Address, key, value common.Hash) {
 			// common.TxWriteList[common.GlobalTxHash][addr].Storage = []map[common.Hash]common.Hash{tmp}
 
 			// // SubstateAccount.Storage map[Hash]Hash version
+
 			common.TxWriteList[common.GlobalTxHash][addr].Storage = map[common.Hash]common.Hash{key: value}
 		} else {
 			// // SubstateAccount.Storage []map[Hash]Hash version
@@ -540,6 +541,9 @@ func (s *StateDB) deleteStateObject(obj *stateObject) {
 	}
 	// Delete the account from the trie
 	addr := obj.Address()
+	// fmt.Println("DeleteStateObject/", common.GlobalTxHash, addr)
+	common.TxDetail[common.GlobalTxHash].DeletedAddress = append(common.TxDetail[common.GlobalTxHash].DeletedAddress, addr)
+	// fmt.Println("  common.TxDetail[common.GlobalTxHash].DeletedAddress", common.TxDetail[common.GlobalTxHash].DeletedAddress)
 	if err := s.trie.TryDelete(addr[:]); err != nil {
 		s.setError(fmt.Errorf("deleteStateObject (%x) error: %v", addr[:], err))
 	}
@@ -569,8 +573,8 @@ func (s *StateDB) getStateObject(addr common.Address) *stateObject {
 		s.ResearchPreAlloc[addr] = research.NewSubstateAccount(0, big.NewInt(0), nil) // jhkim: make new account's substate account
 	}
 	if common.GlobalBlockNumber > 0 && common.GlobalTxHash != common.HexToHash("0x0") {
-		common.TxWriteList[common.GlobalTxHash][addr] = common.NewSubstateAccount(0, big.NewInt(0), nil)
 
+		common.TxWriteList[common.GlobalTxHash][addr] = common.NewSubstateAccount(0, big.NewInt(0), nil)
 	}
 
 	return nil
@@ -693,8 +697,8 @@ func (s *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) 
 // CreateAccount is called during the EVM CREATE operation. The situation might arise that
 // a contract does the following:
 //
-//   1. sends funds to sha(account ++ (nonce + 1))
-//   2. tx_create(sha(account ++ nonce)) (note that this gets the address of 1)
+//  1. sends funds to sha(account ++ (nonce + 1))
+//  2. tx_create(sha(account ++ nonce)) (note that this gets the address of 1)
 //
 // Carrying over the balance ensures that Ether doesn't disappear.
 func (s *StateDB) CreateAccount(addr common.Address) {
@@ -1049,16 +1053,36 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 	}
 	usedAddrs := make([][]byte, 0, len(s.stateObjectsPending))
 	// for addr, lst := range s.stateObjectsPending {
+	tmp := make(common.SubstateAlloc)
+	// tmp := common.TxWriteList[common.GlobalTxHash]
 	for addr := range s.stateObjectsPending {
 		if obj := s.stateObjects[addr]; obj.deleted {
 			s.deleteStateObject(obj)
 			s.AccountDeleted += 1
 		} else {
+			if common.GlobalTxHash != common.HexToHash("0x0") && common.GlobalBlockNumber > 0 {
+				tmp[addr] = common.TxWriteList[common.GlobalTxHash][addr]
+			}
+			// if common.GlobalTxHash == common.HexToHash("0xe310dde4735aa6ab90d69910aacdce77ad399db3f94a5b4bba93fa01df353a08") {
+			// 	fmt.Println("68460: state object update:", addr)
+			// 	fmt.Println(obj.Address(), obj.Balance(), obj.CodeHash(), obj.trie)
+			// 	fmt.Println()
+			// }
 			s.updateStateObject(obj)
 			s.AccountUpdated += 1
 		}
 
 		usedAddrs = append(usedAddrs, common.CopyBytes(addr[:])) // Copy needed for closure
+	}
+	if common.GlobalTxHash != common.HexToHash("0x0") && common.GlobalBlockNumber > 0 {
+		delete(common.TxWriteList, common.GlobalTxHash)
+		common.TxWriteList[common.GlobalTxHash] = tmp
+
+		// if common.GlobalTxHash == common.HexToHash("0xe310dde4735aa6ab90d69910aacdce77ad399db3f94a5b4bba93fa01df353a08") {
+		// 	fmt.Println("68460: state object update tmp:", tmp)
+		// 	fmt.Println("68460: state object update :", common.TxWriteList[common.GlobalTxHash])
+		// }
+
 	}
 	if prefetcher != nil {
 		prefetcher.used(s.originalRoot, usedAddrs)

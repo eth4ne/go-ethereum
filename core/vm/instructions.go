@@ -596,6 +596,16 @@ func opGas(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte
 	return nil, nil
 }
 
+func deletebyKey(key common.Address, lst []common.Address) []common.Address {
+	newlst := []common.Address{}
+	for i, v := range lst {
+		if v == key {
+			newlst = append(lst[:i], lst[i+1:]...)
+		}
+	}
+	return newlst
+}
+
 // jhkim: contract creates new account
 func opCreate(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	if interpreter.readOnly {
@@ -630,14 +640,20 @@ func opCreate(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 	} else {
 		common.TxDetail[common.GlobalTxHash].InternalDeployedAddress = append(common.TxDetail[common.GlobalTxHash].InternalDeployedAddress, addr)
 	}
-	//panic(0)
+
 	// Push item on the stack based on the returned error. If the ruleset is
 	// homestead we must check for CodeStoreOutOfGasError (homestead only
 	// rule) and treat as an error, if the ruleset is frontier we must
 	// ignore this error and pretend the operation was successful.
 	if interpreter.evm.chainRules.IsHomestead && suberr == ErrCodeStoreOutOfGas {
+		deletebyKey(addr, common.TxDetail[common.GlobalTxHash].InternalDeployedAddress)
+		delete(common.TxWriteList[common.GlobalTxHash], addr)
+		// fmt.Println(common.GlobalBlockNumber, "delete1", addr, "from internalDeployed address and txwritelist")
 		stackvalue.Clear()
 	} else if suberr != nil && suberr != ErrCodeStoreOutOfGas {
+		deletebyKey(addr, common.TxDetail[common.GlobalTxHash].InternalDeployedAddress)
+		delete(common.TxWriteList[common.GlobalTxHash], addr)
+		// fmt.Println(common.GlobalBlockNumber, "delete2", addr, "from internalDeployed address and txwritelist")
 		stackvalue.Clear()
 	} else {
 		stackvalue.SetBytes(addr.Bytes())
@@ -693,6 +709,9 @@ func opCreate2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]
 	//panic(0)
 	// Push item on the stack based on the returned error.
 	if suberr != nil {
+		deletebyKey(addr, common.TxDetail[common.GlobalTxHash].InternalDeployedAddress)
+		delete(common.TxWriteList[common.GlobalTxHash], addr)
+		// fmt.Println(common.GlobalBlockNumber, "delete3", addr, "from internalDeployed address and txwritelist")
 		stackvalue.Clear()
 	} else {
 		stackvalue.SetBytes(addr.Bytes())
@@ -770,6 +789,7 @@ func opCallCode(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([
 	}
 
 	ret, returnGas, err := interpreter.evm.CallCode(scope.Contract, toAddr, args, gas, bigVal)
+
 	if err != nil {
 		temp.Clear()
 	} else {

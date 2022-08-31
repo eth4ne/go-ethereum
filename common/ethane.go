@@ -7,8 +7,8 @@ import (
 	"sync"
 )
 
-var Path = "/home/jhkim/go/src/github.com/ethereum/go-ethereum-substate/txDetail/" // used absolute path
-// var Path = "/shared/jhkim/" // used absolute path
+// var Path = "/home/jhkim/go/src/github.com/ethereum/go-ethereum-substate/txDetail/" // used absolute path
+var Path = "/shared/jhkim/" // used absolute path
 var (
 	// GlobalDistance                int     = 0
 	GlobalTxHash      Hash    = HexToHash("0x0")
@@ -53,6 +53,7 @@ type TxInformation struct {
 	Types                   int
 	DeployedContractAddress Address
 	InternalDeployedAddress []Address
+	DeletedAddress          []Address
 }
 
 // SubstateAccount is modification of GenesisAccount in core/genesis.go
