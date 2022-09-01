@@ -383,6 +383,71 @@ def strategy_heuristic_splitShortNodes(flushEpoch, attackNumPerBlock, accNumToIn
 
 
 
+# heuristic 2: fill all full node's child hashes
+def strategy_heuristic_fillFullNodes():
+    # initialize
+    reset()
+    updateCount = 0
+    startTime = datetime.now()
+    
+    # set options
+    flushEpoch = 400
+    doRealComputation = False
+    totalAccNumToInsert = 1000000
+    maxPrefixLen = 1
+    logFileName = "strategy_heuristic_fillFullNodes" + "_" + str(maxPrefixLen) + "_" + str(flushEpoch) + "_" + str(totalAccNumToInsert) + ".txt"
+
+    # insert accounts to make fullfilled full nodes (i.e., have 16 children)
+    heuristicInsertNum = int(min(16**maxPrefixLen, totalAccNumToInsert))
+    print("heuristicInsertNum:", heuristicInsertNum)    
+    for i in range(heuristicInsertNum):
+        prefix = hex(i)[2:] # delete 0x
+        prefix = prefix.zfill(maxPrefixLen) # zero padding
+        # print("prefix:", prefix)
+        if doRealComputation:
+            # real computation
+            shortestPrefixes = prefix
+            addr, addrHash = findAddrHashWithPrefix(shortestPrefixes)
+        else:
+            # sudo computation
+            addrHash = prefix + makeRandHashLengthHexString()[len(prefix):]
+        # print("prefix:", prefix, "/ addrHash:", addrHash)
+
+        updateTrieSimple(addrHash)
+        updateCount += 1
+        if updateCount % flushEpoch == 0:
+            print("flush! inserted", '{:,}'.format(i+1), "accounts / elapsed time:", datetime.now()-startTime)
+            flush()
+    
+    # show intermediate result
+    inspectTrie()
+    inspectDB()
+
+    # insert random accounts
+    randomInsertNum = totalAccNumToInsert - heuristicInsertNum
+    print("randomInsertNum:", randomInsertNum)
+    for i in range(randomInsertNum):
+        updateTrieSimple(makeRandHashLengthHexString())
+        updateCount += 1
+        if updateCount % flushEpoch == 0:
+            print("flush! inserted", '{:,}'.format(i+1), "accounts / elapsed time:", datetime.now()-startTime)
+            flush()
+    flush()
+
+    # show final result
+    print("strategy_heuristic_fillFullNodes() finished")
+    print("total elapsed time:", datetime.now()-startTime)
+    print("max prefix len:", maxPrefixLen)
+    print("heuristic inserts:", heuristicInsertNum, "/ random inserts:", randomInsertNum)
+    # printCurrentTrie()
+    inspectTrie()
+    inspectDB()
+    printAllStats(logFileName)
+
+
+
+
+
 # just insert random keys
 def strategy_random(flushEpoch, totalAccNumToInsert):
     # initialize
