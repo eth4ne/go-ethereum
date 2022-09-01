@@ -11,8 +11,9 @@ db_host = 'localhost'
 db_user = 'ethereum'
 db_pass = '1234' # fill in the MariaDB/MySQL password.
 db_name = 'ethereum' # block 0 ~ 1,000,000
-conn_mariadb = lambda host, user, password, database: pymysql.connect(host=host, user=user, password=password, database=database, cursorclass=pymysql.cursors.DictCursor)
-conn = conn_mariadb(db_host, db_user, db_pass, db_name)
+db_port = 3306 # 3306: mariadb default
+conn_mariadb = lambda host, port, user, password, database: pymysql.connect(host=host, port=port, user=user, password=password, database=database, cursorclass=pymysql.cursors.DictCursor)
+conn = conn_mariadb(db_host, db_port, db_user, db_pass, db_name)
 cursor = conn.cursor()
 
 # simulator server IP address
