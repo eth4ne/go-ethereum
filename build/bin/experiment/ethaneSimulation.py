@@ -31,26 +31,72 @@ client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 # connect to the server
 client_socket.connect((SERVER_IP, SERVER_PORT))
 
+# caching data from db
+cache_address = {}
+cache_slot = {}
+
+# read block header
+def select_block_header(cursor, blocknumber):
+    sql = "SELECT * FROM blocks WHERE `number`=%s;"
+    cursor.execute(sql, (blocknumber,))
+    result = cursor.fetchall()
+    return result[0]
+
+# read tx hash of block [blocknumber]'s [txindex]^th tx
+def select_tx_hash(cursor, blocknumber, txindex):
+    sql = "SELECT * FROM transactions WHERE `blocknumber`=%s AND `transactionindex`=%s;"
+    cursor.execute(sql, (blocknumber, txindex))
+    result = cursor.fetchall()
+    return result
+
+# read address of address_id
+def select_address(cursor, addressid):
+    # sql = "SELECT * FROM addresses WHERE `id`=%s;"
+    # cursor.execute(sql, (addressid,))
+    # result = cursor.fetchall()
+    # return result[0]['address'].hex()
+    if addressid in cache_address:
+        return cache_address[addressid]
+    sql = "SELECT * FROM addresses WHERE `id`=%s;"
+    cursor.execute(sql, (addressid,))
+    result = cursor.fetchall()
+    cache_address[addressid] = result[0]['address'].hex()
+    return cache_address[addressid]
+
+# read slot of address_id
+def select_slot(cursor, slotid):
+    # sql = "SELECT * FROM slots WHERE `id`=%s;"
+    # cursor.execute(sql, (slotid,))
+    # result = cursor.fetchall()
+    # return result[0]['slot'].hex()
+    if slotid in cache_slot:
+        return cache_slot[slotid]
+    sql = "SELECT * FROM slots WHERE `id`=%s;"
+    cursor.execute(sql, (slotid,))
+    result = cursor.fetchall()
+    cache_slot[slotid] = result[0]['slot'].hex()
+    return cache_slot[slotid]
+
 # read txs in this block from DB
 def select_txs(cursor, blocknumber):
-  sql = "SELECT * FROM `transactions` WHERE `blocknumber`=%s;"
-  cursor.execute(sql, (blocknumber,))
-  result = cursor.fetchall()
-  return result
+    sql = "SELECT * FROM `transactions` WHERE `blocknumber`=%s;"
+    cursor.execute(sql, (blocknumber,))
+    result = cursor.fetchall()
+    return result
 
 # read accounts r/w list in this block from DB
 def select_account_read_write_list(cursor, blocknumber):
-  sql = "SELECT * FROM `states` WHERE `blocknumber`=%s;"
-  cursor.execute(sql, (blocknumber,))
-  result = cursor.fetchall()
-  return result
+    sql = "SELECT * FROM `states` WHERE `blocknumber`=%s;"
+    cursor.execute(sql, (blocknumber,))
+    result = cursor.fetchall()
+    return result
 
 # read storage trie slots r/w list in this block from DB
-def select_slot_read_write_list(cursor, stateid):
-  sql = "SELECT * FROM `slotlogs` WHERE `stateid`=%s;"
-  cursor.execute(sql, (stateid,))
-  result = cursor.fetchall()
-  return result
+def select_slot_write_list(cursor, stateid):
+    sql = "SELECT * FROM `slotlogs` WHERE `stateid`=%s;"
+    cursor.execute(sql, (stateid,))
+    result = cursor.fetchall()
+    return result
 
 # get current block number (i.e., # of flushes)
 def getBlockNum():
@@ -176,6 +222,17 @@ def updateTrie(nonce, balance, root, codeHash, addr):
     updateResult = data.decode()
     # print("updateTrie result:", updateResult)
     return updateResult
+
+# delete account of this address
+def updateTrieDelete(addr):
+    cmd = str("updateTrieDelete")
+    cmd += str(",")
+    cmd += str(addr)
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    deleteResult = data.decode()
+    # print("updateTrieDelete result:", deleteResult)
+    return deleteResult
 
 # update stroage trie 
 def updateStorageTrie(contractAddr, slot, value):
@@ -450,8 +507,10 @@ def simulateEthereum(startBlockNum, endBlockNum):
     # set log file name
     logFileName = "ethereum_simulate_" + str(startBlockNum) + "_" + str(endBlockNum) + ".txt"
 
+    currentStorageRoot = ""
     # insert random accounts
     for blockNum in range(startBlockNum, endBlockNum+1):
+        print("do block", blockNum ,"\n")
         # get read/write list from DB
         rwList = select_account_read_write_list(cursor, blockNum)
         
@@ -459,13 +518,25 @@ def simulateEthereum(startBlockNum, endBlockNum):
         for item in rwList:
             # print("item:", item)
             if item['type'] % 2 == 1:
+                # print("item:", item)
                 writeCount += 1
 
-                addr = item['address'].hex()
+                addrId = item['address_id']
+                addr = select_address(cursor, addrId)
+
+                if item['type'] == 63:
+                    # delete this address
+                    updateTrieDelete(addr)
+                    continue
+
                 nonce = item['nonce']
                 balance = item['balance']
-                codeHash = item['codehash'].hex()
-                storageRoot = item['storageroot'].hex()
+                codeHash = emptyCodeHash
+                storageRoot = emptyRoot
+                if item['codehash'] != None:
+                    codeHash = item['codehash'].hex()
+                if item['storageroot'] != None:
+                    storageRoot = item['storageroot'].hex()
 
                 # print("in block", blockNum, ", find write item", writeCount)
                 # print("write account ->")
@@ -475,6 +546,46 @@ def simulateEthereum(startBlockNum, endBlockNum):
                 # print("  codeHash:", codeHash)
                 # print("  storageRoot:", storageRoot)
                 # print("\n")
+
+                # update storage trie
+                slotWriteList = select_slot_write_list(cursor, item['id'])
+                if len(slotWriteList) != 0:
+                    # print("item:", item)
+                    # print("txHash:", item['txhash'].hex())
+                    for slotWrite in slotWriteList:
+                        contractAddrId = slotWrite['address_id']
+                        contractAddress = select_address(cursor, contractAddrId)
+
+                        slotId = slotWrite['slot_id']
+                        slot = select_slot(cursor, slotId)
+
+                        slotValue = []
+                        # slotValue = 0x0 # 
+                        if slotWrite['slotvalue'] != None:
+                            slotValue = slotWrite['slotvalue'].hex()
+
+                        # print("item:", slotWrite)
+                        # print("contractAddress:", contractAddress)
+                        # print("slot:", slot)
+                        # print("slotValue:", slotValue)
+                        # print("\n")
+                        currentStorageRoot = updateStorageTrie(contractAddress, slot, slotValue)
+
+                    # check current storage trie is made correctly
+                    if currentStorageRoot[2:] != storageRoot:
+                        print("blocknum:", blockNum)
+                        # print("txindex:", item['txindex'])
+                        # print("tx hash:", select_tx_hash(cursor, blockNum, item['txindex']))
+                        print("item:", item)
+                        print("  addr:", addr)
+                        print("  nonce:", nonce)
+                        print("  balance:", balance)
+                        print("  codeHash:", codeHash)
+                        print("  storageRoot:", storageRoot)
+                        print(currentStorageRoot[2:], "vs", storageRoot)
+                        sys.exit()
+                
+                # update state trie
                 updateTrie(nonce, balance, storageRoot, codeHash, addr)
             else:
                 readCount += 1
@@ -483,6 +594,17 @@ def simulateEthereum(startBlockNum, endBlockNum):
         # flush
         flush()
         print("flush finished -> current block num:", blockNum)
+
+        # check current trie is made correctly
+        stateRootInBlockHeader = select_block_header(cursor, blockNum)['stateroot'].hex()
+        currentStateRoot = getTrieRootHash()[2:]
+        if currentStateRoot != stateRootInBlockHeader:
+            print("@@fail")
+            print(currentStateRoot, "vs", stateRootInBlockHeader)
+            sys.exit()
+        else:
+            print("@@success")
+            print(currentStateRoot, "vs", stateRootInBlockHeader)
 
     # show final result
     print("simulateEthereum() finished -> from block", startBlockNum, "to", endBlockNum)
@@ -572,7 +694,7 @@ if __name__ == "__main__":
     # printEthaneState()
 
     # ex2. replay txs in Ethereum for Ethereum
-    # simulateEthereum(1, 10000)
+    simulateEthereum(1, 10000)
 
     # ex3. replay txs in Ethereum for Ethane
     # simulateEthane(1, 1000000, 40320, 40320, 40320)

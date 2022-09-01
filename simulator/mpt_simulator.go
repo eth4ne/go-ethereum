@@ -1211,6 +1211,15 @@ func connHandler(conn net.Conn) {
 
 				response = []byte("success")
 
+			case "updateTrieDelete":
+				// get params
+				// fmt.Println("execute updateTrieDelete()")
+				addr := common.HexToAddress(params[1])
+				addrHash := crypto.Keccak256Hash(addr[:])
+				normTrie.TryDelete(addrHash[:])
+
+				response = []byte("success")
+
 			case "updateStorageTrie":
 				// get params
 				// fmt.Println("execute updateStorageTrie()")
