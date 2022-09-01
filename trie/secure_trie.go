@@ -217,3 +217,8 @@ func (t *SecureTrie) getSecKeyCache() map[string][]byte {
 	}
 	return t.secKeyCache
 }
+
+// TrieDB returns its database (jmlee)
+func (t *SecureTrie) TrieDB() *Database {
+	return t.trie.db
+}

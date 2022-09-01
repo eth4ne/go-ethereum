@@ -177,6 +177,21 @@ def updateTrie(nonce, balance, root, codeHash, addr):
     # print("updateTrie result:", updateResult)
     return updateResult
 
+# update stroage trie 
+def updateStorageTrie(contractAddr, slot, value):
+    cmd = str("updateStorageTrie")
+    cmd += str(",")
+    cmd += str(contractAddr)
+    cmd += str(",")
+    cmd += str(slot)
+    cmd += str(",")
+    cmd += str(value)
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    currentStorageRoot = data.decode()
+    # print("updateStorageTrie result:", currentStorageRoot)
+    return currentStorageRoot
+
 # reset simulator
 def reset():
     cmd = str("reset")

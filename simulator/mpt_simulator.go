@@ -73,6 +73,10 @@ var (
 	normTrie *trie.Trie
 	// secure state trie
 	secureTrie *trie.SecureTrie
+	// storage tries which have unflushed trie updates
+	// dirtyStorageTries[contractAddr] = opened storage trie
+	// (reset dirtyStorageTries after flush)
+	dirtyStorageTries = make(map[common.Address]*trie.SecureTrie)
 
 	// same as SecureTrie.hashKeyBuf (to mimic SecureTrie)
 	hashKeyBuf = make([]byte, common.HashLength)
@@ -126,7 +130,9 @@ func reset() {
 
 	// reset db stats
 	common.TotalNodeStat.Reset()
+	common.TotalStorageNodeStat.Reset()
 	common.NewNodeStat.Reset()
+	common.NewStorageNodeStat.Reset()
 
 	common.TrieNodeInfos = make(map[common.Hash]common.NodeInfo)
 	common.TrieNodeInfosDirty = make(map[common.Hash]common.NodeInfo)
@@ -235,6 +241,34 @@ func rollbackToBlock(targetBlockNum uint64) bool {
 			delete(common.TrieNodeInfos, nodeHash)
 		}
 
+		// TODO(jmlee): split FlushedNodeHashes -> FlushedNodeHashes + FlushedStorageNodeHashes
+		// for _, nodeHash := range blockInfo.FlushedStorageNodeHashes {
+		// 	// delete from disk
+		// 	err := diskdb.Delete(nodeHash.Bytes())
+		// 	if err != nil {
+		// 		fmt.Println("diskdb.Delete error:", err)
+		// 	}
+
+		// 	// get node info
+		// 	nodeInfo, _ := common.TrieNodeInfos[nodeHash]
+		// 	nodeSize := uint64(nodeInfo.Size)
+
+		// 	// update db stats
+		// 	if nodeInfo.IsLeafNode {
+		// 		common.TotalStorageNodeStat.LeafNodesNum--
+		// 		common.TotalStorageNodeStat.LeafNodesSize -= nodeSize
+		// 	} else if nodeInfo.IsShortNode {
+		// 		common.TotalStorageNodeStat.ShortNodesNum--
+		// 		common.TotalStorageNodeStat.ShortNodesSize -= nodeSize
+		// 	} else {
+		// 		common.TotalStorageNodeStat.FullNodesNum--
+		// 		common.TotalStorageNodeStat.FullNodesSize -= nodeSize
+		// 	}
+
+		// 	// delete from TrieNodeInfos
+		// 	delete(common.TrieNodeInfos, nodeHash)
+		// }
+
 		// delete block
 		delete(common.Blocks, blockNum)
 		common.CurrentBlockNum--
@@ -248,10 +282,12 @@ func rollbackToBlock(targetBlockNum uint64) bool {
 
 	// reset new trie nodes info
 	common.NewNodeStat.Reset()
+	common.NewStorageNodeStat.Reset()
 
 	// print db stats
 	totalNodesNum, totalNodesSize := common.TotalNodeStat.GetSum()
-	fmt.Println("  rollback finished -> total trie nodes:", totalNodesNum, "/ db size:", totalNodesSize)
+	totalStorageNodesNum, totalStorageNodesSize := common.TotalStorageNodeStat.GetSum()
+	fmt.Println("  rollback finished -> total trie nodes:", totalNodesNum+totalStorageNodesNum, "/ db size:", totalNodesSize+totalStorageNodesSize)
 
 	return true
 }
@@ -332,10 +368,21 @@ func flushTrieNodes() {
 
 	// reset db stats before flush
 	common.NewNodeStat.Reset()
+	common.NewStorageNodeStat.Reset()
 
-	// flush trie nodes
+	// flush state trie nodes
+	common.FlushStorageTries = false
 	normTrie.Commit(nil)
 	normTrie.TrieDB().Commit(normTrie.Hash(), false, nil)
+
+	// flush storage trie nodes
+	common.FlushStorageTries = true
+	for _, storageTrie := range dirtyStorageTries {
+		storageTrie.Commit(nil)
+		storageTrie.TrieDB().Commit(storageTrie.Hash(), false, nil)
+	}
+	// reset dirty storage tries after flush
+	dirtyStorageTries = make(map[common.Address]*trie.SecureTrie)
 
 	// update block info (to be able to rollback to this state later)
 	// fmt.Println("new trie root after flush:", normTrie.Hash().Hex())
@@ -356,10 +403,14 @@ func flushTrieNodes() {
 
 	// show db stat
 	totalNodesNum, totalNodesSize := common.TotalNodeStat.GetSum()
+	totalStorageNodesNum, totalStorageNodesSize := common.TotalStorageNodeStat.GetSum()
 	newNodesNum, newNodesSize := common.NewNodeStat.GetSum()
+	newStorageNodesNum, newStorageNodesSize := common.NewStorageNodeStat.GetSum()
 	common.NewNodeStat.Print()
 	fmt.Println("  new trie nodes:", newNodesNum, "/ increased db size:", newNodesSize)
+	fmt.Println("  new storage trie nodes:", newStorageNodesNum, "/ increased db size:", newStorageNodesSize)
 	fmt.Println("  total trie nodes:", totalNodesNum, "/ db size:", totalNodesSize)
+	fmt.Println("  total storage trie nodes:", totalStorageNodesNum, "/ db size:", totalStorageNodesSize)
 }
 
 func countOpenFiles() int64 {
@@ -713,6 +764,22 @@ func updateTrie(key, value []byte) error {
 	return err
 }
 
+func updateStorageTrie(storageTrie *trie.SecureTrie, key, value common.Hash) error {
+
+	var v []byte
+	if (value == common.Hash{}) {
+		storageTrie.TryDelete(key[:])
+	} else {
+		// Encoding []byte cannot fail, ok to ignore the error.
+		v, _ = rlp.EncodeToBytes(common.TrimLeftZeroes(value[:]))
+		// fmt.Println("slot:", key, "/ slotValue:", v)
+		storageTrie.TryUpdate(key[:], v)
+	}
+
+	// TODO(jmlee): return error
+	return nil
+}
+
 //
 // functions for Ethane
 //
@@ -1020,10 +1087,15 @@ func connHandler(conn net.Conn) {
 			case "inspectDB":
 				fmt.Println("execute inspectDB()")
 				totalNodesNum, totalNodesSize := common.TotalNodeStat.GetSum()
-				fmt.Println("print inspectDB result")
+				totalStorageNodesNum, totalStorageNodesSize := common.TotalStorageNodeStat.GetSum()
+				fmt.Println("print inspectDB result: state trie")
 				common.TotalNodeStat.Print()
+				fmt.Println("print inspectDB result: storage tries")
+				common.TotalStorageNodeStat.Print()
 
-				response = []byte(strconv.FormatUint(totalNodesNum, 10) + "," + strconv.FormatUint(totalNodesSize, 10))
+				nodeNum := totalNodesNum + totalStorageNodesNum
+				nodeSize := totalNodesSize + totalStorageNodesSize
+				response = []byte(strconv.FormatUint(nodeNum, 10) + "," + strconv.FormatUint(nodeSize, 10))
 
 			case "inspectTrie":
 				inspectDB(diskdb)
@@ -1073,7 +1145,10 @@ func connHandler(conn net.Conn) {
 				fmt.Println("execute flushTrieNodes()")
 				flushTrieNodes()
 				newNodesNum, newNodesSize := common.NewNodeStat.GetSum()
-				response = []byte(strconv.FormatUint(newNodesNum, 10) + "," + strconv.FormatUint(newNodesSize, 10))
+				newStorageNodesNum, newStorageNodesSize := common.NewStorageNodeStat.GetSum()
+				nodeSum := newNodesNum + newStorageNodesNum
+				nodeSize := newNodesSize + newStorageNodesSize
+				response = []byte(strconv.FormatUint(nodeSum, 10) + "," + strconv.FormatUint(nodeSize, 10))
 
 			case "updateTrieSimple":
 				key, err := hex.DecodeString(params[1]) // convert hex string to bytes
@@ -1135,6 +1210,55 @@ func connHandler(conn net.Conn) {
 				// normTrie.Print()
 
 				response = []byte("success")
+
+			case "updateStorageTrie":
+				// get params
+				// fmt.Println("execute updateStorageTrie()")
+
+				contractAddr := common.HexToAddress(params[1])
+				slot := common.HexToHash(params[2])
+				value := common.HexToHash(params[3])
+				// fmt.Println("contractAddr:", contractAddr)
+				// fmt.Println("slot:", slot)
+				// fmt.Println("value:", value)
+				// fmt.Println()
+
+				// get storage trie to update
+				storageTrie, doExist := dirtyStorageTries[contractAddr]
+				if !doExist {
+					// get storage trie root
+					addrHash := crypto.Keccak256Hash(contractAddr[:])
+					enc, err := normTrie.TryGet(addrHash[:])
+					if err != nil {
+						fmt.Println("TryGet() error:", err)
+						os.Exit(1)
+					}
+					var acc types.StateAccount
+					if err := rlp.DecodeBytes(enc, &acc); err != nil {
+						fmt.Println("Failed to decode state object:", err)
+						fmt.Println("contractAddr:", contractAddr)
+						fmt.Println("enc:", enc)
+						fmt.Println("this address might be newly appeared address")
+						acc.Root = common.Hash{}
+					}
+
+					// open storage trie
+					storageTrie, err = trie.NewSecure(acc.Root, trie.NewDatabase(diskdb))
+					if err != nil {
+						fmt.Println("trie.NewSecure() failed:", err)
+						fmt.Println("contractAddr:", contractAddr)
+						fmt.Println("acc.Root:", acc.Root.Hex())
+						os.Exit(1)
+					}
+
+					// add to dirty storage tries
+					dirtyStorageTries[contractAddr] = storageTrie
+				}
+
+				// update storage trie
+				updateStorageTrie(storageTrie, slot, value)
+
+				response = []byte(storageTrie.Hash().Hex())
 
 			case "rollbackUncommittedUpdates":
 				fmt.Println("execute rollbackUncommittedUpdates()")
@@ -1279,9 +1403,11 @@ func connHandler(conn net.Conn) {
 				}
 
 				totalResult := common.TotalNodeStat.ToString(delimiter)
+				totalStorageResult := common.TotalStorageNodeStat.ToString(delimiter)
 				subTrieResult := nodeInfo.SubTrieNodeStat.ToString(delimiter)
 
 				fmt.Print(totalResult)
+				fmt.Print(totalStorageResult)
 				fmt.Print(subTrieResult)
 				fmt.Println("@")
 
@@ -1298,7 +1424,7 @@ func connHandler(conn net.Conn) {
 				if err != nil {
 					fmt.Println("ERR", "err", err)
 				}
-				logData := totalResult + subTrieResult
+				logData := totalResult + totalStorageResult + subTrieResult
 				fmt.Fprintln(logFile, logData)
 				logFile.Close()
 

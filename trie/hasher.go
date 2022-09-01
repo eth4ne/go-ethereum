@@ -127,7 +127,7 @@ func (h *hasher) hash(n node, force bool) (hashed node, cached node) {
 					// fmt.Println("    short node hash:", myHash.Hex(), " / child fullNode hash:", childHash.Hex())
 				case *fullNode:
 					childHashNode, _ := v.cache()
-					childHash := common.BytesToHash(childHashNode)
+					childHash := common.BytesToHash(childHashNode) // TODO(jmlee): child can be short/full node (not hashNode) whose size is smaller than 32 bytes
 					nodeInfo.ChildHashes = append(nodeInfo.ChildHashes, childHash)
 					// fmt.Println("  hasher.go case *fullNode")
 					// fmt.Println("    short node hash:", myHash.Hex(), " / child fullNode hash:", childHash.Hex())
@@ -167,6 +167,7 @@ func (h *hasher) hash(n node, force bool) (hashed node, cached node) {
 						var childHash common.Hash
 						if childHashNode == nil {
 							// child is hashNode (full node's child cannot be value node in Ethereum)
+							// TODO(jmlee): child can be short/full node (not hashNode) whose size is smaller than 32 bytes
 							childHash = common.BytesToHash([]byte(child.(hashNode)))
 						} else {
 							// child is full node or short node

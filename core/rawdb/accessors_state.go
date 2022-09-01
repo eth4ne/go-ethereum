@@ -113,24 +113,30 @@ func WriteTrieNode(db ethdb.KeyValueWriter, hash common.Hash, node []byte) {
 		nodeSize := uint64(nodeInfoDirty.Size) // size: 32 bytes hash + rlped node
 
 		// update total db stat
+		newNodeStat := &common.NewNodeStat
+		totalNodeStat := &common.TotalNodeStat
+		if common.FlushStorageTries {
+			newNodeStat = &common.NewStorageNodeStat
+			totalNodeStat = &common.TotalStorageNodeStat
+		}
 		if nodeInfoDirty.IsLeafNode {
-			common.NewNodeStat.LeafNodesNum++
-			common.NewNodeStat.LeafNodesSize += nodeSize
+			newNodeStat.LeafNodesNum++
+			newNodeStat.LeafNodesSize += nodeSize
 
-			common.TotalNodeStat.LeafNodesNum++
-			common.TotalNodeStat.LeafNodesSize += nodeSize
+			totalNodeStat.LeafNodesNum++
+			totalNodeStat.LeafNodesSize += nodeSize
 		} else if nodeInfoDirty.IsShortNode {
-			common.NewNodeStat.ShortNodesNum++
-			common.NewNodeStat.ShortNodesSize += nodeSize
+			newNodeStat.ShortNodesNum++
+			newNodeStat.ShortNodesSize += nodeSize
 
-			common.TotalNodeStat.ShortNodesNum++
-			common.TotalNodeStat.ShortNodesSize += nodeSize
+			totalNodeStat.ShortNodesNum++
+			totalNodeStat.ShortNodesSize += nodeSize
 		} else {
-			common.NewNodeStat.FullNodesNum++
-			common.NewNodeStat.FullNodesSize += nodeSize
+			newNodeStat.FullNodesNum++
+			newNodeStat.FullNodesSize += nodeSize
 
-			common.TotalNodeStat.FullNodesNum++
-			common.TotalNodeStat.FullNodesSize += nodeSize
+			totalNodeStat.FullNodesNum++
+			totalNodeStat.FullNodesSize += nodeSize
 		}
 
 		// update current block's stat

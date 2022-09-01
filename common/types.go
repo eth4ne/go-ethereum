@@ -55,11 +55,16 @@ var (
 	// infos for dirty trie nodes, that will be flushed or discarded
 	TrieNodeInfosDirty = make(map[Hash]NodeInfo)
 
-	// stats for all trie nodes in db (archive data)
+	// stats for all state trie's nodes in db (archive data)
 	TotalNodeStat NodeStat
-
-	// stats for newly flushed trie nodes in latest block
+	// stats for all storage tries' nodes in db (archive data)
+	TotalStorageNodeStat NodeStat
+	// stats for newly flushed state trie's nodes in latest block
 	NewNodeStat NodeStat
+	// stats for newly flushed storage tries' nodes in latest block
+	NewStorageNodeStat NodeStat
+	// this is needed to split flush results
+	FlushStorageTries bool
 
 	// mutex to avoid fatal error: "concurrent map read and map write"
 	ChildHashesMutex = sync.RWMutex{}
@@ -115,7 +120,7 @@ var (
 type NodeInfo struct {
 	Size uint // size of node (i.e., len of rlp-encoded node)
 
-	ChildHashes []Hash // hashes of child nodes
+	ChildHashes []Hash // hashes of child nodes --> TODO(jmlee): child can be short/full node (not hashNode) whose size is smaller than 32 bytes
 	IsShortNode bool   // type of node (short node vs full node)
 	IsLeafNode  bool
 	Indices     []string // full node's indices for child nodes
@@ -152,7 +157,6 @@ type BlockInfo struct {
 	FlushedNodeHashes []Hash   // hashes of flushed nodes
 	MaxAccountNonce   uint64   // biggest nonce amoung accounts (just to regenerate same state root, not essential field)
 	NewNodeStat       NodeStat // stats for newly flushed nodes in this block
-
 }
 
 // TrieGraphInfo has edges and features representing trie
