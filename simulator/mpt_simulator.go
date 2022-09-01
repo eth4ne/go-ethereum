@@ -705,6 +705,7 @@ func trieToGraph(hash common.Hash) {
 }
 
 // find shortest prefixes among short nodes in the trie
+// TODO(jmlee): memorize shortest prefixes (maybe add NodeInfo.shortestPrefixes field)
 func findShortestPrefixAmongShortNodes(hash common.Hash) ([]string, bool) {
 	// fmt.Println("@ node hash:", hash.Hex())
 	// check that the node exist
@@ -909,20 +910,93 @@ func inactivateLeafNodes(firstKeyToCheck, lastKeyToCheck common.Hash) {
 	}
 }
 
-// restore this address's accounts
+// restore all inactive accounts of given address (for Ethane)
+// TODO(jmlee): check correctness
 func restoreAccount(restoreAddr common.Address) {
+
+	if len(common.AddrToKeyInactive[restoreAddr]) == 0 {
+		fmt.Println("there is no account to restore")
+		os.Exit(1)
+		return
+	}
+
+	// collect & merge inactive accounts
+	var restoredAcc types.EthaneStateAccount
+	restoredAcc.Root = emptyRoot
+	restoredAcc.CodeHash = emptyCodeHash
+	// var for experiment: no need to merge accounts, actually
+	// because latest account is the latest state of this address in our simulation
+	var latestAcc types.EthaneStateAccount
+	for _, key := range common.AddrToKeyInactive[restoreAddr] {
+
+		// get inactive account
+		enc, err := normTrie.TryGet(key[:])
+		if err != nil {
+			fmt.Println("TryGet() error:", err)
+			os.Exit(1)
+		}
+		var acc types.EthaneStateAccount
+		if err := rlp.DecodeBytes(enc, &acc); err != nil {
+			fmt.Println("Failed to decode state object:", err)
+			fmt.Println("restoreAddr:", restoreAddr)
+			fmt.Println("enc:", enc)
+			os.Exit(1)
+		}
+		latestAcc = acc
+
+		// merge account
+		restoredAcc.Balance.Add(restoredAcc.Balance, acc.Balance)
+		if restoredAcc.Nonce < acc.Nonce {
+			restoredAcc.Nonce = acc.Nonce
+		}
+		if acc.Root != emptyRoot {
+			restoredAcc.Root = acc.Root
+		}
+		if bytes.Compare(acc.CodeHash, emptyCodeHash) != 0 {
+			restoredAcc.CodeHash = acc.CodeHash
+		}
+	}
+
+	// get active account if exist & merge it
+	addrKey, exist := common.AddrToKeyActive[restoreAddr]
+	if exist {
+		// get inactive account
+		enc, err := normTrie.TryGet(addrKey[:])
+		if err != nil {
+			fmt.Println("TryGet() error:", err)
+			os.Exit(1)
+		}
+		var acc types.EthaneStateAccount
+		if err := rlp.DecodeBytes(enc, &acc); err != nil {
+			fmt.Println("Failed to decode state object:", err)
+			fmt.Println("restoreAddr:", restoreAddr)
+			fmt.Println("enc:", enc)
+			os.Exit(1)
+		}
+		latestAcc = acc
+
+		// merge account
+		restoredAcc.Balance.Add(restoredAcc.Balance, acc.Balance)
+		if restoredAcc.Nonce < acc.Nonce {
+			restoredAcc.Nonce = acc.Nonce
+		}
+		if acc.Root != emptyRoot {
+			restoredAcc.Root = acc.Root
+		}
+		if bytes.Compare(acc.CodeHash, emptyCodeHash) != 0 {
+			restoredAcc.CodeHash = acc.CodeHash
+		}
+	}
+
+	// insert restored account
+	// data, _ := rlp.EncodeToBytes(restoredAcc)
+	data, _ := rlp.EncodeToBytes(latestAcc) // code for experiment
+	updateTrieForEthane(restoreAddr, data)
 
 	// record merkle proofs for restoration
 	// RESTORE_ALL: restore all inactive leaf nodes of this address
 	common.RestoredKeys = append(common.RestoredKeys, common.AddrToKeyInactive[restoreAddr]...)
 	delete(common.AddrToKeyInactive, restoreAddr)
-
-	// TODO(jmlee): reconstruct real latest state later
-	// temply now, just raise state update with meaningless data
-	emptyEthaneAccount.Nonce++
-	emptyEthaneAccount.Addr = restoreAddr
-	data, _ := rlp.EncodeToBytes(emptyEthaneAccount)
-	updateTrieForEthane(restoreAddr, data)
 }
 
 // InspectTrieWithinRange prints trie stats (size, node num, node types, depths) within range
@@ -1269,6 +1343,60 @@ func connHandler(conn net.Conn) {
 
 				response = []byte(storageTrie.Hash().Hex())
 
+			case "updateStorageTrieEthane":
+				// get params
+				// fmt.Println("execute updateStorageTrieEthane()")
+
+				contractAddr := common.HexToAddress(params[1])
+				slot := common.HexToHash(params[2])
+				value := common.HexToHash(params[3])
+				// fmt.Println("contractAddr:", contractAddr)
+				// fmt.Println("slot:", slot)
+				// fmt.Println("value:", value)
+				// fmt.Println()
+
+				// get storage trie to update
+				storageTrie, doExist := dirtyStorageTries[contractAddr]
+				if !doExist {
+
+					// find addrKey
+					addrKey, exist := common.AddrToKeyActive[contractAddr]
+					var acc types.EthaneStateAccount
+					acc.Root = common.Hash{}
+					if exist {
+						// find account
+						enc, err := normTrie.TryGet(addrKey[:])
+						if err != nil {
+							fmt.Println("TryGet() error:", err)
+							os.Exit(1)
+						}
+						if err := rlp.DecodeBytes(enc, &acc); err != nil {
+							fmt.Println("Failed to decode state object:", err)
+							fmt.Println("contractAddr:", contractAddr)
+							fmt.Println("enc:", enc)
+							fmt.Println("ERROR: AddrToKeyActive exists but account is not there")
+							os.Exit(1)
+						}
+					}
+
+					// open storage trie
+					storageTrie, err = trie.NewSecure(acc.Root, trie.NewDatabase(diskdb))
+					if err != nil {
+						fmt.Println("trie.NewSecure() failed:", err)
+						fmt.Println("contractAddr:", contractAddr)
+						fmt.Println("acc.Root:", acc.Root.Hex())
+						os.Exit(1)
+					}
+
+					// add to dirty storage tries
+					dirtyStorageTries[contractAddr] = storageTrie
+				}
+
+				// update storage trie
+				updateStorageTrie(storageTrie, slot, value)
+
+				response = []byte(storageTrie.Hash().Hex())
+
 			case "rollbackUncommittedUpdates":
 				fmt.Println("execute rollbackUncommittedUpdates()")
 				rollbackUncommittedUpdates()
@@ -1500,6 +1628,16 @@ func connHandler(conn net.Conn) {
 				normTrie.Hash()
 				// fmt.Println("print state trie\n")
 				// normTrie.Print()
+
+				response = []byte("success")
+
+			case "restoreAccount":
+				// get params
+				// fmt.Println("execute restoreAccount()")
+				addr := common.HexToAddress(params[1])
+				fmt.Println("addr to restore:", addr.Hex())
+
+				restoreAccount(addr)
 
 				response = []byte("success")
 

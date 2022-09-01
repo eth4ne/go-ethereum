@@ -249,6 +249,21 @@ def updateStorageTrie(contractAddr, slot, value):
     # print("updateStorageTrie result:", currentStorageRoot)
     return currentStorageRoot
 
+# update stroage trie for Ethane
+def updateStorageTrieEthane(contractAddr, slot, value):
+    cmd = str("updateStorageTrieEthane")
+    cmd += str(",")
+    cmd += str(contractAddr)
+    cmd += str(",")
+    cmd += str(slot)
+    cmd += str(",")
+    cmd += str(value)
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    currentStorageRoot = data.decode()
+    # print("updateStorageTrieEthane result:", currentStorageRoot)
+    return currentStorageRoot
+
 # reset simulator
 def reset():
     cmd = str("reset")
@@ -394,6 +409,17 @@ def updateTrieForEthaneSimple(addr):
     updateResult = data.decode()
     # print("updateTrieForEthaneSimple result:", updateResult)
     return updateResult
+
+# restore all inactive accounts of given address (for Ethane)
+def restoreAccount(addr):
+    cmd = str("restoreAccount")
+    cmd += str(",")
+    cmd += str(addr)
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    restoreResult = data.decode()
+    # print("restoreAccount result:", restoreResult)
+    return restoreResult
 
 # print Ethane related stats
 def printEthaneState():
