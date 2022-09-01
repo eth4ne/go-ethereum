@@ -42,10 +42,22 @@ def select_block_header(cursor, blocknumber):
     result = cursor.fetchall()
     return result[0]
 
+def select_blocks_header(cursor, startblocknumber, endblocknumber):
+    sql = "SELECT `stateroot` FROM blocks WHERE `number`>=%s AND `number`<%s;"
+    cursor.execute(sql, (startblocknumber, endblocknumber))
+    result = cursor.fetchall()
+    return result
+
 # read tx hash of block [blocknumber]'s [txindex]^th tx
 def select_tx_hash(cursor, blocknumber, txindex):
     sql = "SELECT * FROM transactions WHERE `blocknumber`=%s AND `transactionindex`=%s;"
     cursor.execute(sql, (blocknumber, txindex))
+    result = cursor.fetchall()
+    return result
+
+def select_txs_hash(cursor, blocknumber):
+    sql = "SELECT * FROM transactions WHERE `blocknumber`=%s;"
+    cursor.execute(sql, (blocknumber, ))
     result = cursor.fetchall()
     return result
 
@@ -91,12 +103,29 @@ def select_account_read_write_list(cursor, blocknumber):
     result = cursor.fetchall()
     return result
 
+def select_account_read_write_lists(cursor, startblocknumber, endblocknumber):
+    sql = "SELECT * FROM `states` WHERE `blocknumber`>=%s AND `blocknumber`<%s;"
+    cursor.execute(sql, (startblocknumber, endblocknumber))
+    result = cursor.fetchall()
+    return result
+
 # read storage trie slots r/w list in this block from DB
 def select_slot_write_list(cursor, stateid):
     sql = "SELECT * FROM `slotlogs` WHERE `stateid`=%s;"
     cursor.execute(sql, (stateid,))
     result = cursor.fetchall()
     return result
+
+def select_slot_write_lists(cursor, startstateid, endstateid):
+    sql = "SELECT * FROM `slotlogs` WHERE `stateid`>=%s AND `stateid`<%s;"
+    cursor.execute(sql, (startstateid, endstateid))
+    result = cursor.fetchall()
+    slots = {}
+    for i in result:
+        if i['stateid'] not in slots:
+            slots[i['stateid']] = []
+        slots[i['stateid']].append(i)
+    return slots
 
 # get current block number (i.e., # of flushes)
 def getBlockNum():
@@ -530,19 +559,57 @@ def simulateEthereum(startBlockNum, endBlockNum):
     writeCount = 0
     startTime = datetime.now()
 
+    # block batch size for db query
+    batchsize = 1000
+    # print log interval
+    loginterval = 2000
+
+    headers = {}
+    oldblocknumber = startBlockNum
+    start = time.time()
+    blockcount = 0
+
     # set log file name
     logFileName = "ethereum_simulate_" + str(startBlockNum) + "_" + str(endBlockNum) + ".txt"
 
     currentStorageRoot = ""
     # insert random accounts
-    for blockNum in range(startBlockNum, endBlockNum+1):
-        print("do block", blockNum ,"\n")
+    for blockNum in range(startBlockNum, endBlockNum+1, batchsize):
+        #print("do block", blockNum ,"\n")
         # get read/write list from DB
-        rwList = select_account_read_write_list(cursor, blockNum)
+        rwList = select_account_read_write_lists(cursor, blockNum, blockNum+batchsize)
+        slotList = select_slot_write_lists(cursor, rwList[0]['id'], rwList[-1]['id']+1)
         
         # replay writes
         for item in rwList:
             # print("item:", item)
+            if item['blocknumber'] != oldblocknumber:
+                # printCurrentTrie()
+                # flush
+                blockcount += 1
+                flush()
+                #print("flush finished -> current block num:", oldblocknumber)
+                
+                # check current trie is made correctly
+                if oldblocknumber not in headers:
+                    headers = dict(zip(range(blockNum, blockNum+batchsize), select_blocks_header(cursor, blockNum, blockNum+batchsize)))
+                stateRootInBlockHeader = headers[oldblocknumber]['stateroot'].hex()
+                currentStateRoot = getTrieRootHash()[2:]
+                if currentStateRoot != stateRootInBlockHeader:
+                    print("@@fail")
+                    print(currentStateRoot, "vs", stateRootInBlockHeader)
+                    print('block #{}'.format(oldblocknumber))
+                    sys.exit()
+                else:
+                    pass
+                    #print("@@success")
+                    #print(currentStateRoot, "vs", stateRootInBlockHeader)
+                if oldblocknumber % loginterval == 0:
+                    seconds = time.time() - start
+                    print('#{}, Blkn: {}({:.2f}/s), Writen: {}({:.2f}/s), Readn: {}({:.2f}/s), Time: {}ms'.format(oldblocknumber, blockcount, blockcount/seconds, writeCount, writeCount/seconds, readCount, readCount/seconds, int(seconds*1000)))
+                oldblocknumber += 1
+                #print("do block", oldblocknumber ,"\n")
+
             if item['type'] % 2 == 1:
                 # print("item:", item)
                 writeCount += 1
@@ -574,8 +641,8 @@ def simulateEthereum(startBlockNum, endBlockNum):
                 # print("\n")
 
                 # update storage trie
-                slotWriteList = select_slot_write_list(cursor, item['id'])
-                if len(slotWriteList) != 0:
+                if item['id'] in slotList:
+                    slotWriteList = slotList[item['id']]
                     # print("item:", item)
                     # print("txHash:", item['txhash'].hex())
                     for slotWrite in slotWriteList:
@@ -599,7 +666,7 @@ def simulateEthereum(startBlockNum, endBlockNum):
 
                     # check current storage trie is made correctly
                     if currentStorageRoot[2:] != storageRoot:
-                        print("blocknum:", blockNum)
+                        print("blocknum:", oldblocknumber)
                         # print("txindex:", item['txindex'])
                         # print("tx hash:", select_tx_hash(cursor, blockNum, item['txindex']))
                         print("item:", item)
@@ -615,22 +682,6 @@ def simulateEthereum(startBlockNum, endBlockNum):
                 updateTrie(nonce, balance, storageRoot, codeHash, addr)
             else:
                 readCount += 1
-
-        # printCurrentTrie()
-        # flush
-        flush()
-        print("flush finished -> current block num:", blockNum)
-
-        # check current trie is made correctly
-        stateRootInBlockHeader = select_block_header(cursor, blockNum)['stateroot'].hex()
-        currentStateRoot = getTrieRootHash()[2:]
-        if currentStateRoot != stateRootInBlockHeader:
-            print("@@fail")
-            print(currentStateRoot, "vs", stateRootInBlockHeader)
-            sys.exit()
-        else:
-            print("@@success")
-            print(currentStateRoot, "vs", stateRootInBlockHeader)
 
     # show final result
     print("simulateEthereum() finished -> from block", startBlockNum, "to", endBlockNum)
@@ -720,7 +771,7 @@ if __name__ == "__main__":
     # printEthaneState()
 
     # ex2. replay txs in Ethereum for Ethereum
-    simulateEthereum(1, 10000)
+    simulateEthereum(0, 10000)
 
     # ex3. replay txs in Ethereum for Ethane
     # simulateEthane(1, 1000000, 40320, 40320, 40320)
