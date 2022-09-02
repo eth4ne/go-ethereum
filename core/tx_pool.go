@@ -888,7 +888,11 @@ func (pool *TxPool) journalTx(from common.Address, tx *types.Transaction) {
 // Note, this method assumes the pool lock is held!
 func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.Transaction) bool {
 	// Try to insert the transaction into the pending queue
-	if pool.pending[addr] == nil {
+	// if pool.pending[addr] == nil { // --> original code
+	if true {
+		// even if txs are familiar, just insert to the queue (joonha)
+		// because now in Ethane simulation, txpool is not initialized
+		// TODO empty txpool after every block sealing, so that original code be ok
 		pool.pending[addr] = newTxList(true)
 	}
 	list := pool.pending[addr]

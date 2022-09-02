@@ -220,9 +220,10 @@ func (st *StateTransition) preCheck() error {
 	if !st.msg.IsFake() {
 		// Make sure this transaction's nonce is correct.
 		stNonce := st.state.GetNonce(st.msg.From())
-		if msgNonce := st.msg.Nonce(); stNonce < msgNonce {
-			return fmt.Errorf("%w: address %v, tx: %d state: %d", ErrNonceTooHigh,
-				st.msg.From().Hex(), msgNonce, stNonce)
+		if msgNonce := st.msg.Nonce(); stNonce < msgNonce { // temporarilty commented-out by joonha not to handle normal tx failing
+			log.Warn("[preCheck] NONCE TOO HIGH BUT GO ON because nonce mismatch might... be fixed with transaction ordering (joonha)")
+			// return fmt.Errorf("%w: address %v, tx: %d state: %d", ErrNonceTooHigh,
+			// 	st.msg.From().Hex(), msgNonce, stNonce)
 		} else if stNonce > msgNonce { // temporarilty commented-out by joonha to implement restore tx
 			// return fmt.Errorf("%w: address %v, tx: %d state: %d", ErrNonceTooLow,
 			// 	st.msg.From().Hex(), msgNonce, stNonce)
