@@ -922,6 +922,7 @@ func restoreAccount(restoreAddr common.Address) {
 
 	// collect & merge inactive accounts
 	var restoredAcc types.EthaneStateAccount
+	restoredAcc.Balance = big.NewInt(0)
 	restoredAcc.Root = emptyRoot
 	restoredAcc.CodeHash = emptyCodeHash
 	// var for experiment: no need to merge accounts, actually
@@ -1065,6 +1066,10 @@ func inspectEthaneTries(blockNum uint64) {
 	fmt.Println()
 	fmt.Println("print inactive trie")
 	inactiveResult := InspectTrieWithinRange(stateRoot, startKey, inactiveBoundarySubOne)
+	if inactiveBoundaryKey == 0 {
+		// there is no inactive account
+		inactiveResult = "0 0 0 0 0 0 0 0 0 0 0"
+	}
 
 	fmt.Println(totalResult, activeResult, inactiveResult)
 }
@@ -1146,9 +1151,9 @@ func connHandler(conn net.Conn) {
 				response = []byte(strconv.FormatUint(common.CurrentBlockNum, 10))
 
 			case "getTrieRootHash":
-				fmt.Println("execute getTrieRootHash()")
+				// fmt.Println("execute getTrieRootHash()")
 				rootHash := normTrie.Hash().Hex()
-				fmt.Println("current trie root hash:", rootHash)
+				// fmt.Println("current trie root hash:", rootHash)
 				response = []byte(rootHash)
 
 			case "printCurrentTrie":

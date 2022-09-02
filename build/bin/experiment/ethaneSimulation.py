@@ -3,7 +3,9 @@ import socket
 import os, binascii
 import sys
 import random, time
+import json
 from datetime import datetime
+from os.path import exists
 import pymysql.cursors
 
 # ethereum tx data DB options
@@ -143,7 +145,7 @@ def getTrieRootHash():
     client_socket.send(cmd.encode())
     data = client_socket.recv(1024)
     rootHash = data.decode()
-    print("root hash:", rootHash)
+    # print("root hash:", rootHash)
     return rootHash
 
 # print current trie (trie.Print())
@@ -220,7 +222,7 @@ def flush():
     flushResult = data.decode().split(',')
     newTrieNodesNum = int(flushResult[0])
     newTrieNodesSize = int(flushResult[1])
-    print("flush result -> # of new trie nodes:", '{:,}'.format(newTrieNodesNum), "/ increased db size:", '{:,}'.format(newTrieNodesSize), "B")
+    # print("flush result -> # of new trie nodes:", '{:,}'.format(newTrieNodesNum), "/ increased db size:", '{:,}'.format(newTrieNodesSize), "B")
     return flushResult
 
 # update account with meaningless values (using monotonically increasing nonce)
@@ -555,7 +557,6 @@ def simulateEthereum(startBlockNum, endBlockNum):
 
     # initialize
     reset()
-    updateCount = 0
     stateReadCount = 0
     stateWriteCount = 0
     storageWriteCount = 0
@@ -698,7 +699,8 @@ def simulateEthereum(startBlockNum, endBlockNum):
     # show final result
     print("simulateEthereum() finished -> from block", startBlockNum, "to", endBlockNum)
     print("total elapsed time:", datetime.now()-startTime)
-    print("state writes:", stateWriteCount," / storage writes:", storageWriteCount, "/ state reads:", stateReadCount)
+    print("state reads:", stateReadCount,"/ state writes:", stateWriteCount, "/ storage writes:", storageWriteCount)
+    print(stateReadCount, stateWriteCount, storageWriteCount)
 
     # inspectTrie()
     # printCurrentTrie()
@@ -713,35 +715,103 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
     switchSimulationMode(1) # 1: Ethane mode
     setEthaneOptions(deleteEpoch, inactivateEpoch, inactivateCriterion)
 
-    # initialize
-    reset()
-    updateCount = 0
-    readCount = 0
-    writeCount = 0
-    startTime = datetime.now()
-
     # set log file name
     logFileName = "ethane_simulate_" + str(startBlockNum) + "_" + str(endBlockNum) \
         + "_" + str(deleteEpoch) + "_" + str(inactivateEpoch) + "_" + str(inactivateCriterion) + ".txt"
+    
+    # check restore list exist
+    restoreFileName = "restore_list_" + str(startBlockNum) + "_" + str(endBlockNum) \
+        + "_"  + str(inactivateEpoch) + "_" + str(inactivateCriterion) + ".json"
+    restoreFilePath = "./restoreList/"
+    if not os.path.exists(restoreFilePath + restoreFileName):
+        print("there is no restore list in:", restoreFilePath + restoreFileName)
+        sys.exit()
+    with open(restoreFilePath + restoreFileName, "r") as rl_json:
+        restoreList = json.load(rl_json)
 
+    # initialize
+    reset()
+    updateCount = 0
+    stateReadCount = 0
+    stateWriteCount = 0
+    storageWriteCount = 0
+    restoreCount = 0
+    startTime = datetime.now()
+
+    # block batch size for db query
+    batchsize = 1000
+    # print log interval
+    loginterval = 2000
+
+    oldblocknumber = startBlockNum
+    start = time.time()
+    blockcount = 0
+
+    # set log file name
+    logFileName = "ethane_simulate_" + str(startBlockNum) + "_" + str(endBlockNum) + ".txt"
+
+    currentStorageRoot = ""
     # insert random accounts
-    for blockNum in range(startBlockNum, endBlockNum+1):
+    for blockNum in range(startBlockNum, endBlockNum+2, batchsize):
+        #print("do block", blockNum ,"\n")
         # get read/write list from DB
-        rwList = select_account_read_write_list(cursor, blockNum)
+        rwList = select_account_read_write_lists(cursor, blockNum, blockNum+batchsize)
+        if len(rwList) > 0:
+            slotList = select_slot_write_lists(cursor, rwList[0]['id'], rwList[-1]['id']+1)
+        else:
+            slotlist = []
         
         # replay writes
         for item in rwList:
             # print("item:", item)
-            if item['type'] % 2 == 1:
-                writeCount += 1
+            if item['blocknumber'] != oldblocknumber:
+                # printCurrentTrie()
+                # flush
+                blockcount += 1
+                flush()
+                # print("flush finished -> generated block", oldblocknumber, "\n\n\n")
 
-                addr = item['address'].hex()
+                if oldblocknumber % loginterval == 0:
+                    seconds = time.time() - start
+                    print('#{}, Blkn: {}({:.2f}/s), Writen: {}({:.2f}/s), Readn: {}({:.2f}/s), Time: {}ms'.format(oldblocknumber, blockcount, blockcount/seconds, stateWriteCount+storageWriteCount, (stateWriteCount+storageWriteCount)/seconds, stateReadCount, stateReadCount/seconds, int(seconds*1000)))
+                oldblocknumber += 1
+                #print("do block", oldblocknumber ,"\n")
+
+                # restore accounts
+                blockNumKey = str(item['blocknumber'])
+                if blockNumKey in restoreList:
+                    # print("restore list in block", blockNumKey, ":", restoreList[blockNumKey])
+                    for addr in restoreList[blockNumKey]:
+                        # print("restore addr:", addr)
+                        restoreAccount(addr)
+                        restoreCount += 1
+
+            if item['blocknumber'] > endBlockNum:
+                print("reaching end block num, stop writing")
+                break
+
+            if item['type'] % 2 == 1:
+                # print("do writes in block", item['blocknumber'])
+                # print("item:", item)
+
+                addrId = item['address_id']
+                addr = select_address(cursor, addrId)
+
+                if item['type'] == 63:
+                    # delete this address
+                    updateTrieDelete(addr)
+                    continue
+
                 nonce = item['nonce']
                 balance = item['balance']
-                codeHash = item['codehash'].hex()
-                storageRoot = item['storageroot'].hex()
+                codeHash = emptyCodeHash
+                storageRoot = emptyRoot
+                if item['codehash'] != None:
+                    codeHash = item['codehash'].hex()
+                if item['storageroot'] != None:
+                    storageRoot = item['storageroot'].hex()
 
-                # print("in block", blockNum, ", find write item", writeCount)
+                # print("in block", blockNum)
                 # print("write account ->")
                 # print("  addr:", addr)
                 # print("  nonce:", nonce)
@@ -749,19 +819,59 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
                 # print("  codeHash:", codeHash)
                 # print("  storageRoot:", storageRoot)
                 # print("\n")
-                updateTrieForEthane(nonce, balance, storageRoot, codeHash, addr)
-            else:
-                readCount += 1
 
-        # printCurrentTrie()
-        # flush
-        flush()
-        print("flush finished -> current block num:", blockNum)
+                # update storage trie
+                if item['id'] in slotList:
+                    slotWriteList = slotList[item['id']]
+                    # print("item:", item)
+                    # print("txHash:", item['txhash'].hex())
+                    for slotWrite in slotWriteList:
+                        contractAddrId = slotWrite['address_id']
+                        contractAddress = select_address(cursor, contractAddrId)
+
+                        slotId = slotWrite['slot_id']
+                        slot = select_slot(cursor, slotId)
+
+                        slotValue = []
+                        # slotValue = 0x0 # 
+                        if slotWrite['slotvalue'] != None:
+                            slotValue = slotWrite['slotvalue'].hex()
+
+                        # print("item:", slotWrite)
+                        # print("contractAddress:", contractAddress)
+                        # print("slot:", slot)
+                        # print("slotValue:", slotValue)
+                        # print("\n")
+                        currentStorageRoot = updateStorageTrieEthane(contractAddress, slot, slotValue)
+                        storageWriteCount += 1
+
+                    # check current storage trie is made correctly
+                    if currentStorageRoot[2:] != storageRoot:
+                        print("@@fail: storage trie is wrong")
+                        print("blocknum:", oldblocknumber)
+                        # print("txindex:", item['txindex'])
+                        # print("tx hash:", select_tx_hash(cursor, blockNum, item['txindex']))
+                        print("item:", item)
+                        print("  addr:", addr)
+                        print("  nonce:", nonce)
+                        print("  balance:", balance)
+                        print("  codeHash:", codeHash)
+                        print("  storageRoot:", storageRoot)
+                        print(currentStorageRoot[2:], "vs", storageRoot)
+                        sys.exit()
+                
+                # update state trie
+                updateTrieForEthane(nonce, balance, storageRoot, codeHash, addr)
+                stateWriteCount += 1
+            else:
+                stateReadCount += 1
 
     # show final result
     print("simulateEthane() finished -> from block", startBlockNum, "to", endBlockNum)
     print("total elapsed time:", datetime.now()-startTime)
-    print("total writes:", writeCount, "/ total reads:", readCount)
+    print("state reads:", stateReadCount,"/ state writes:", stateWriteCount, "/ storage writes:", storageWriteCount)
+    print("restored accounts:", restoreCount)
+    print(stateReadCount, stateWriteCount, storageWriteCount)
     # inspectTrie()
     # printCurrentTrie()
     printEthaneState()
