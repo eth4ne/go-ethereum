@@ -556,8 +556,9 @@ def simulateEthereum(startBlockNum, endBlockNum):
     # initialize
     reset()
     updateCount = 0
-    readCount = 0
-    writeCount = 0
+    stateReadCount = 0
+    stateWriteCount = 0
+    storageWriteCount = 0
     startTime = datetime.now()
 
     # block batch size for db query
@@ -610,7 +611,7 @@ def simulateEthereum(startBlockNum, endBlockNum):
                     #print(currentStateRoot, "vs", stateRootInBlockHeader)
                 if oldblocknumber % loginterval == 0:
                     seconds = time.time() - start
-                    print('#{}, Blkn: {}({:.2f}/s), Writen: {}({:.2f}/s), Readn: {}({:.2f}/s), Time: {}ms'.format(oldblocknumber, blockcount, blockcount/seconds, writeCount, writeCount/seconds, readCount, readCount/seconds, int(seconds*1000)))
+                    print('#{}, Blkn: {}({:.2f}/s), Writen: {}({:.2f}/s), Readn: {}({:.2f}/s), Time: {}ms'.format(oldblocknumber, blockcount, blockcount/seconds, stateWriteCount+storageWriteCount, (stateWriteCount+storageWriteCount)/seconds, stateReadCount, stateReadCount/seconds, int(seconds*1000)))
                 oldblocknumber += 1
                 #print("do block", oldblocknumber ,"\n")
 
@@ -621,7 +622,6 @@ def simulateEthereum(startBlockNum, endBlockNum):
             if item['type'] % 2 == 1:
                 # print("do writes in block", item['blocknumber'])
                 # print("item:", item)
-                writeCount += 1
 
                 addrId = item['address_id']
                 addr = select_address(cursor, addrId)
@@ -640,7 +640,7 @@ def simulateEthereum(startBlockNum, endBlockNum):
                 if item['storageroot'] != None:
                     storageRoot = item['storageroot'].hex()
 
-                # print("in block", blockNum, ", find write item", writeCount)
+                # print("in block", blockNum)
                 # print("write account ->")
                 # print("  addr:", addr)
                 # print("  nonce:", nonce)
@@ -672,6 +672,7 @@ def simulateEthereum(startBlockNum, endBlockNum):
                         # print("slotValue:", slotValue)
                         # print("\n")
                         currentStorageRoot = updateStorageTrie(contractAddress, slot, slotValue)
+                        storageWriteCount += 1
 
                     # check current storage trie is made correctly
                     if currentStorageRoot[2:] != storageRoot:
@@ -690,13 +691,15 @@ def simulateEthereum(startBlockNum, endBlockNum):
                 
                 # update state trie
                 updateTrie(nonce, balance, storageRoot, codeHash, addr)
+                stateWriteCount += 1
             else:
-                readCount += 1
+                stateReadCount += 1
 
     # show final result
     print("simulateEthereum() finished -> from block", startBlockNum, "to", endBlockNum)
     print("total elapsed time:", datetime.now()-startTime)
-    print("total writes:", writeCount, "/ total reads:", readCount)
+    print("state writes:", stateWriteCount," / storage writes:", storageWriteCount, "/ state reads:", stateReadCount)
+
     # inspectTrie()
     # printCurrentTrie()
     inspectTrieWithinRange()
