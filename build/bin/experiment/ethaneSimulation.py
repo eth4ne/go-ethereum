@@ -2,7 +2,7 @@ from web3 import Web3
 import socket
 import os, binascii
 import sys
-import random
+import random, time
 from datetime import datetime
 import pymysql.cursors
 
@@ -575,11 +575,14 @@ def simulateEthereum(startBlockNum, endBlockNum):
 
     currentStorageRoot = ""
     # insert random accounts
-    for blockNum in range(startBlockNum, endBlockNum+1, batchsize):
+    for blockNum in range(startBlockNum, endBlockNum+2, batchsize):
         #print("do block", blockNum ,"\n")
         # get read/write list from DB
         rwList = select_account_read_write_lists(cursor, blockNum, blockNum+batchsize)
-        slotList = select_slot_write_lists(cursor, rwList[0]['id'], rwList[-1]['id']+1)
+        if len(rwList) > 0:
+            slotList = select_slot_write_lists(cursor, rwList[0]['id'], rwList[-1]['id']+1)
+        else:
+            slotlist = []
         
         # replay writes
         for item in rwList:
@@ -589,7 +592,7 @@ def simulateEthereum(startBlockNum, endBlockNum):
                 # flush
                 blockcount += 1
                 flush()
-                #print("flush finished -> current block num:", oldblocknumber)
+                # print("flush finished -> generated block", oldblocknumber, "\n\n\n")
                 
                 # check current trie is made correctly
                 if oldblocknumber not in headers:
@@ -597,7 +600,7 @@ def simulateEthereum(startBlockNum, endBlockNum):
                 stateRootInBlockHeader = headers[oldblocknumber]['stateroot'].hex()
                 currentStateRoot = getTrieRootHash()[2:]
                 if currentStateRoot != stateRootInBlockHeader:
-                    print("@@fail")
+                    print("@@fail: state trie is wrong")
                     print(currentStateRoot, "vs", stateRootInBlockHeader)
                     print('block #{}'.format(oldblocknumber))
                     sys.exit()
@@ -611,7 +614,12 @@ def simulateEthereum(startBlockNum, endBlockNum):
                 oldblocknumber += 1
                 #print("do block", oldblocknumber ,"\n")
 
+            if item['blocknumber'] > endBlockNum:
+                print("reaching end block num, stop writing")
+                break
+
             if item['type'] % 2 == 1:
+                # print("do writes in block", item['blocknumber'])
                 # print("item:", item)
                 writeCount += 1
 
@@ -667,6 +675,7 @@ def simulateEthereum(startBlockNum, endBlockNum):
 
                     # check current storage trie is made correctly
                     if currentStorageRoot[2:] != storageRoot:
+                        print("@@fail: storage trie is wrong")
                         print("blocknum:", oldblocknumber)
                         # print("txindex:", item['txindex'])
                         # print("tx hash:", select_tx_hash(cursor, blockNum, item['txindex']))
