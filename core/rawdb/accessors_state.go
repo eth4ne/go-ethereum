@@ -140,9 +140,9 @@ func WriteTrieNode(db ethdb.KeyValueWriter, hash common.Hash, node []byte) {
 		}
 
 		// update current block's stat
-		blockInfo, _ := common.Blocks[common.CurrentBlockNum]
+		blockInfo, _ := common.Blocks[common.NextBlockNum]
 		blockInfo.FlushedNodeHashes = append(blockInfo.FlushedNodeHashes, hash)
-		common.Blocks[common.CurrentBlockNum] = blockInfo
+		common.Blocks[common.NextBlockNum] = blockInfo
 
 		// confirm dirty node
 		if nodeInfoDirty.Size != uint(32+len(node)) {

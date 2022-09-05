@@ -71,8 +71,9 @@ var (
 
 	// Blocks[blockNum] = block's information
 	Blocks = make(map[uint64]BlockInfo)
-	// current block number (which will be increased after flushing trie nodes)
-	CurrentBlockNum = uint64(0)
+	// next block number to generate (which will be increased after flushing trie nodes)
+	// latest flushed block num = next block num - 1 (if next block num == 0, then no block exists)
+	NextBlockNum = uint64(0)
 	// max number of blocks to store in "Blocks" (i.e., rollback limit)
 	MaxBlocksToStore = uint64(1000000)
 

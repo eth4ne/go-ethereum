@@ -151,7 +151,7 @@ func reset() {
 
 	// reset blocks
 	common.Blocks = make(map[uint64]common.BlockInfo)
-	common.CurrentBlockNum = 0
+	common.NextBlockNum = 0
 
 	// reset Ethane related vars
 	common.AddrToKeyActive = make(map[common.Address]common.Hash)
@@ -162,25 +162,25 @@ func reset() {
 	common.InactiveBoundaryKey = uint64(0)
 	common.CheckpointKeys = make(map[uint64]uint64)
 	common.RestoredKeys = make([]common.Hash, 0)
-
-	// set genesis block (with empty state trie)
-	flushTrieNodes()
-	// tricky codes to correctly set genesis block and current block number
-	common.Blocks[0] = common.Blocks[1]
-	delete(common.Blocks, 1)
-	common.CurrentBlockNum = 0
-	common.CheckpointKeys[0] = common.CheckpointKey
 }
 
 // rollbackUncommittedUpdates goes back to latest flushed trie (i.e., undo all uncommitted trie updates)
 // discards unflushed dirty nodes
 func rollbackUncommittedUpdates() {
+	// there is no block, just reset
+	if common.NextBlockNum == 0 {
+		reset()
+		return
+	}
+
+	latestBlockNum := common.NextBlockNum - 1
+
 	// open current state trie
-	currentRoot := common.Blocks[common.CurrentBlockNum].Root
+	currentRoot := common.Blocks[latestBlockNum].Root
 	normTrie, _ = trie.New(currentRoot, trie.NewDatabase(diskdb))
 
 	// rollback account nonce value
-	emptyAccount.Nonce = common.Blocks[common.CurrentBlockNum].MaxAccountNonce
+	emptyAccount.Nonce = common.Blocks[latestBlockNum].MaxAccountNonce
 
 	// drop all dirty nodes
 	common.TrieNodeInfosDirty = make(map[common.Hash]common.NodeInfo)
@@ -189,8 +189,15 @@ func rollbackUncommittedUpdates() {
 // rollback goes back to the target block state
 func rollbackToBlock(targetBlockNum uint64) bool {
 
+	if common.NextBlockNum == 0 {
+		fmt.Println("cannot rollback, no block exist")
+		return false
+	}
+
+	latestBlockNum := common.NextBlockNum - 1
+
 	// check rollback validity
-	if targetBlockNum >= common.CurrentBlockNum {
+	if targetBlockNum >= latestBlockNum {
 		fmt.Println("cannot rollback to current or future")
 		return false
 	}
@@ -205,8 +212,8 @@ func rollbackToBlock(targetBlockNum uint64) bool {
 	}
 
 	// rollback db modifications
-	fmt.Println("rollbackToBlock: from block", common.CurrentBlockNum, "to block", targetBlockNum)
-	for blockNum := common.CurrentBlockNum; blockNum > targetBlockNum; blockNum-- {
+	fmt.Println("rollbackToBlock: from block", latestBlockNum, "to block", targetBlockNum)
+	for blockNum := latestBlockNum; blockNum > targetBlockNum; blockNum-- {
 		blockInfo, exist := common.Blocks[blockNum]
 		if !exist {
 			fmt.Println("rollbackToBlock error")
@@ -271,7 +278,7 @@ func rollbackToBlock(targetBlockNum uint64) bool {
 
 		// delete block
 		delete(common.Blocks, blockNum)
-		common.CurrentBlockNum--
+		common.NextBlockNum--
 	}
 
 	// open target block's trie
@@ -312,16 +319,14 @@ func estimateIncrement(hash common.Hash) (uint64, uint64) {
 
 // flushTrieNodes flushes dirty trie nodes to the db
 func flushTrieNodes() {
-	// increase block number
-	common.CurrentBlockNum++
 
-	fmt.Println("flush: generate block number", common.CurrentBlockNum)
+	fmt.Println("flush start: generate block number", common.NextBlockNum)
 
 	// do inactivate or delete previous leaf nodes
 	if common.IsEthane {
 
 		// update checkpoint key
-		bn := common.CurrentBlockNum
+		bn := common.NextBlockNum
 		common.CheckpointKeys[bn] = common.CheckpointKey
 		common.CheckpointKey = common.NextKey
 
@@ -386,15 +391,15 @@ func flushTrieNodes() {
 
 	// update block info (to be able to rollback to this state later)
 	// fmt.Println("new trie root after flush:", normTrie.Hash().Hex())
-	blockInfo, _ := common.Blocks[common.CurrentBlockNum]
+	blockInfo, _ := common.Blocks[common.NextBlockNum]
 	blockInfo.Root = normTrie.Hash()
 	blockInfo.MaxAccountNonce = emptyAccount.Nonce
 	blockInfo.NewNodeStat = common.NewNodeStat
-	common.Blocks[common.CurrentBlockNum] = blockInfo
+	common.Blocks[common.NextBlockNum] = blockInfo
 	// delete too old block to store
-	blockNumToDelete := common.CurrentBlockNum - common.MaxBlocksToStore - 1
+	blockNumToDelete := common.NextBlockNum - common.MaxBlocksToStore - 1
 	if _, exist := common.Blocks[blockNumToDelete]; exist {
-		// fmt.Println("current block num:", common.CurrentBlockNum, "/ block num to delete:", blockNumToDelete)
+		// fmt.Println("current block num:", common.NextBlockNum, "/ block num to delete:", blockNumToDelete)
 		delete(common.Blocks, blockNumToDelete)
 	}
 
@@ -402,15 +407,9 @@ func flushTrieNodes() {
 	common.TrieNodeInfosDirty = make(map[common.Hash]common.NodeInfo)
 
 	// show db stat
-	totalNodesNum, totalNodesSize := common.TotalNodeStat.GetSum()
-	totalStorageNodesNum, totalStorageNodesSize := common.TotalStorageNodeStat.GetSum()
-	newNodesNum, newNodesSize := common.NewNodeStat.GetSum()
-	newStorageNodesNum, newStorageNodesSize := common.NewStorageNodeStat.GetSum()
-	common.NewNodeStat.Print()
-	fmt.Println("  new trie nodes:", newNodesNum, "/ increased db size:", newNodesSize)
-	fmt.Println("  new storage trie nodes:", newStorageNodesNum, "/ increased db size:", newStorageNodesSize)
-	fmt.Println("  total trie nodes:", totalNodesNum, "/ db size:", totalNodesSize)
-	fmt.Println("  total storage trie nodes:", totalStorageNodesNum, "/ db size:", totalStorageNodesSize)
+
+	// increase next block number after flush
+	common.NextBlockNum++
 }
 
 func countOpenFiles() int64 {
@@ -1065,6 +1064,10 @@ func inspectEthaneTries(blockNum uint64) {
 	// inactive trie
 	fmt.Println()
 	fmt.Println("print inactive trie")
+	if inactiveBoundaryKey == 0 {
+		// there is no inactive account
+		inactiveBoundarySubOne = startKey
+	}
 	inactiveResult := InspectTrieWithinRange(stateRoot, startKey, inactiveBoundarySubOne)
 	if inactiveBoundaryKey == 0 {
 		// there is no inactive account
@@ -1077,7 +1080,12 @@ func inspectEthaneTries(blockNum uint64) {
 // print Ethane related stats
 func printEthaneState() {
 
-	fmt.Println("current block num:", common.CurrentBlockNum)
+	if common.NextBlockNum == 0 {
+		fmt.Println("there is no block to print state, just finish printEthaneState()")
+		return
+	}
+	latestBlockNum := common.NextBlockNum - 1
+	fmt.Println("latest block num:", latestBlockNum)
 
 	// print options
 	fmt.Println("delete epoch:", common.DeleteEpoch, "/ inactivate epoch:", common.InactivateEpoch, "/ inactivate criterion:", common.InactivateCriterion)
@@ -1095,8 +1103,8 @@ func printEthaneState() {
 	fmt.Println("current NextKey:", common.NextKey, "/ NextKey(hex):", common.Uint64ToHash(common.NextKey).Hex())
 
 	// print total/active/inactive trie stats (size, node num, node types, depths)
-	inspectEthaneTries(common.CurrentBlockNum)
-	latestCheckpointBlockNum := common.CurrentBlockNum - (common.CurrentBlockNum % common.InactivateEpoch) - 1
+	inspectEthaneTries(latestBlockNum)
+	latestCheckpointBlockNum := latestBlockNum - (latestBlockNum % common.InactivateEpoch) - 1
 	inspectEthaneTries(latestCheckpointBlockNum)     // relatively small state trie after delete/inactivate
 	inspectEthaneTries(latestCheckpointBlockNum - 1) // relatively large state trie before delete/inactivate
 }
@@ -1147,8 +1155,9 @@ func connHandler(conn net.Conn) {
 				response = []byte("reset success")
 
 			case "getBlockNum":
+				// caution: this returns next block num, not latest block num
 				fmt.Println("execute getBlockNum()")
-				response = []byte(strconv.FormatUint(common.CurrentBlockNum, 10))
+				response = []byte(strconv.FormatUint(common.NextBlockNum, 10))
 
 			case "getTrieRootHash":
 				// fmt.Println("execute getTrieRootHash()")
@@ -1159,7 +1168,7 @@ func connHandler(conn net.Conn) {
 			case "printCurrentTrie":
 				fmt.Println("execute printCurrentTrie()")
 				normTrie.Hash()
-				fmt.Println("current block num:", common.CurrentBlockNum)
+				fmt.Println("next block num:", common.NextBlockNum)
 				normTrie.Print()
 				response = []byte("success")
 
@@ -1425,13 +1434,19 @@ func connHandler(conn net.Conn) {
 				fmt.Println("execute estimateFlushResult()")
 
 				// inspect latest flushed trie
-				flushedRoot := common.Blocks[common.CurrentBlockNum].Root
-				inspectTrie(flushedRoot)
-				flushedRootInfo, existF := common.TrieNodeInfos[flushedRoot]
-				if !existF {
-					flushedRootInfo, existF = common.TrieNodeInfosDirty[flushedRoot]
+				var flushedNodesNum, flushedNodesSize uint64
+				if common.NextBlockNum == 0 {
+					flushedNodesNum, flushedNodesSize = 0, 0
+				} else {
+					latestBlockNum := common.NextBlockNum - 1
+					flushedRoot := common.Blocks[latestBlockNum].Root
+					inspectTrie(flushedRoot)
+					flushedRootInfo, existF := common.TrieNodeInfos[flushedRoot]
+					if !existF {
+						flushedRootInfo, existF = common.TrieNodeInfosDirty[flushedRoot]
+					}
+					flushedNodesNum, flushedNodesSize = flushedRootInfo.SubTrieNodeStat.GetSum()
 				}
-				flushedNodesNum, flushedNodesSize := flushedRootInfo.SubTrieNodeStat.GetSum()
 
 				// inspect current trie
 				currentRoot := normTrie.Hash()
