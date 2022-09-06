@@ -692,3 +692,21 @@ func (c *ChainConfig) Rules(num *big.Int, isMerge bool) Rules {
 		IsMerge:          isMerge,
 	}
 }
+
+// jhkim: check Hardfork block
+func (c *ChainConfig) IsHardForkBlock(num *big.Int) bool {
+	return (num.Cmp(c.HomesteadBlock) == 0 ||
+		num.Cmp(c.DAOForkBlock) == 0 ||
+		num.Cmp(c.EIP150Block) == 0 ||
+		num.Cmp(c.EIP155Block) == 0 ||
+		num.Cmp(c.EIP158Block) == 0 ||
+		num.Cmp(c.ByzantiumBlock) == 0 ||
+		num.Cmp(c.ConstantinopleBlock) == 0 ||
+		num.Cmp(c.PetersburgBlock) == 0 ||
+		num.Cmp(c.IstanbulBlock) == 0 ||
+		num.Cmp(c.MuirGlacierBlock) == 0 ||
+		num.Cmp(c.BerlinBlock) == 0 ||
+		num.Cmp(c.LondonBlock) == 0 ||
+		num.Cmp(c.ArrowGlacierBlock) == 0)
+
+}

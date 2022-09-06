@@ -322,7 +322,10 @@ func (s *stateObject) SetStorage(storage map[common.Hash]common.Hash) {
 }
 
 func (s *stateObject) setState(key, value common.Hash) {
+	// fmt.Println("      setstate", key, value)
+
 	s.dirtyStorage[key] = value
+	// fmt.Println("      setstate: dirtyStorage", s.dirtyStorage)
 }
 
 // finalise moves all dirty storage slots into the pending area to be hashed or
@@ -330,8 +333,9 @@ func (s *stateObject) setState(key, value common.Hash) {
 func (s *stateObject) finalise(prefetch bool) {
 	slotsToPrefetch := make([][]byte, 0, len(s.dirtyStorage))
 	for key, value := range s.dirtyStorage {
-		// fmt.Println("    stateObject.finalise move key value from dirty to pending", key, value, s.txHash)
+		// fmt.Println("    stateObject.finalise move key value from dirty to pending", key, value)
 		s.pendingStorage[key] = value
+
 		if value != s.originStorage[key] {
 			slotsToPrefetch = append(slotsToPrefetch, common.CopyBytes(key[:])) // Copy needed for closure
 		}
@@ -370,7 +374,7 @@ func (s *stateObject) updateTrie(db Database) Trie {
 	usedStorage := make([][]byte, 0, len(s.pendingStorage))
 	for key, value := range s.pendingStorage {
 		// Skip noop changes, persist actual changes
-		// fmt.Println("       for key value in range s.pendingStorage", s.txHash, key, value)
+		// fmt.Println("       for key value in range s.pendingStorage", key, value)
 		if value == s.originStorage[key] {
 			continue
 		}
@@ -379,10 +383,38 @@ func (s *stateObject) updateTrie(db Database) Trie {
 		var v []byte
 		if (value == common.Hash{}) {
 			s.setError(tr.TryDelete(key[:]))
+			// fmt.Println(" DELETE")
+			if s.txHash != common.HexToHash("0x0") {
+				// fmt.Println("     ", common.GlobalBlockNumber, common.GlobalTxHash)
+				// fmt.Println("     MyTryUpdate", s.address, key, common.Bytes2Hex(v))
+				// fmt.Println("     MyTryUpdate", common.TxWriteList[common.GlobalTxHash])
+				// fmt.Println("     MyTryUpdate", common.TxWriteList[common.GlobalTxHash][s.address])
+				// fmt.Println("     MyTryUpdate", common.TxWriteList[common.GlobalTxHash][s.address].Storage)
+				// fmt.Println("     MyTryUpdate", common.TxWriteList[common.GlobalTxHash][s.address].Storage[key])
+				common.TxWriteList[common.GlobalTxHash][s.address].Storage[key] = value
+			} else {
+				// fmt.Println("delete hardfork obj ", common.GlobalTxHash, key)
+				common.HardFork[s.address].Storage[key] = value
+			}
+
 			s.db.StorageDeleted += 1
 		} else {
 			// Encoding []byte cannot fail, ok to ignore the error.
 			v, _ = rlp.EncodeToBytes(common.TrimLeftZeroes(value[:]))
+			// fmt.Println(" UPDATE")
+			if s.txHash != common.HexToHash("0x0") {
+				// fmt.Println("     ", common.GlobalBlockNumber, common.GlobalTxHash)
+				// fmt.Println("     MyTryUpdate", s.address, key, common.Bytes2Hex(v))
+				// fmt.Println("     MyTryUpdate", common.TxWriteList[common.GlobalTxHash])
+				// fmt.Println("     MyTryUpdate", common.TxWriteList[common.GlobalTxHash][s.address])
+				// fmt.Println("     MyTryUpdate", common.TxWriteList[common.GlobalTxHash][s.address].Storage)
+				// fmt.Println("     MyTryUpdate", common.TxWriteList[common.GlobalTxHash][s.address].Storage[key])
+				common.TxWriteList[common.GlobalTxHash][s.address].Storage[key] = value
+			} else {
+				// fmt.Println("update hardfork obj ", common.GlobalTxHash, key)
+				common.HardFork[s.address].Storage[key] = value
+			}
+
 			s.setError(tr.MyTryUpdate(key[:], v, s.txHash, s.address)) //jhkim
 			s.db.StorageUpdated += 1
 		}

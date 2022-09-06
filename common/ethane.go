@@ -8,7 +8,10 @@ import (
 )
 
 // var Path = "/home/jhkim/go/src/github.com/ethereum/go-ethereum-substate/txDetail/" // used absolute path
-var Path = "/shared/jhkim/" // used absolute path
+var Path = "/home/jhkim/go/src/github.com/ethereum/go-ethereum/txDetail/"
+
+// var Path = "/shared/jhkim/" // used absolute path
+
 var (
 	// GlobalDistance                int     = 0
 	GlobalTxHash      Hash    = HexToHash("0x0")
@@ -32,6 +35,7 @@ var (
 	TxReadList  = map[Hash]map[Address]struct{}{}
 	TxWriteList = map[Hash]SubstateAlloc{} // key: tx hash, value: SubstateAlloc(map key:address, value:stateAccount)
 
+	HardFork = SubstateAlloc{}
 )
 
 type SimpleAccount struct {

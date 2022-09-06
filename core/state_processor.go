@@ -71,15 +71,18 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	if p.config.DAOForkSupport && p.config.DAOForkBlock != nil && p.config.DAOForkBlock.Cmp(block.Number()) == 0 {
 		misc.ApplyDAOHardFork(statedb)
 
-		// jhkim: DAO account는 초반에 attack에 의해 생긴 account라고 보임
 		// stage1-substate: Finalise all DAO accounts, don't save them in substate
-		if config := p.config; config.IsByzantium(header.Number) {
+		if config := p.config; config.IsByzantium(header.Number) { // jhkim: 437만 블록 이후
 			statedb.Finalise(true)
 		} else {
-			statedb.Finalise(config.IsEIP158(header.Number))
+			// fmt.Println("Finalise dao accounts")
+			statedb.Finalise(config.IsEIP158(header.Number)) // jhkim: 267.5만 ~ 437만 블록
 		}
 
 	}
+	// fmt.Println("Process new statedb.IntermediateRoot before")
+	statedb.IntermediateRoot(p.config.IsEIP158(header.Number))
+	// fmt.Println("Process new statedb.IntermediateRoot after")
 	blockContext := NewEVMBlockContext(header, p.bc, nil)
 	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, p.config, cfg)
 
@@ -106,8 +109,16 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	if common.BlockTxList[common.GlobalBlockNumber] == nil {
 		common.BlockTxList[common.GlobalBlockNumber] = []common.Hash{}
 	}
+	if common.HardFork == nil {
+		common.HardFork = common.SubstateAlloc{}
+	}
+	// fmt.Println("stateobjects:", statedb.GetStateObjects())
+	// obj := statedb.GetStateObjects()[common.HexToAddress("0x005F5ceE7a43331D5a3d3EEC71305925a62f34b6")]
+	// fmt.Println("statedb.GetStateObjects()[0x005F5ceE7a43331D5a3d3EEC71305925a62f34b6]", obj.Balance(), obj.Nonce(), common.Bytes2Hex(obj.CodeHash()), obj.StorageRoot())
+	// fmt.Println("common.GlobalTxHash1", common.GlobalTxHash)
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
+		// fmt.Println("common.GlobalTxHash 1 ", common.GlobalTxHash)
 		// common.TxReadList[tx.Hash()] = common.SubstateAlloc{}
 		common.TxReadList[tx.Hash()] = map[common.Address]struct{}{}
 		common.TxWriteList[tx.Hash()] = common.SubstateAlloc{}
@@ -130,9 +141,11 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		//jhkim: reset global variable after process each transaction
 		common.GlobalTxTo = common.Address{}
 		common.GlobalTxFrom = common.Address{}
-
+		common.GlobalTxHash = common.HexToHash("0x0")
 	}
+	// fmt.Println("common.GlobalTxHash3", common.GlobalTxHash)
 	common.GlobalTxHash = common.HexToHash("0x0")
+	// fmt.Println("common.GlobalTxHash4", common.GlobalTxHash)
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles())
 	common.BlockMinerList[blocknumber] = common.SimpleAccount{Addr: block.Coinbase(),
@@ -216,6 +229,7 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	// common.GlobalMutex.Unlock()
 
 	// Update the state with pending changes.
+	// fmt.Println("After applyTx, update state with pending changes", tx.Hash())
 	var root []byte
 	if config.IsByzantium(blockNumber) {
 		statedb.Finalise(true)
@@ -285,9 +299,9 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 		common.TxDetail[tx.Hash()].DeployedContractAddress = receipt.ContractAddress
 		if receipt.Status == types.ReceiptStatusSuccessful { //jhkim
 
-			if statedb.GetCode(receipt.ContractAddress) != nil {
-				common.TxWriteList[tx.Hash()][receipt.ContractAddress].Code = statedb.GetCode(receipt.ContractAddress)
-			}
+			// if statedb.GetCode(receipt.ContractAddress) != nil {
+			// 	common.TxWriteList[tx.Hash()][receipt.ContractAddress].Code = statedb.GetCode(receipt.ContractAddress)
+			// }
 		}
 	}
 	receipt.TxHash = tx.Hash()

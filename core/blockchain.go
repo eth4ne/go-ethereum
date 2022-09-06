@@ -1312,12 +1312,14 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	} else {
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
 	}
-	var epoch = 100000
-	if common.GlobalBlockNumber > 11000000 {
-		epoch = 10000
-	}
+	var epoch = 1000
+	// var epoch = 10
+	// if common.GlobalBlockNumber > 11000000 {
+	// 	epoch = 10000
+	// }
 	if common.GlobalBlockNumber%epoch == 0 && common.GlobalBlockNumber != 0 {
-		PrintTxSubstate(common.GlobalBlockNumber, epoch)
+		// if common.GlobalBlockNumber == 49018 {
+		PrintTxSubstate(common.GlobalBlockNumber, epoch, *bc.chainConfig)
 		fmt.Println("DONE blocknumber:", common.GlobalBlockNumber)
 
 		// reset TxDetail, TxReadList, TxWriteList, Miner&Uncle list, and Txlist
@@ -1340,9 +1342,11 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 			delete(common.BlockTxList, k)
 		}
 		common.BlockTxList = make(map[int][]common.Hash)
-
+		// os.Exit(0)
 	}
-
+	// if common.GlobalBlockNumber == 200000 {
+	// 	os.Exit(0)
+	// }
 	if common.GlobalBlockNumber != 0 && common.GlobalBlockNumber%1000000 == 0 {
 		rawdb.MyInspectDatabase(bc.db, nil, nil)
 		// os.Exit(0)
@@ -1355,7 +1359,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 // var path = "/shared/jhkim/" // used absolute path
 // var _ = os.MkdirAll(common.Path, 0777)
 
-func PrintTxSubstate(blocknumber, distance int) {
+func PrintTxSubstate(blocknumber, distance int, chainconfig params.ChainConfig) {
 	ss := fmt.Sprintf("Write TxSubstate %d-%d in txt file", blocknumber-distance, blocknumber)
 	filepath := common.Path + "TxSubstate" + fmt.Sprintf("%08d", blocknumber-distance+1) + "-" + fmt.Sprintf("%08d", blocknumber) + ".txt"
 
@@ -1378,6 +1382,70 @@ func PrintTxSubstate(blocknumber, distance int) {
 
 		// s := fmt.Sprintf("\n/Block:%v\n", i)
 		fmt.Fprintf(f, "\n/Block:%v\n", i)
+
+		// add hardfork
+		// if big.NewInt(int64(i)).Cmp(params.MainnetChainConfig.DAOForkBlock) == 0 {
+		// 	DAOpath := common.Path + "DAOHardFork.txt"
+		// 	if fdao, err := os.Open(DAOpath); err == nil {
+		// 		defer f.Close()
+		// 		fmt.Println("Append DAO HardFork state transition to", filepath)
+		// 		scanner := bufio.NewScanner(fdao)
+		// 		for scanner.Scan() {
+		// 			fmt.Fprintln(f, scanner.Text())
+		// 		}
+
+		// 		fmt.Println("Done! Delete", DAOpath)
+		// 		os.Remove(DAOpath)
+		// 	}
+		// }
+		// if common.GlobalBlockNumber == 192000 {
+		// 	fmt.Println("write block 1920000")
+		// 	fmt.Println(big.NewInt(int64(i)))
+		// 	fmt.Println(chainconfig.DAOForkBlock)
+		// 	fmt.Println(chainconfig.IsHardForkBlock(big.NewInt(int64(i))))
+		// 	fmt.Println(chainconfig.DAOForkBlock.Cmp(big.NewInt(int64(i))))
+		// }
+		if chainconfig.IsHardForkBlock(big.NewInt(int64(i))) {
+			fmt.Println(i, "is hard fork block")
+			fmt.Fprintln(f, "*HardFork")
+			fmt.Fprintln(f, "@ReadList")
+			for addr := range common.HardFork {
+				fmt.Fprintf(f, ".address:%v\n", addr)
+			}
+			// fmt.Fprintln(f, ".address:", params.DAORefundContract)
+			// for _, addr := range params.DAODrainList() {
+			// 	fmt.Fprintln(f, ".address:", addr)
+			// }
+
+			// Move every DAO account and extra-balance account funds into the refund contract
+			fmt.Fprintln(f, "#WriteList")
+			for addr, sa := range common.HardFork {
+
+				// jhkim: write DAO Hardfork substate for txSubstate
+				// DAO drainlist
+				fmt.Fprintf(f, ".address:%v\n", addr)
+				fmt.Fprintf(f, "Nonce:%v\n", sa.Nonce)
+				fmt.Fprintf(f, "Balance:%v\n", sa.Balance)
+				fmt.Fprintf(f, "CodeHash:%v\n", common.Bytes2Hex(sa.CodeHash))
+				fmt.Fprintf(f, "StorageRoot:%v\n", sa.StorageRoot)
+				if sa.StorageRoot != types.EmptyRootHash {
+					fmt.Fprintln(f, "Storage:")
+					for key, value := range sa.Storage {
+						fmt.Fprint(f, "slot:", key, ",value:")
+						tmp := common.TrimLeftZeroes(value[:])
+						if len(tmp) != 0 {
+							fmt.Fprintf(f, "0x%v\n", common.Bytes2Hex(tmp))
+							// s += fmt.Sprintf("0x%v\n", common.Bytes2Hex(tmp))
+						} else {
+							fmt.Fprintln(f, "0x0")
+							// s += fmt.Sprintln("0x0")
+						}
+					}
+				}
+
+			}
+		}
+
 		if txlist, exist := common.BlockTxList[i]; exist {
 			txcounter += len(common.BlockTxList[i])
 			for _, tx := range txlist {
@@ -1604,6 +1672,7 @@ func PrintTxSubstate(blocknumber, distance int) {
 
 			}
 		}
+
 		// s += fmt.Sprintln("##########################################################################")
 		// fmt.Fprintln(f, s)
 	}
@@ -1620,6 +1689,7 @@ func PrintTxSubstate(blocknumber, distance int) {
 	common.TxWriteList = make(map[common.Hash]common.SubstateAlloc)
 	common.BlockMinerList = make(map[int]common.SimpleAccount)
 	common.BlockUncleList = make(map[int][]common.SimpleAccount)
+	common.HardFork = make(common.SubstateAlloc)
 }
 
 func contains(list []common.Address, addr common.Address) bool {

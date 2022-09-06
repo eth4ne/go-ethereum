@@ -451,29 +451,21 @@ func (s *StateDB) SetCode(addr common.Address, code []byte) {
 }
 
 func (s *StateDB) SetState(addr common.Address, key, value common.Hash) {
+	// fmt.Println(" SETSTATE/ addr:", addr, "key:", key, "value:", value)
 	stateObject := s.GetOrNewStateObject(addr)
 	if stateObject != nil {
-		if sa, exist := common.TxWriteList[common.GlobalTxHash][addr]; !exist {
-			common.TxWriteList[common.GlobalTxHash][addr] = common.NewSubstateAccount(stateObject.Nonce(), stateObject.Balance(), stateObject.code)
-			common.TxWriteList[common.GlobalTxHash][addr].CodeHash = stateObject.CodeHash()
-			common.TxWriteList[common.GlobalTxHash][addr].StorageRoot = s.GetStorageTrieHash(addr)
-			// // SubstateAccount.Storage []map[Hash]Hash version
-			// tmp := map[common.Hash]common.Hash{key: value}
-			// common.TxWriteList[common.GlobalTxHash][addr].Storage = []map[common.Hash]common.Hash{tmp}
+		// if sa, exist := common.TxWriteList[common.GlobalTxHash][addr]; !exist {
+		// 	common.TxWriteList[common.GlobalTxHash][addr] = common.NewSubstateAccount(stateObject.Nonce(), stateObject.Balance(), stateObject.code)
+		// 	common.TxWriteList[common.GlobalTxHash][addr].CodeHash = stateObject.CodeHash()
+		// 	common.TxWriteList[common.GlobalTxHash][addr].StorageRoot = s.GetStorageTrieHash(addr)
 
-			// // SubstateAccount.Storage map[Hash]Hash version
+		// 	// common.TxWriteList[common.GlobalTxHash][addr].Storage = map[common.Hash]common.Hash{key: value}
+		// } else {
 
-			common.TxWriteList[common.GlobalTxHash][addr].Storage = map[common.Hash]common.Hash{key: value}
-		} else {
-			// // SubstateAccount.Storage []map[Hash]Hash version
-			// tmp := map[common.Hash]common.Hash{key: value}
-			// sa.Storage = append(sa.Storage, tmp)
-			// common.TxWriteList[common.GlobalTxHash][addr].Storage = sa.Storage
-
-			// // SubstateAccount.Storage map[Hash]Hash version
-			sa.Storage[key] = value
-			common.TxWriteList[common.GlobalTxHash][addr] = sa
-		}
+		// 	// // SubstateAccount.Storage map[Hash]Hash version
+		// 	// sa.Storage[key] = value
+		// 	common.TxWriteList[common.GlobalTxHash][addr] = sa
+		// }
 		stateObject.SetState(s.db, key, value)
 	}
 }
@@ -541,9 +533,12 @@ func (s *StateDB) deleteStateObject(obj *stateObject) {
 	}
 	// Delete the account from the trie
 	addr := obj.Address()
-	// fmt.Println("DeleteStateObject/", common.GlobalTxHash, addr)
-	common.TxDetail[common.GlobalTxHash].DeletedAddress = append(common.TxDetail[common.GlobalTxHash].DeletedAddress, addr)
-	// fmt.Println("  common.TxDetail[common.GlobalTxHash].DeletedAddress", common.TxDetail[common.GlobalTxHash].DeletedAddress)
+	// if txdetail, exist := common.TxDetail[common.GlobalTxHash]; exist {
+	// 	common.TxDetail[common.GlobalTxHash].DeletedAddress = append(txdetail.DeletedAddress, addr)
+	// }
+	// if _, exist := common.TxWriteList[common.GlobalTxHash]; exist {
+	// 	delete(common.TxWriteList[common.GlobalTxHash], addr)
+	// }
 	if err := s.trie.TryDelete(addr[:]); err != nil {
 		s.setError(fmt.Errorf("deleteStateObject (%x) error: %v", addr[:], err))
 	}
@@ -572,10 +567,10 @@ func (s *StateDB) getStateObject(addr common.Address) *stateObject {
 	if _, exist := s.ResearchPreAlloc[addr]; !exist {
 		s.ResearchPreAlloc[addr] = research.NewSubstateAccount(0, big.NewInt(0), nil) // jhkim: make new account's substate account
 	}
-	if common.GlobalBlockNumber > 0 && common.GlobalTxHash != common.HexToHash("0x0") {
+	// if common.GlobalBlockNumber > 0 && common.GlobalTxHash != common.HexToHash("0x0") {
 
-		common.TxWriteList[common.GlobalTxHash][addr] = common.NewSubstateAccount(0, big.NewInt(0), nil)
-	}
+	// 	common.TxWriteList[common.GlobalTxHash][addr] = common.NewSubstateAccount(0, big.NewInt(0), nil)
+	// }
 
 	return nil
 }
@@ -910,6 +905,7 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 	}
 
 	addressesToPrefetch := make([][]byte, 0, len(s.journal.dirties))
+	// fmt.Println(" s.journal.dirties: ", len(s.journal.dirties))
 	for addr := range s.journal.dirties {
 		obj, exist := s.stateObjects[addr]
 		if !exist {
@@ -934,7 +930,7 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 				delete(s.snapStorage, obj.addrHash)        // Clear out any previously updated storage data (may be recreated via a ressurrect)
 			}
 		} else {
-
+			// fmt.Println(" @#@# Finalise", common.GlobalTxHash, addr)
 			// jhkim:substate
 			// stage1-substate: copy dirty account to StateDB.ResearchPostAlloc
 			sa := research.NewSubstateAccount(obj.Nonce(), obj.Balance(), obj.Code(s.db))
@@ -955,13 +951,13 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 					}
 					// mySA.Storage = []map[common.Hash]common.Hash{}
 					mySA.Storage = map[common.Hash]common.Hash{}
-					for key := range obj.ResearchTouchedWrite {
-						val := obj.GetState(s.db, key)
-						fmt.Println("      never enter this branch")
-						panic(0)
-						fmt.Println("      common.TxWritelist not exists: Write2 storage/key:", key, "value:", val)
+					// for key := range obj.ResearchTouchedWrite {
+					// 	val := obj.GetState(s.db, key)
+					// 	fmt.Println("      never enter this branch")
+					// 	panic(0)
+					// 	fmt.Println("      common.TxWritelist not exists: Write2 storage/key:", key, "value:", val)
 
-					}
+					// }
 					common.TxWriteList[common.GlobalTxHash][addr] = mySA
 				} else {
 
@@ -989,12 +985,17 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 
 				}
 
+			} else {
+				common.HardFork[addr] = common.NewSubstateAccount(obj.Nonce(), obj.Balance(), obj.Code(s.db))
+				common.HardFork[addr].StorageRoot = obj.StorageRoot()
+				common.HardFork[addr].CodeHash = obj.CodeHash()
 			}
 
 			s.ResearchPostAlloc[addr] = sa
 
 			obj.finalise(true) // Prefetch slots in the background
 		}
+		// fmt.Println("add to stateobjectspending", addr)
 		s.stateObjectsPending[addr] = struct{}{}
 		s.stateObjectsDirty[addr] = struct{}{}
 
@@ -1003,11 +1004,24 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 		// the commit-phase will be a lot faster
 		addressesToPrefetch = append(addressesToPrefetch, common.CopyBytes(addr[:])) // Copy needed for closure
 	}
+	// fmt.Println("stateObjectsPending", len(s.stateObjectsPending))
 	if s.prefetcher != nil && len(addressesToPrefetch) > 0 {
 		s.prefetcher.prefetch(s.originalRoot, addressesToPrefetch)
 	}
 	// Invalidate journal because reverting across transactions is not allowed.
 	s.clearJournalAndRefund()
+}
+func contains(list []common.Address, addr common.Address) bool {
+	// fmt.Println("find ", addr)
+	for _, v := range list {
+		// fmt.Print(v)
+		if v == addr {
+			// fmt.Println()
+			return true
+		}
+	}
+	// fmt.Println()
+	return false
 }
 
 // IntermediateRoot computes the current root hash of the state trie.
@@ -1037,6 +1051,7 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 	// the account prefetcher. Instead, let's process all the storage updates
 	// first, giving the account prefeches just a few more milliseconds of time
 	// to pull useful data from disk.
+	// fmt.Println("Last Question?: length of s.stateobjectspending", len(s.stateObjectsPending))
 	for addr := range s.stateObjectsPending {
 
 		if obj := s.stateObjects[addr]; !obj.deleted {
@@ -1053,41 +1068,63 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 	}
 	usedAddrs := make([][]byte, 0, len(s.stateObjectsPending))
 	// for addr, lst := range s.stateObjectsPending {
-	tmp := make(common.SubstateAlloc)
+
 	// tmp := common.TxWriteList[common.GlobalTxHash]
+	// fmt.Println("IntermediateRoot", s.stateObjectsPending)
 	for addr := range s.stateObjectsPending {
 		if obj := s.stateObjects[addr]; obj.deleted {
+			if common.GlobalBlockNumber > 0 {
+				if common.GlobalTxHash != common.HexToHash("0x0") {
+					if txdetail, exist := common.TxDetail[common.GlobalTxHash]; exist {
+						common.TxDetail[common.GlobalTxHash].DeletedAddress = append(txdetail.DeletedAddress, addr)
+					}
+					if _, exist := common.TxWriteList[common.GlobalTxHash]; exist {
+						delete(common.TxWriteList[common.GlobalTxHash], addr)
+					}
+				} else {
+					common.HardFork[addr] = common.NewSubstateAccount(obj.Nonce(), obj.Balance(), obj.code)
+					common.HardFork[addr].CodeHash = obj.CodeHash()
+					common.HardFork[addr].StorageRoot = obj.StorageRoot()
+					common.HardFork[addr].Storage = make(map[common.Hash]common.Hash)
+				}
+			}
 			s.deleteStateObject(obj)
 			s.AccountDeleted += 1
 		} else {
-			if common.GlobalTxHash != common.HexToHash("0x0") && common.GlobalBlockNumber > 0 {
-				tmp[addr] = common.TxWriteList[common.GlobalTxHash][addr]
+			if common.GlobalBlockNumber > 0 {
+				if common.GlobalTxHash != common.HexToHash("0x0") {
+
+					// fmt.Println("2 ", common.GlobalTxHash, addr)
+					common.TxWriteList[common.GlobalTxHash][addr] = common.NewSubstateAccount(obj.Nonce(), obj.Balance(), obj.code)
+					common.TxWriteList[common.GlobalTxHash][addr].CodeHash = obj.CodeHash()
+					common.TxWriteList[common.GlobalTxHash][addr].StorageRoot = s.GetStorageTrieHash(addr)
+					common.TxWriteList[common.GlobalTxHash][addr].Storage = make(map[common.Hash]common.Hash)
+					// tmp[addr] = common.NewSubstateAccount(obj.Nonce(), obj.Balance(), obj.code)
+					// tmp[addr].CodeHash = obj.CodeHash()
+					// tmp[addr].StorageRoot = s.GetStorageTrieHash(addr)
+					// tmp[addr].Storage = common.TxWriteList[common.GlobalTxHash][addr].Storage
+
+				} else {
+					// fmt.Println("3 ", common.GlobalTxHash, addr)
+					common.HardFork[addr] = common.NewSubstateAccount(obj.Nonce(), obj.Balance(), obj.code)
+					common.HardFork[addr].CodeHash = obj.CodeHash()
+					common.HardFork[addr].StorageRoot = obj.StorageRoot()
+					common.HardFork[addr].Storage = make(map[common.Hash]common.Hash)
+				}
 			}
-			// if common.GlobalTxHash == common.HexToHash("0xe310dde4735aa6ab90d69910aacdce77ad399db3f94a5b4bba93fa01df353a08") {
-			// 	fmt.Println("68460: state object update:", addr)
-			// 	fmt.Println(obj.Address(), obj.Balance(), obj.CodeHash(), obj.trie)
-			// 	fmt.Println()
-			// }
+
 			s.updateStateObject(obj)
 			s.AccountUpdated += 1
 		}
 
 		usedAddrs = append(usedAddrs, common.CopyBytes(addr[:])) // Copy needed for closure
 	}
-	if common.GlobalTxHash != common.HexToHash("0x0") && common.GlobalBlockNumber > 0 {
-		delete(common.TxWriteList, common.GlobalTxHash)
-		common.TxWriteList[common.GlobalTxHash] = tmp
 
-		// if common.GlobalTxHash == common.HexToHash("0xe310dde4735aa6ab90d69910aacdce77ad399db3f94a5b4bba93fa01df353a08") {
-		// 	fmt.Println("68460: state object update tmp:", tmp)
-		// 	fmt.Println("68460: state object update :", common.TxWriteList[common.GlobalTxHash])
-		// }
-
-	}
 	if prefetcher != nil {
 		prefetcher.used(s.originalRoot, usedAddrs)
 	}
 	if len(s.stateObjectsPending) > 0 {
+		// fmt.Println("MAKE PENDING EMPTY")
 		s.stateObjectsPending = make(map[common.Address]struct{})
 		// s.stateObjectsPending = make(map[common.Address][]stateObject)
 	}
