@@ -716,3 +716,15 @@ func (t *Trie) findLeafNodes(n node, prefix, startKey, endKey []byte) {
 		panic(fmt.Sprintf("%T: invalid node: %v", n, n))
 	}
 }
+
+// get shortnode's size (for debugging)
+func getShortnodeSize(n shortNode) int {
+	h := newHasher(false)
+	defer returnHasherToPool(h)
+	collapsed, _ := h.hashShortNodeChildren(&n)
+	h.tmp.Reset()
+	if err := rlp.Encode(&h.tmp, collapsed); err != nil {
+		panic("encode error: " + err.Error())
+	}
+	return len(h.tmp)
+}

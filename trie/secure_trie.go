@@ -222,3 +222,7 @@ func (t *SecureTrie) getSecKeyCache() map[string][]byte {
 func (t *SecureTrie) TrieDB() *Database {
 	return t.trie.db
 }
+
+func (t *SecureTrie) InspectStorageTrie() TrieInspectResult {
+	return t.trie.InspectStorageTrie()
+}
