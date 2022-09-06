@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -409,7 +410,7 @@ type TrieInspectResult struct {
 func (tir *TrieInspectResult) PrintTrieInspectResult(blockNumber uint64, elapsedTime int) {
 	// f1, err := os.Create("/home/jhkim/go/src/github.com/ethereum/go-ethereum/build/bin/new_result_" + strconv.FormatUint(blockNumber, 10) + ".txt") // goroutine version
 	// f1, err := os.Create("/home/jhkim/go/src/github.com/ethereum/new_result_" + strconv.FormatUint(blockNumber, 10) + "_vanilla.txt") // vanilla version
-	f1, err := os.Create("./new_result_" + strconv.FormatUint(blockNumber, 10) + "_vanilla.txt") // vanilla version
+	f1, err := os.Create("./trie_inspect_result.txt") // vanilla version
 
 	if err != nil {
 		fmt.Printf("Cannot create result file.\n")
@@ -453,7 +454,7 @@ func (tir *TrieInspectResult) PrintTrieInspectResult(blockNumber uint64, elapsed
 	// 	output += fmt.Sprintf("  %s,%v\n", key, value.Uint64())
 	// }
 	// fmt.Fprintln(f1, output) // write text file
-	// fmt.Println(output)      // console print
+	fmt.Println(output) // console print
 
 	// list all StorageTrie's codehash, leafnode depth, each node size
 	output = fmt.Sprintf("\n\nNonZero StorageTrie Leaf Node Depth: addressHash, codeHash, leaf node depth, [SN #, size, FN #, size, LN #, size]\n")
@@ -649,9 +650,28 @@ func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGro
 		// fmt.Printf("this node is value node (size: %d bytes) ", len(n))
 		// fmt.Println("addressHash:", addressHash)
 
-		// TODO(jmlee): state account vs ethane state account
-		var acc Account
-		if err := rlp.DecodeBytes(n, &acc); err != nil {
+		// decode value node to check this is storage trie or not
+		var acc types.StateAccount
+		var ethaneAcc types.EthaneStateAccount
+		isStorageTrie := false
+		if common.IsEthane {
+			err := rlp.DecodeBytes(n, &ethaneAcc)
+			if err != nil {
+				isStorageTrie = true
+			} else {
+				acc.Balance = ethaneAcc.Balance
+				acc.Nonce = ethaneAcc.Nonce
+				acc.CodeHash = ethaneAcc.CodeHash
+				acc.Root = ethaneAcc.Root
+			}
+		} else {
+			err := rlp.DecodeBytes(n, &acc)
+			if err != nil {
+				isStorageTrie = true
+			}
+		}
+
+		if isStorageTrie {
 			// valuenode is not an account, which means inspectig trie is "storage Trie"
 			tir.AddressHashTocodeHash[addressHash] = "" // In this case, addressHash means slotHash of storage Trie and codeHash is empty
 
