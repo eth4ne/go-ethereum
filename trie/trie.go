@@ -864,7 +864,8 @@ func (t *Trie) GetLastKey() *big.Int {
 func (t *Trie) getLastKey(origNode node, lastKey []byte) *big.Int {
 	switch n := (origNode).(type) {
 	case nil:
-		return big.NewInt(0)
+		// return big.NewInt(0)
+		return big.NewInt(-1) // active account's key starts with -1(initial last key) + 1 (joonha)
 	case valueNode:
 		hexToInt := new(big.Int)
 		hexToInt.SetString(common.BytesToHash(hexToKeybytes(lastKey)).Hex()[2:], 16)
