@@ -484,6 +484,7 @@ const stateTrie trieType = 1
 const storageTrie trieType = 2
 
 // inspect the trie
+// caution: inspect trie stats can be larger than real, since these might include duplicated nodes
 func (t *Trie) InspectTrie() TrieInspectResult {
 	// if isFirst {
 
@@ -545,45 +546,60 @@ func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGro
 	case *shortNode:
 
 		hn, _ := n.cache()
-		hash := common.BytesToHash(hn)
 		if hn == nil { // storage trie case
 			// this node is smaller than 32 bytes, cause there is no cached hash
 			// "Nodes smaller than 32 bytes are stored inside their parent"
-			if getShortnodeSize(*n) >= 32 {
-				// ERROR: this must not be printed, this is big error
-				fmt.Println("ERROR: this shortnode is larger than 32 bytes, but has no cache()")
-				os.Exit(1)
-			}
-			rwMutex.Lock()
-			tir.LeafNodeNum++
-			tir.ShortNodeNum++
-			rwMutex.Unlock()
+			// this node's size is already counted in the parent node, so just return
 			return
 		}
-		nodeBytes, err := t.db.Node(hash) // DB acceess
-		if err != nil {
-			// in normal case (ex. archive node), it will not come in here
-			fmt.Println("ERROR: short node not found -> node hash:", hash.Hex())
-			os.Exit(1)
-		}
-		// fmt.Println("    Short node: addressKey", hex.EncodeToString(addressKey), "+", hex.EncodeToString(n.Key), " (length of key:", len(n.Key), ")")
+		// hash := common.BytesToHash(hn)
 		addressKey = append(addressKey, n.Key...)
 
-		increaseSize(len(nodeBytes), "short", tir, depth)             // increase tir
+		// encoding node to measure node size (in trie/hasher.go -> hashShortNodeChildren(), shortnodeToHash())
+		h := newHasher(false)
+		defer returnHasherToPool(h)
+		collapsed, _ := n.copy(), n.copy()
+		collapsed.Key = hexToCompact(n.Key)
+		collapsed.Val, _ = h.hash(n.Val, false)
+		_, nodeSize := h.shortnodeToHash(collapsed, false)
+
+		// increase tir
+		if n.Key[len(n.Key)-1] != 16 {
+			// this is intermediate short node
+			increaseSize(nodeSize, "short", tir, depth)
+		} else {
+			// this is leaf short node
+			increaseSize(nodeSize, "value", tir, depth)
+		}
+
 		t.inspectTrieNodes(n.Val, tir, wg, depth+1, trie, addressKey) // go child node
-		// t.inspectTrieNodes(n.Val, tir, wg, depth+1, trie) // go child node
 
 	case *fullNode:
 
 		hn, _ := n.cache()
-		nodeBytes, err := t.db.Node(common.BytesToHash(hn))
-		if err != nil {
-			// in normal case (ex. archive node), it will not come in here
-			fmt.Println("ERROR: full node not found -> node hash:", common.BytesToHash(hn).Hex())
-			os.Exit(1)
+		if hn == nil { // storage trie case
+			// this node is smaller than 32 bytes, cause there is no cached hash
+			// "Nodes smaller than 32 bytes are stored inside their parent"
+			// this node's size is already counted in the parent node, so just return
+			return
 		}
+		// hash := common.BytesToHash(hn)
+
+		// encoding node to measure node size (in trie/hasher.go -> hashFullNodeChildren(), fullnodeToHash())
+		h := newHasher(false)
+		defer returnHasherToPool(h)
+		collapsed, _ := n.copy(), n.copy()
+		for i := 0; i < 16; i++ {
+			if child := n.Children[i]; child != nil {
+				collapsed.Children[i], _ = h.hash(child, false)
+			} else {
+				collapsed.Children[i] = nilValueNode
+			}
+		}
+		_, nodeSize := h.fullnodeToHash(collapsed, false)
+
 		temp_addressKey := addressKey
-		increaseSize(len(nodeBytes), "full", tir, depth) // increase tir
+		increaseSize(nodeSize, "full", tir, depth) // increase tir
 
 		// // vanilla version
 		for i, child := range &n.Children {
@@ -643,7 +659,6 @@ func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGro
 
 		// Value nodes don't have children so they're left as were
 
-		increaseSize(len(n), "value", tir, depth)
 		// value node has account info, decode it
 		addressHash := common.BytesToHash(hexToKeybytes(addressKey)).Hex()
 		// fmt.Printf("	inspectTrieNodes, addressKey %v ->", hex.EncodeToString(addressKey))
