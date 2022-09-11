@@ -119,24 +119,21 @@ func (h *hasher) hash(n node, force bool) (hashed node, cached node) {
 				// fmt.Println("n.Key:", n.Key, "/ len:", len(n.Key))
 
 				// set child node hashes
-				switch v := cached.Val.(type) {
+				switch c := collapsed.Val.(type) {
 				case hashNode:
-					childHash := common.BytesToHash(v)
+					childHash := common.BytesToHash(c)
 					nodeInfo.ChildHashes = append(nodeInfo.ChildHashes, childHash)
 					// fmt.Println("  hasher.go case hashNode")
 					// fmt.Println("    short node hash:", myHash.Hex(), " / child fullNode hash:", childHash.Hex())
 				case *fullNode:
-					childHashNode, _ := v.cache()
-					childHash := common.BytesToHash(childHashNode) // TODO(jmlee): child can be short/full node (not hashNode) whose size is smaller than 32 bytes
-					nodeInfo.ChildHashes = append(nodeInfo.ChildHashes, childHash)
-					// fmt.Println("  hasher.go case *fullNode")
-					// fmt.Println("    short node hash:", myHash.Hex(), " / child fullNode hash:", childHash.Hex())
+					// this full node might be smaller than 32B, we consider this is not a independent child node
+					
 				case valueNode:
 					// this short node is leaf node, so do not have child node
 				case *shortNode:
 					// short node's child cannot be short node
 				default:
-					fmt.Println("  hasher.go case default")
+					fmt.Println("  hasher.go case default for short node")
 					fmt.Println("this should not happen")
 					os.Exit(1)
 				}
@@ -162,20 +159,34 @@ func (h *hasher) hash(n node, force bool) (hashed node, cached node) {
 				nodeInfo.IsShortNode = false
 				nodeInfo.Size = 32 + uint(size)
 				for i := 0; i < 16; i++ {
-					if child := cached.Children[i]; child != nil {
-						childHashNode, _ := child.cache()
-						var childHash common.Hash
-						if childHashNode == nil {
-							// child is hashNode (full node's child cannot be value node in Ethereum)
-							// TODO(jmlee): child can be short/full node (not hashNode) whose size is smaller than 32 bytes
-							childHash = common.BytesToHash([]byte(child.(hashNode)))
-						} else {
-							// child is full node or short node
-							childHash = common.BytesToHash(childHashNode)
+					if child := collapsed.Children[i]; child != nil {
+
+						switch c := (child).(type) {
+						case hashNode:
+							childHash := common.BytesToHash([]byte(c))
+							nodeInfo.ChildHashes = append(nodeInfo.ChildHashes, childHash)
+							nodeInfo.Indices = append(nodeInfo.Indices, Indices[i])
+
+						case *fullNode:
+							// this full node might be smaller than 32B, we consider this is not a independent child node
+
+						case *shortNode:
+							// this short node might be smaller than 32B, we consider this is not a independent child node
+
+						case valueNode:
+							// can reach here when c is nil
+							if c != nil {
+								fmt.Println("  hasher.go case valueNode for full node")
+								fmt.Println("this should not happen")
+								os.Exit(1)
+							}
+
+						default:
+							fmt.Println("  hasher.go case default for full node")
+							fmt.Println("this should not happen")
+							os.Exit(1)
 						}
-						// fmt.Println("full node hash:", myHash.Hex(), " / child hash:", childHash.Hex())
-						nodeInfo.ChildHashes = append(nodeInfo.ChildHashes, childHash)
-						nodeInfo.Indices = append(nodeInfo.Indices, Indices[i])
+
 					}
 				}
 
