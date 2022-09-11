@@ -465,10 +465,83 @@ func (tir *TrieInspectResult) PrintTrieInspectResult(blockNumber uint64, elapsed
 		// for _, v := range tir.StorageTrieSlotHash[key] {
 		// 	output += fmt.Sprintf("      %v\n", v)
 		// }
-	}
-	fmt.Fprintln(f1, output) // write text file
-	// fmt.Println(output)      // console print
+}
 
+// convert trie.TrieInspectResult to common.NodeStat (jmlee)
+func (tir *TrieInspectResult) ToNodeStat() {
+
+	// key for trie node: hash -> 32B
+	keySize := uint64(32)
+
+	// convert trie.TrieInspectResult to common.NodeStat
+	var stateNodeStat common.NodeStat
+	stateNodeStat.FullNodesNum = uint64(tir.FullNodeNum)
+	stateNodeStat.FullNodesSize = uint64(tir.FullNodeSize) + keySize*stateNodeStat.FullNodesNum
+	stateNodeStat.ShortNodesNum = uint64(tir.ShortNodeNum)
+	stateNodeStat.ShortNodesSize = uint64(tir.ShortNodeSize) + keySize*stateNodeStat.ShortNodesNum
+	stateNodeStat.LeafNodesNum = uint64(tir.LeafNodeNum)
+	stateNodeStat.LeafNodesSize = uint64(tir.LeafNodeSize) + keySize*stateNodeStat.LeafNodesNum
+
+	// deal with depths
+	var avgDepth float64
+	minDepth := 100
+	maxDepth := 0
+	depthSum := 0
+	for depth, num := range tir.StateTrieLeafNodeDepth {
+		depthSum += depth * num
+		if maxDepth < depth && num != 0 {
+			maxDepth = depth
+		}
+		if minDepth > depth && num != 0 {
+			minDepth = depth
+		}
+	}
+	if stateNodeStat.LeafNodesNum != 0 {
+		avgDepth = float64(depthSum) / float64(stateNodeStat.LeafNodesNum)
+	}
+
+	// print state trie inspect result
+	fmt.Println("convert state trie inspect result to nodeStat")
+	fmt.Println("avg depth:", avgDepth, "( min:", minDepth, "/ max:", maxDepth, ")")
+	stateNodeStat.Print()
+	fmt.Println(stateNodeStat.ToString(" "))
+
+	// convert trie.TrieInspectResult to common.NodeStat
+	var storageNodeStat common.NodeStat
+	storageNodeStat.FullNodesNum = uint64(tir.StorageTrieFullNodeNum)
+	storageNodeStat.FullNodesSize = uint64(tir.StorageTrieFullNodeSize) + keySize*storageNodeStat.FullNodesNum
+	storageNodeStat.ShortNodesNum = uint64(tir.StorageTrieShortNodeNum)
+	storageNodeStat.ShortNodesSize = uint64(tir.StorageTrieShortNodeSize) + keySize*storageNodeStat.ShortNodesNum
+	storageNodeStat.LeafNodesNum = uint64(tir.StorageTrieLeafNodeNum)
+	storageNodeStat.LeafNodesSize = uint64(tir.StorageTrieLeafNodeSize) + keySize*storageNodeStat.LeafNodesNum
+
+	// deal with depths
+	minDepth = 100
+	maxDepth = 0
+	depthSum = 0
+	for _, depths := range tir.StorageTrieLeafNodeDepth {
+		for depth, num := range depths {
+			depthSum += depth * num
+			if maxDepth < depth && num != 0 {
+				maxDepth = depth
+			}
+			if minDepth > depth && num != 0 {
+				minDepth = depth
+			}
+		}
+	}
+	if storageNodeStat.LeafNodesNum != 0 {
+		avgDepth = float64(depthSum) / float64(storageNodeStat.LeafNodesNum)
+	} else {
+		avgDepth = 0
+		minDepth = 0
+	}
+
+	// print storage trie inspect result
+	fmt.Println("convert storage trie inspect result to nodeStat -> storage tries num:", tir.StorageTrieNum)
+	fmt.Println("avg depth:", avgDepth, "( min:", minDepth, "/ max:", maxDepth, ")")
+	storageNodeStat.Print()
+	fmt.Println(storageNodeStat.ToString(" "))
 }
 
 // type Account struct {
@@ -516,6 +589,7 @@ func (t *Trie) InspectTrie() TrieInspectResult {
 	// }
 	wg.Wait() // ***WARNING: if you sets maxgoroutine number wrong, infinite waiting
 	fmt.Println("\n\n#################\nINSPECTATION DONE\n#################")
+	tir.ToNodeStat()
 	return tir
 }
 
