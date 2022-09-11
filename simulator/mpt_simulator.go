@@ -163,6 +163,8 @@ func reset() {
 	common.InactiveBoundaryKey = uint64(0)
 	common.CheckpointKeys = make(map[uint64]uint64)
 	common.RestoredKeys = make([]common.Hash, 0)
+	common.DeletedNodeNum = uint64(0)
+	common.RestoredNodeNum = uint64(0)
 }
 
 // rollbackUncommittedUpdates goes back to latest flushed trie (i.e., undo all uncommitted trie updates)
@@ -322,6 +324,8 @@ func estimateIncrement(hash common.Hash) (uint64, uint64) {
 func flushTrieNodes() {
 
 	fmt.Println("flush start: generate block number", common.NextBlockNum)
+	blockInfo, _ := common.Blocks[common.NextBlockNum] // for logging block info
+	flushStartTime := time.Now()
 
 	// do inactivate or delete previous leaf nodes
 	if common.IsEthane {
@@ -333,11 +337,18 @@ func flushTrieNodes() {
 
 		// delete
 		if (bn+1)%common.DeleteEpoch == 0 {
+			deleteStartTime := time.Now()
 			deletePrevLeafNodes()
+			deleteElapsed := time.Since(deleteStartTime)
+			blockInfo.TimeToDelete = deleteElapsed.Nanoseconds()
+			blockInfo.DeletedNodeNum = common.DeletedNodeNum
+			// fmt.Println("time to delete:", blockInfo.TimeToDelete, "ns")
 		}
 
 		// inactivate
 		if (bn+1)%common.InactivateEpoch == 0 && bn != common.InactivateEpoch-1 {
+			inactivateStartTime := time.Now()
+
 			// check condition (lastBlockNum >= 0)
 			if bn >= common.InactivateCriterion {
 				// find block range to inactivate (firstBlockNum ~ lastBlockNum)
@@ -363,6 +374,12 @@ func flushTrieNodes() {
 					// delete used merkle proofs for restoration
 					// TODO(jmlee): need independent epoch?
 					deleteRestoredLeafNodes()
+
+					inactivateElapsed := time.Since(inactivateStartTime)
+					blockInfo.TimeToInactivate = inactivateElapsed.Nanoseconds()
+					blockInfo.InactivatedNodeNum = common.InactiveBoundaryKey
+					blockInfo.RestoredNodeNum = common.RestoredNodeNum
+					// fmt.Println("time to inactivate:", blockInfo.TimeToInactivate, "ns")
 				}
 
 			}
@@ -390,12 +407,18 @@ func flushTrieNodes() {
 	// reset dirty storage tries after flush
 	dirtyStorageTries = make(map[common.Address]*trie.SecureTrie)
 
+	// logging flush time
+	flushElapsed := time.Since(flushStartTime)
+	blockInfo.TimeToFlush = flushElapsed.Nanoseconds()
+	// fmt.Println("time to flush:", blockInfo.TimeToFlush, "ns")
+
 	// update block info (to be able to rollback to this state later)
 	// fmt.Println("new trie root after flush:", normTrie.Hash().Hex())
-	blockInfo, _ := common.Blocks[common.NextBlockNum]
 	blockInfo.Root = normTrie.Hash()
 	blockInfo.MaxAccountNonce = emptyAccount.Nonce
 	blockInfo.NewNodeStat = common.NewNodeStat
+	blockInfo.TotalNodeStat = common.TotalNodeStat
+	blockInfo.TotalStorageNodeStat = common.TotalStorageNodeStat
 	common.Blocks[common.NextBlockNum] = blockInfo
 	// delete too old block to store
 	blockNumToDelete := common.NextBlockNum - common.MaxBlocksToStore - 1
@@ -408,6 +431,15 @@ func flushTrieNodes() {
 	common.TrieNodeInfosDirty = make(map[common.Hash]common.NodeInfo)
 
 	// show db stat
+	// totalNodesNum, totalNodesSize := common.TotalNodeStat.GetSum()
+	// totalStorageNodesNum, totalStorageNodesSize := common.TotalStorageNodeStat.GetSum()
+	// newNodesNum, newNodesSize := common.NewNodeStat.GetSum()
+	// newStorageNodesNum, newStorageNodesSize := common.NewStorageNodeStat.GetSum()
+	// common.NewNodeStat.Print()
+	// fmt.Println("  new trie nodes:", newNodesNum, "/ increased db size:", newNodesSize)
+	// fmt.Println("  new storage trie nodes:", newStorageNodesNum, "/ increased db size:", newStorageNodesSize)
+	// fmt.Println("  total trie nodes:", totalNodesNum, "/ db size:", totalNodesSize)
+	// fmt.Println("  total storage trie nodes:", totalStorageNodesNum, "/ db size:", totalStorageNodesSize)
 
 	// increase next block number after flush
 	common.NextBlockNum++
@@ -860,6 +892,9 @@ func deletePrevLeafNodes() {
 		}
 	}
 
+	// logging
+	common.DeletedNodeNum += uint64(len(common.KeysToDelete))
+
 	// init keys to delete
 	common.KeysToDelete = make([]common.Hash, 0)
 }
@@ -875,6 +910,9 @@ func deleteRestoredLeafNodes() {
 			os.Exit(1)
 		}
 	}
+
+	// logging
+	common.RestoredNodeNum += uint64(len(common.RestoredKeys))
 
 	// init keys to delete
 	common.RestoredKeys = make([]common.Hash, 0)
@@ -1113,6 +1151,9 @@ func printEthaneState() {
 	latestCheckpointBlockNum := latestBlockNum - (latestBlockNum % common.InactivateEpoch) - 1
 	inspectEthaneTries(latestCheckpointBlockNum)     // relatively small state trie after delete/inactivate
 	inspectEthaneTries(latestCheckpointBlockNum - 1) // relatively large state trie before delete/inactivate
+
+	fmt.Println("restoed nodes in inactive trie:", common.RestoredNodeNum)
+	fmt.Println("deleted nodes in active trie:", common.DeletedNodeNum)
 }
 
 func setEthaneOptions(deleteEpoch, inactivateEpoch, inactivateCriterion uint64) {

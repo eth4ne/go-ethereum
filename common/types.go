@@ -120,6 +120,9 @@ var (
 	InactiveBoundaryKeys = make(map[uint64]uint64) // InactiveBoundaryKeys[blockNum] = inactiveBoundaryKey at that block (TODO(jmlee): maybe merge into BlockInfo)
 	RestoredKeys         = make([]Hash, 0)         // merkle proof keys in restore txs, need to be deleted after inactivation
 
+	DeletedNodeNum  = uint64(0) // total deleted nodes in active trie
+	RestoredNodeNum = uint64(0) // total deleted nodes in inactive trie
+
 	// very large key which will not be reached forever
 	NoExistKey     = HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
 	ToBeDeletedKey = HexToHash("0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe")
@@ -163,10 +166,20 @@ type NodeStat struct {
 
 // BlockInfo stores block related information
 type BlockInfo struct {
-	Root              Hash     // root hash of trie
-	FlushedNodeHashes []Hash   // hashes of flushed nodes
-	MaxAccountNonce   uint64   // biggest nonce amoung accounts (just to regenerate same state root, not essential field)
-	NewNodeStat       NodeStat // stats for newly flushed nodes in this block
+	Root                 Hash     // root hash of trie
+	FlushedNodeHashes    []Hash   // hashes of flushed nodes
+	MaxAccountNonce      uint64   // biggest nonce amoung accounts (just to regenerate same state root, not essential field)
+	NewNodeStat          NodeStat // stats for newly flushed nodes in this block
+	TotalNodeStat        NodeStat // stats for total state trie data until this block
+	TotalStorageNodeStat NodeStat // stats for total storage trie data until this block
+
+	TimeToFlush      int64 // time to generate block (including delete & inactivate in Ethane)
+	TimeToDelete     int64 // time to delete previous leaf nodes in Ethane
+	TimeToInactivate int64 // time to inactivate old leaf nodes in Ethane
+
+	DeletedNodeNum     uint64 // total deleted nodes in active trie
+	RestoredNodeNum    uint64 // total deleted nodes in inactive trie
+	InactivatedNodeNum uint64 // total inactivated nodes in active trie (= InactiveBoundaryKey)
 }
 
 // TrieGraphInfo has edges and features representing trie
