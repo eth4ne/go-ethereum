@@ -468,7 +468,7 @@ func (tir *TrieInspectResult) PrintTrieInspectResult(blockNumber uint64, elapsed
 }
 
 // convert trie.TrieInspectResult to common.NodeStat (jmlee)
-func (tir *TrieInspectResult) ToNodeStat() {
+func (tir *TrieInspectResult) ToNodeStat() common.NodeStat {
 
 	// key for trie node: hash -> 32B
 	keySize := uint64(32)
@@ -504,7 +504,7 @@ func (tir *TrieInspectResult) ToNodeStat() {
 	fmt.Println("convert state trie inspect result to nodeStat")
 	fmt.Println("avg depth:", avgDepth, "( min:", minDepth, "/ max:", maxDepth, ")")
 	stateNodeStat.Print()
-	fmt.Println(stateNodeStat.ToString(" "))
+	fmt.Println(stateNodeStat.ToString(" "), minDepth, avgDepth, maxDepth)
 
 	// convert trie.TrieInspectResult to common.NodeStat
 	var storageNodeStat common.NodeStat
@@ -541,7 +541,9 @@ func (tir *TrieInspectResult) ToNodeStat() {
 	fmt.Println("convert storage trie inspect result to nodeStat -> storage tries num:", tir.StorageTrieNum)
 	fmt.Println("avg depth:", avgDepth, "( min:", minDepth, "/ max:", maxDepth, ")")
 	storageNodeStat.Print()
-	fmt.Println(storageNodeStat.ToString(" "))
+	fmt.Println(storageNodeStat.ToString(" "), minDepth, avgDepth, maxDepth)
+
+	return stateNodeStat
 }
 
 // type Account struct {
@@ -575,7 +577,7 @@ func (t *Trie) InspectTrie() TrieInspectResult {
 	tir.StorageTrieRoot = map[string]string{}
 	tir.AccountBalance = map[string]big.Int{}
 
-	fmt.Println("\n\n#################\nINSPECTATION START\n#################")
+	// fmt.Println("\n\n#################\nINSPECTATION START\n#################")
 	// t.inspectTrieNodes(t.root, &tir, &wg, 0, "state") // Inspect Start
 	t.inspectTrieNodes(t.root, &tir, &wg, 0, stateTrie, nil) // Inspect Start
 
@@ -588,8 +590,8 @@ func (t *Trie) InspectTrie() TrieInspectResult {
 	// 	fmt.Println("Wait group finished")
 	// }
 	wg.Wait() // ***WARNING: if you sets maxgoroutine number wrong, infinite waiting
-	fmt.Println("\n\n#################\nINSPECTATION DONE\n#################")
-	tir.ToNodeStat()
+	// fmt.Println("\n\n#################\nINSPECTATION DONE\n#################")
+	// tir.ToNodeStat()
 	return tir
 }
 
