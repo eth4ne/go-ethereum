@@ -6,6 +6,7 @@
 
 /simulator/logFiles/*
 /simulator/trieGraphs/*
+/simulator/blockInfos/*
 
 /tmp
 */**/*un~

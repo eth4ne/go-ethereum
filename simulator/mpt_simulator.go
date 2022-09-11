@@ -39,6 +39,8 @@ const (
 
 	// simulation result log file path
 	logFilePath = "./logFiles/"
+	// block infos log file path
+	blockInfosLogFilePath = "./blockInfos/"
 
 	// trie graph json file path
 	trieGraphPath = "./trieGraphs/"
@@ -1240,6 +1242,30 @@ func setEthaneOptions(deleteEpoch, inactivateEpoch, inactivateCriterion uint64) 
 	common.InactivateCriterion = inactivateCriterion
 }
 
+// save block infos
+func saveBlockInfos(fileName string, startBlockNum, endBlockNum uint64) {
+	f, _ := os.OpenFile(blockInfosLogFilePath+fileName, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	defer f.Close()
+	// fmt.Fprintln(f, "checkpoint key -> bn:" + strconv.FormatUint(bn, 10) + " / cpk:" + strconv.FormatUint(common.CheckpointKey, 10))
+
+	delimiter := " "
+	for blockNum := startBlockNum; blockNum<= endBlockNum; blockNum++ {
+		blockInfo, exist := common.Blocks[blockNum]
+		if !exist {
+			fmt.Println("there is no block", blockNum)
+			os.Exit(1)
+		}
+		log := ""
+		log += blockInfo.NewNodeStat.ToString(delimiter)
+		log += blockInfo.NewStorageNodeStat.ToString(delimiter)
+		log += blockInfo.TotalNodeStat.ToString(delimiter)
+		log += blockInfo.TotalStorageNodeStat.ToString(delimiter)
+		// fmt.Println("log at block", blockNum, ":", log)
+		fmt.Fprintln(f, log)
+	}
+	
+}
+
 func getTrieLastKey() {
 	fmt.Println("getTrieLastKey:", normTrie.GetLastKey())
 	fmt.Printf("getTrieLastKey hex: %x", normTrie.GetLastKey())
@@ -1750,6 +1776,12 @@ func connHandler(conn net.Conn) {
 				logData := totalResult + totalStorageResult + subTrieResult
 				fmt.Fprintln(logFile, logData)
 				logFile.Close()
+
+				response = []byte("success")
+
+			case "saveBlockInfos":
+				logFileName := params[1]
+				saveBlockInfos(logFileName, 0, common.NextBlockNum-1)
 
 				response = []byte("success")
 

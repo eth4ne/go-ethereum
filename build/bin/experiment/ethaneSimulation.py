@@ -214,6 +214,16 @@ def printAllStats(logFileName):
     # print("print result ->", printResult)
     return printResult
 
+def saveBlockInfos(logFileName):
+    cmd = str("saveBlockInfos")
+    cmd += str(",")
+    cmd += logFileName
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    saveResult = data.decode()
+    # print("saveResult ->", saveResult)
+    return saveResult
+
 def estimateFlushResult():
     cmd = str("estimateFlushResult")
     client_socket.send(cmd.encode())
@@ -588,6 +598,7 @@ def simulateEthereum(startBlockNum, endBlockNum):
 
     # set log file name
     logFileName = "ethereum_simulate_" + str(startBlockNum) + "_" + str(endBlockNum) + ".txt"
+    blockInfosLogFileName = "ethereum_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + ".txt"
 
     currentStorageRoot = ""
     # insert random accounts
@@ -728,11 +739,12 @@ def simulateEthereum(startBlockNum, endBlockNum):
 
     # inspectTrie()
     # printCurrentTrie()
-    inspectTrieWithinRange()
+    # inspectTrie()
     getDBStatistics()
-    inspectDatabase()
     printAllStats(logFileName)
     print("create log file:", logFileName)
+    saveBlockInfos(blockInfosLogFileName)
+    print("create log file:", blockInfosLogFileName)
 
 # replay txs in Ethereum with Ethane client
 def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion):
@@ -742,6 +754,8 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
 
     # set log file name
     logFileName = "ethane_simulate_" + str(startBlockNum) + "_" + str(endBlockNum) \
+        + "_" + str(deleteEpoch) + "_" + str(inactivateEpoch) + "_" + str(inactivateCriterion) + ".txt"
+    blockInfosLogFileName = "ethane_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) \
         + "_" + str(deleteEpoch) + "_" + str(inactivateEpoch) + "_" + str(inactivateCriterion) + ".txt"
     
     # check restore list exist
@@ -903,9 +917,11 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
     # printCurrentTrie()
     printEthaneState()
     getDBStatistics()
-    inspectDatabase()
+    # inspectDatabase()
     printAllStats(logFileName)
     print("create log file:", logFileName)
+    saveBlockInfos(blockInfosLogFileName)
+    print("create log file:", blockInfosLogFileName)
 
 
 
