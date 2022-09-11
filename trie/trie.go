@@ -618,7 +618,7 @@ func (t *Trie) GetLastKey() *big.Int {
 func (t *Trie) getLastKey(origNode node, lastKey []byte) *big.Int {
 	switch n := (origNode).(type) {
 	case nil:
-		return big.NewInt(0)
+		return big.NewInt(-1)
 	case valueNode:
 		hexToInt := new(big.Int)
 		hexToInt.SetString(common.BytesToHash(hexToKeybytes(lastKey)).Hex()[2:], 16)
@@ -644,7 +644,7 @@ func (t *Trie) getLastKey(origNode node, lastKey []byte) *big.Int {
 		child, err := t.resolveHash(n, nil)
 		if err != nil {
 			lastKey = nil
-			return big.NewInt(0)
+			return big.NewInt(-1)
 		}
 		return t.getLastKey(child, lastKey)
 	default:

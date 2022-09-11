@@ -860,8 +860,6 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
 
                             slotValue = []
                             # slotValue = 0x0 # 
-                        # slotValue = 0x0 # 
-                            # slotValue = 0x0 # 
                             if slotWrite['slotvalue'] != None:
                                 slotValue = slotWrite['slotvalue'].hex()
 
