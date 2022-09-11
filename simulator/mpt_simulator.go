@@ -417,6 +417,7 @@ func flushTrieNodes() {
 	blockInfo.Root = normTrie.Hash()
 	blockInfo.MaxAccountNonce = emptyAccount.Nonce
 	blockInfo.NewNodeStat = common.NewNodeStat
+	blockInfo.NewStorageNodeStat = common.NewStorageNodeStat
 	blockInfo.TotalNodeStat = common.TotalNodeStat
 	blockInfo.TotalStorageNodeStat = common.TotalStorageNodeStat
 	common.Blocks[common.NextBlockNum] = blockInfo
@@ -1272,16 +1273,19 @@ func connHandler(conn net.Conn) {
 
 			case "getDBStatistics":
 				// caution: this statistics might be wrong, use inspectDatabase to get correct values
-				fmt.Println("execute getDBStatistics()")
+				fmt.Println("\nexecute getDBStatistics()")
 				if !common.CollectNodeInfos && !common.CollectNodeHashes {
 					fmt.Println("  CAUTION: this statistics might contain several same trie nodes")
 				}
 				totalNodesNum, totalNodesSize := common.TotalNodeStat.GetSum()
 				totalStorageNodesNum, totalStorageNodesSize := common.TotalStorageNodeStat.GetSum()
-				fmt.Println("print getDBStatistics result: state trie")
+				fmt.Println("print getDBStatistics result: all state trie nodes in disk (archive data)")
 				common.TotalNodeStat.Print()
-				fmt.Println("print getDBStatistics result: storage tries")
+				fmt.Println(common.TotalNodeStat.ToString(" "))
+				fmt.Println("print getDBStatistics result: all storage tries nodes in disk (archive data)")
 				common.TotalStorageNodeStat.Print()
+				fmt.Println(common.TotalStorageNodeStat.ToString(" "))
+				fmt.Println()
 
 				nodeNum := totalNodesNum + totalStorageNodesNum
 				nodeSize := totalNodesSize + totalStorageNodesSize
@@ -1311,12 +1315,11 @@ func connHandler(conn net.Conn) {
 						nodeInfo, exist = common.TrieNodeInfosDirty[rootHash]
 					}
 					nodeStat = nodeInfo.SubTrieNodeStat
+					fmt.Println("print inspectTrie result")
+					nodeStat.Print()
 				} else {
 					nodeStat = inspectTrieDisk(rootHash)
-				}
-
-				fmt.Println("print inspectTrie result")
-				nodeStat.Print()
+				}				
 
 				response = []byte(rootHash.Hex() + "," + nodeStat.ToString(","))
 
