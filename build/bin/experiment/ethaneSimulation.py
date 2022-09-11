@@ -158,14 +158,24 @@ def printCurrentTrie():
     return printResult
 
 # get number and size of all trie nodes in db
-def inspectDB():
-    cmd = str("inspectDB")
+# caution: this statistics might be wrong, use inspectDatabase() to get correct values
+def getDBStatistics():
+    cmd = str("getDBStatistics")
     client_socket.send(cmd.encode())
     data = client_socket.recv(1024)
     inspectResult = data.decode().split(',')
     totalTrieNodesNum = int(inspectResult[0])
     TotalTrieNodesSize = int(inspectResult[1])
-    print("inspectDB result -> # of total trie nodes:", '{:,}'.format(totalTrieNodesNum), "/ total db size:", '{:,}'.format(TotalTrieNodesSize), "B")
+    print("getDBStatistics result -> # of total trie nodes:", '{:,}'.format(totalTrieNodesNum), "/ total db size:", '{:,}'.format(TotalTrieNodesSize), "B")
+    return inspectResult
+
+# get number and size of all trie nodes in db
+def inspectDatabase():
+    cmd = str("inspectDatabase")
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    inspectResult = data.decode()
+    print("inspectDatabase result:", inspectResult)
     return inspectResult
 
 # get number and size of trie nodes in current state trie
@@ -408,7 +418,7 @@ def generateSampleTrie():
     endTime = datetime.now()
     print("\nupdate", '{:,}'.format(accNumToInsert), "accounts / flush epoch:", flushEpoch, "/ elapsed time:", endTime - startTime)
     inspectTrie()
-    inspectDB()
+    getDBStatistics()
 
 # -----------------------------------------------------
 
@@ -513,7 +523,7 @@ def strategy_random(flushEpoch, totalAccNumToInsert, maxAddr=0xfffffffffffffffff
     print("total elapsed time:", datetime.now()-startTime)
     print("random inserts:", totalAccNumToInsert)
     inspectTrie()
-    inspectDB()
+    getDBStatistics()
     printAllStats(logFileName)
     print("create log file:", logFileName)
     # printCurrentTrie()
@@ -547,7 +557,7 @@ def test_ethane(flushEpoch):
     print("total elapsed time:", datetime.now()-startTime)
     print("random inserts:", totalAccNumToInsert)
     inspectTrie()
-    inspectDB()
+    getDBStatistics()
     printCurrentTrie()
 
 # replay txs in Ethereum with original Ethereum client
@@ -705,7 +715,8 @@ def simulateEthereum(startBlockNum, endBlockNum):
     # inspectTrie()
     # printCurrentTrie()
     inspectTrieWithinRange()
-    inspectDB()
+    getDBStatistics()
+    inspectDatabase()
     printAllStats(logFileName)
     print("create log file:", logFileName)
 
@@ -875,7 +886,8 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
     # inspectTrie()
     # printCurrentTrie()
     printEthaneState()
-    inspectDB()
+    getDBStatistics()
+    inspectDatabase()
     printAllStats(logFileName)
     print("create log file:", logFileName)
 

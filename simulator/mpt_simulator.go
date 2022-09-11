@@ -447,9 +447,10 @@ func hashKey(key []byte) []byte {
 	return hashKeyBuf[:]
 }
 
-// (deprecated: storing db stats in common/types.go)
-// inspectDB iterates db and returns # of total trie nodes and their size
-func inspectDB(diskdb ethdb.KeyValueStore) (uint64, uint64) {
+// inspectDatabase iterates db and returns # of total trie nodes and their size
+// (use this function when common.CollectNodeInfos, common.CollectNodeHashes are both false
+// else, just get db stats from common.TotalNodeStat, common.TotalStorageNodeStat)
+func inspectDatabase(diskdb ethdb.KeyValueStore) (uint64, uint64) {
 	// iterate db
 	it := diskdb.NewIterator(nil, nil)
 	totalNodes := uint64(0)
@@ -471,9 +472,10 @@ func inspectDB(diskdb ethdb.KeyValueStore) (uint64, uint64) {
 	return totalNodes, uint64(totalSize)
 }
 
-// inspectTrie measures number and size of trie nodes in the trie
+
+// inspectTrieMem measures number and size of trie nodes in the trie (get node info from memory)
 // (count duplicated nodes)
-func inspectTrie(hash common.Hash) {
+func inspectTrieMem(hash common.Hash) {
 	// fmt.Println("insepctTrie() node hash:", hash.Hex())
 
 	// find this node's info
@@ -507,7 +509,7 @@ func inspectTrie(hash common.Hash) {
 
 	for _, childHash := range nodeInfo.ChildHashes {
 		// inspect child node
-		inspectTrie(childHash)
+		inspectTrieMem(childHash)
 
 		// get child node info
 		childNodeInfo, exist := common.TrieNodeInfos[childHash]
@@ -557,10 +559,10 @@ func inspectTrie(hash common.Hash) {
 	}
 }
 
-// inspectTrieWithinRange measures number and size of trie nodes in the sub trie
+// inspectTrieWithinRangeMem measures number and size of trie nodes in the sub trie
 // (count duplicated nodes)
 // do not utilize dynamic programming, just keep searching until it reaches to leaf nodes
-func inspectTrieWithinRange(hash common.Hash, depth uint, leafNodeDepths *[]uint, prefix string, startKey, endKey []byte) common.NodeStat {
+func inspectTrieWithinRangeMem(hash common.Hash, depth uint, leafNodeDepths *[]uint, prefix string, startKey, endKey []byte) common.NodeStat {
 	// fmt.Println("insepctTrie() node hash:", hash.Hex())
 
 	// find this node's info
@@ -600,10 +602,10 @@ func inspectTrieWithinRange(hash common.Hash, depth uint, leafNodeDepths *[]uint
 		var childNodeStat common.NodeStat
 		if len(nodeInfo.Indices) != 0 {
 			// this node is full node
-			childNodeStat = inspectTrieWithinRange(childHash, depth+1, leafNodeDepths, prefix+nodeInfo.Indices[i], startKey, endKey)
+			childNodeStat = inspectTrieWithinRangeMem(childHash, depth+1, leafNodeDepths, prefix+nodeInfo.Indices[i], startKey, endKey)
 		} else {
 			// this node is short node
-			childNodeStat = inspectTrieWithinRange(childHash, depth+1, leafNodeDepths, prefix, startKey, endKey)
+			childNodeStat = inspectTrieWithinRangeMem(childHash, depth+1, leafNodeDepths, prefix, startKey, endKey)
 		}
 
 		// collect nums
@@ -1176,21 +1178,36 @@ func connHandler(conn net.Conn) {
 				normTrie.Print()
 				response = []byte("success")
 
-			case "inspectDB":
-				fmt.Println("execute inspectDB()")
+			case "getDBStatistics":
+				// caution: this statistics might be wrong, use inspectDatabase to get correct values
+				fmt.Println("execute getDBStatistics()")
+				if !common.CollectNodeInfos && !common.CollectNodeHashes {
+					fmt.Println("  CAUTION: this statistics might contain several same trie nodes")
+				}
 				totalNodesNum, totalNodesSize := common.TotalNodeStat.GetSum()
 				totalStorageNodesNum, totalStorageNodesSize := common.TotalStorageNodeStat.GetSum()
-				fmt.Println("print inspectDB result: state trie")
+				fmt.Println("print getDBStatistics result: state trie")
 				common.TotalNodeStat.Print()
-				fmt.Println("print inspectDB result: storage tries")
+				fmt.Println("print getDBStatistics result: storage tries")
 				common.TotalStorageNodeStat.Print()
 
 				nodeNum := totalNodesNum + totalStorageNodesNum
 				nodeSize := totalNodesSize + totalStorageNodesSize
 				response = []byte(strconv.FormatUint(nodeNum, 10) + "," + strconv.FormatUint(nodeSize, 10))
 
+			case "inspectDatabase":
+				fmt.Println("execute inspectDatabase()")
+
+				// inspectDatabase(diskdb) is same as
+				// rawdb.InspectDatabase(rawdb.NewDatabase(diskdb), nil, nil)
+				inspectDatabase(diskdb)
+
+				tir := normTrie.InspectTrie()
+				tir.PrintTrieInspectResult(0, 0)
+
+				response = []byte("success")
+
 			case "inspectTrie":
-				inspectDB(diskdb)
 				fmt.Println("execute inspectTrie()")
 				rootHash := normTrie.Hash()
 				fmt.Println("root hash:", rootHash.Hex())
@@ -1219,7 +1236,6 @@ func connHandler(conn net.Conn) {
 				response = []byte("success")
 
 			case "inspectSubTrie":
-				inspectDB(diskdb)
 				fmt.Println("execute inspectSubTrie()")
 				rootHash := common.HexToHash(params[1])
 				fmt.Println("rootHash:", rootHash.Hex())
@@ -1444,7 +1460,7 @@ func connHandler(conn net.Conn) {
 				} else {
 					latestBlockNum := common.NextBlockNum - 1
 					flushedRoot := common.Blocks[latestBlockNum].Root
-					inspectTrie(flushedRoot)
+					inspectTrieMem(flushedRoot)
 					flushedRootInfo, existF := common.TrieNodeInfos[flushedRoot]
 					if !existF {
 						flushedRootInfo, existF = common.TrieNodeInfosDirty[flushedRoot]
@@ -1454,7 +1470,7 @@ func connHandler(conn net.Conn) {
 
 				// inspect current trie
 				currentRoot := normTrie.Hash()
-				inspectTrie(currentRoot)
+				inspectTrieMem(currentRoot)
 				currentRootInfo, existC := common.TrieNodeInfos[currentRoot]
 				if !existC {
 					currentRootInfo, existC = common.TrieNodeInfosDirty[currentRoot]
@@ -1480,7 +1496,7 @@ func connHandler(conn net.Conn) {
 
 				// inspect trie before graph generation
 				root := normTrie.Hash()
-				inspectTrie(root)
+				inspectTrieMem(root)
 
 				// collect graph info
 				trieToGraph(root)
