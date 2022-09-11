@@ -20,7 +20,10 @@ cursor = conn.cursor()
 
 # simulator server IP address
 SERVER_IP = "localhost"
-SERVER_PORT = 8999
+
+# simulator options
+doStorageTrieUpdate = True
+stopWhenErrorOccurs = True
 
 # maximum byte length of response from the simulator
 maxResponseLen = 4096
@@ -570,6 +573,7 @@ def simulateEthereum(startBlockNum, endBlockNum):
     stateReadCount = 0
     stateWriteCount = 0
     storageWriteCount = 0
+    initialInvalidBlockNum = 999999999
     startTime = datetime.now()
 
     # block batch size for db query
@@ -615,7 +619,11 @@ def simulateEthereum(startBlockNum, endBlockNum):
                     print("@@fail: state trie is wrong")
                     print(currentStateRoot, "vs", stateRootInBlockHeader)
                     print('block #{}'.format(oldblocknumber))
-                    sys.exit()
+                    if initialInvalidBlockNum > oldblocknumber:
+                        initialInvalidBlockNum = oldblocknumber
+                    print("initial invalid block num:", initialInvalidBlockNum)
+                    if stopWhenErrorOccurs:
+                        sys.exit()
                 else:
                     pass
                     #print("@@success")
@@ -661,44 +669,50 @@ def simulateEthereum(startBlockNum, endBlockNum):
                 # print("\n")
 
                 # update storage trie
-                if item['id'] in slotList:
-                    slotWriteList = slotList[item['id']]
-                    # print("item:", item)
-                    # print("txHash:", item['txhash'].hex())
-                    for slotWrite in slotWriteList:
-                        contractAddrId = slotWrite['address_id']
-                        contractAddress = select_address(cursor, contractAddrId)
+                if doStorageTrieUpdate:
+                    if item['id'] in slotList:
+                        slotWriteList = slotList[item['id']]
+                        # print("item:", item)
+                        # print("txHash:", item['txhash'].hex())
+                        for slotWrite in slotWriteList:
+                            contractAddrId = slotWrite['address_id']
+                            contractAddress = select_address(cursor, contractAddrId)
 
-                        slotId = slotWrite['slot_id']
-                        slot = select_slot(cursor, slotId)
+                            slotId = slotWrite['slot_id']
+                            slot = select_slot(cursor, slotId)
 
-                        slotValue = []
-                        # slotValue = 0x0 # 
-                        if slotWrite['slotvalue'] != None:
-                            slotValue = slotWrite['slotvalue'].hex()
+                            slotValue = []
+                            # slotValue = 0x0 # 
+                            if slotWrite['slotvalue'] != None:
+                                slotValue = slotWrite['slotvalue'].hex()
 
-                        # print("item:", slotWrite)
-                        # print("contractAddress:", contractAddress)
-                        # print("slot:", slot)
-                        # print("slotValue:", slotValue)
-                        # print("\n")
-                        currentStorageRoot = updateStorageTrie(contractAddress, slot, slotValue)
-                        storageWriteCount += 1
+                            # print("item:", slotWrite)
+                            # print("contractAddress:", contractAddress)
+                            # print("slot:", slot)
+                            # print("slotValue:", slotValue)
+                            # print("\n")
+                            currentStorageRoot = updateStorageTrie(contractAddress, slot, slotValue)
+                            storageWriteCount += 1
 
-                    # check current storage trie is made correctly
-                    if currentStorageRoot[2:] != storageRoot:
-                        print("@@fail: storage trie is wrong")
-                        print("blocknum:", oldblocknumber)
-                        # print("txindex:", item['txindex'])
-                        # print("tx hash:", select_tx_hash(cursor, blockNum, item['txindex']))
-                        print("item:", item)
-                        print("  addr:", addr)
-                        print("  nonce:", nonce)
-                        print("  balance:", balance)
-                        print("  codeHash:", codeHash)
-                        print("  storageRoot:", storageRoot)
-                        print(currentStorageRoot[2:], "vs", storageRoot)
-                        sys.exit()
+                        # check current storage trie is made correctly
+                        if currentStorageRoot[2:] != storageRoot:
+                            print("@@fail: storage trie is wrong")
+                            print("blocknum:", oldblocknumber)
+                            # print("txindex:", item['txindex'])
+                            # print("tx hash:", select_tx_hash(cursor, blockNum, item['txindex']))
+                            print("item:", item)
+                            print("  addr:", addr)
+                            print("  nonce:", nonce)
+                            print("  balance:", balance)
+                            print("  codeHash:", codeHash)
+                            print("  storageRoot:", storageRoot)
+                            print(currentStorageRoot[2:], "vs", storageRoot)
+
+                            if initialInvalidBlockNum > oldblocknumber:
+                                initialInvalidBlockNum = oldblocknumber
+                            print("initial invalid block num:", initialInvalidBlockNum)
+                            if stopWhenErrorOccurs:
+                                sys.exit()
                 
                 # update state trie
                 updateTrie(nonce, balance, storageRoot, codeHash, addr)
@@ -832,44 +846,48 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
                 # print("\n")
 
                 # update storage trie
-                if item['id'] in slotList:
-                    slotWriteList = slotList[item['id']]
-                    # print("item:", item)
-                    # print("txHash:", item['txhash'].hex())
-                    for slotWrite in slotWriteList:
-                        contractAddrId = slotWrite['address_id']
-                        contractAddress = select_address(cursor, contractAddrId)
+                if doStorageTrieUpdate:
+                    if item['id'] in slotList:
+                        slotWriteList = slotList[item['id']]
+                        # print("item:", item)
+                        # print("txHash:", item['txhash'].hex())
+                        for slotWrite in slotWriteList:
+                            contractAddrId = slotWrite['address_id']
+                            contractAddress = select_address(cursor, contractAddrId)
 
-                        slotId = slotWrite['slot_id']
-                        slot = select_slot(cursor, slotId)
+                            slotId = slotWrite['slot_id']
+                            slot = select_slot(cursor, slotId)
 
-                        slotValue = []
+                            slotValue = []
+                            # slotValue = 0x0 # 
                         # slotValue = 0x0 # 
-                        if slotWrite['slotvalue'] != None:
-                            slotValue = slotWrite['slotvalue'].hex()
+                            # slotValue = 0x0 # 
+                            if slotWrite['slotvalue'] != None:
+                                slotValue = slotWrite['slotvalue'].hex()
 
-                        # print("item:", slotWrite)
-                        # print("contractAddress:", contractAddress)
-                        # print("slot:", slot)
-                        # print("slotValue:", slotValue)
-                        # print("\n")
-                        currentStorageRoot = updateStorageTrieEthane(contractAddress, slot, slotValue)
-                        storageWriteCount += 1
+                            # print("item:", slotWrite)
+                            # print("contractAddress:", contractAddress)
+                            # print("slot:", slot)
+                            # print("slotValue:", slotValue)
+                            # print("\n")
+                            currentStorageRoot = updateStorageTrieEthane(contractAddress, slot, slotValue)
+                            storageWriteCount += 1
 
-                    # check current storage trie is made correctly
-                    if currentStorageRoot[2:] != storageRoot:
-                        print("@@fail: storage trie is wrong")
-                        print("blocknum:", oldblocknumber)
-                        # print("txindex:", item['txindex'])
-                        # print("tx hash:", select_tx_hash(cursor, blockNum, item['txindex']))
-                        print("item:", item)
-                        print("  addr:", addr)
-                        print("  nonce:", nonce)
-                        print("  balance:", balance)
-                        print("  codeHash:", codeHash)
-                        print("  storageRoot:", storageRoot)
-                        print(currentStorageRoot[2:], "vs", storageRoot)
-                        sys.exit()
+                        # check current storage trie is made correctly
+                        if currentStorageRoot[2:] != storageRoot:
+                            print("@@fail: storage trie is wrong")
+                            print("blocknum:", oldblocknumber)
+                            # print("txindex:", item['txindex'])
+                            # print("tx hash:", select_tx_hash(cursor, blockNum, item['txindex']))
+                            print("item:", item)
+                            print("  addr:", addr)
+                            print("  nonce:", nonce)
+                            print("  balance:", balance)
+                            print("  codeHash:", codeHash)
+                            print("  storageRoot:", storageRoot)
+                            print(currentStorageRoot[2:], "vs", storageRoot)
+                            if stopWhenErrorOccurs:
+                                sys.exit()
                 
                 # update state trie
                 updateTrieForEthane(nonce, balance, storageRoot, codeHash, addr)
@@ -900,6 +918,10 @@ if __name__ == "__main__":
     #
     # call APIs to simulate MPT
     #
+
+    # set simulation options
+    doStorageTrieUpdate = False
+    stopWhenErrorOccurs = False
     
     # ex1. strategy: random
     # strategy_random(100, 1000, 10)
