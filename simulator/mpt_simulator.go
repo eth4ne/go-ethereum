@@ -504,6 +504,18 @@ func inspectDatabase(diskdb ethdb.KeyValueStore) (uint64, uint64) {
 	return totalNodes, uint64(totalSize)
 }
 
+// inspectTrieDisk measures number and size of trie nodes in the trie (get node info from disk)
+func inspectTrieDisk(hash common.Hash) common.NodeStat {
+
+	// open trie to inspect
+	trieToInsepct, _ := trie.New(hash, trie.NewDatabase(diskdb))
+
+	// inspect trie
+	tir := trieToInsepct.InspectTrie()
+	// tir.PrintTrieInspectResult(0, 0)
+
+	return tir.ToNodeStat()
+}
 
 // inspectTrieMem measures number and size of trie nodes in the trie (get node info from memory)
 // (count duplicated nodes)
@@ -1049,39 +1061,49 @@ func restoreAccount(restoreAddr common.Address) {
 func InspectTrieWithinRange(stateRoot common.Hash, startKey, endKey []byte) string {
 	// fmt.Println("stateRoot:", stateRoot.Hex(), startKey, endKey)
 
-	leafNodeDepths := []uint{}
-	trieNodeStat := inspectTrieWithinRange(stateRoot, 0, &leafNodeDepths, "", startKey, endKey)
+	if common.CollectNodeInfos {
+		// inspect trie in memory (get node info from memory)
 
-	// deal with depths
-	var avgDepth float64
-	minDepth := uint(100)
-	maxDepth := uint(0)
-	depthSum := uint(0)
-	for _, depth := range leafNodeDepths {
-		depthSum += depth
-		if maxDepth < depth {
-			maxDepth = depth
+		leafNodeDepths := []uint{}
+		trieNodeStat := inspectTrieWithinRangeMem(stateRoot, 0, &leafNodeDepths, "", startKey, endKey)
+		// deal with depths
+		var avgDepth float64
+		minDepth := uint(100)
+		maxDepth := uint(0)
+		depthSum := uint(0)
+		for _, depth := range leafNodeDepths {
+			depthSum += depth
+			if maxDepth < depth {
+				maxDepth = depth
+			}
+			if minDepth > depth {
+				minDepth = depth
+			}
 		}
-		if minDepth > depth {
-			minDepth = depth
+		if len(leafNodeDepths) != 0 {
+			avgDepth = float64(depthSum) / float64(len(leafNodeDepths))
+			fmt.Println("avg depth:", avgDepth, "( min:", minDepth, "/ max:", maxDepth, ")")
+		} else {
+			minDepth = 0
+			avgDepth = 0
+			maxDepth = 0
+			fmt.Println("avg depth: there is no leaf node")
 		}
-	}
-	if len(leafNodeDepths) != 0 {
-		avgDepth = float64(depthSum) / float64(len(leafNodeDepths))
-		fmt.Println("avg depth:", avgDepth, "( min:", minDepth, "/ max:", maxDepth, ")")
+
+		// print result
+		trieNodeStat.Print()
+		result := trieNodeStat.ToString(" ") + strconv.FormatUint(uint64(minDepth), 10) + " " + fmt.Sprintf("%f", avgDepth) + " " + strconv.FormatUint(uint64(maxDepth), 10)
+		fmt.Println(result)
+		fmt.Println()
+		return result
+
 	} else {
-		minDepth = 0
-		avgDepth = 0
-		maxDepth = 0
-		fmt.Println("avg depth: there is no leaf node")
+		// TODO(jmlee): implement inspecting in disk
+
+		// inspect trie in disk (get node info from disk)
+		return ""
 	}
 
-	// print result
-	trieNodeStat.Print()
-	result := trieNodeStat.ToString(" ") + strconv.FormatUint(uint64(minDepth), 10) + " " + fmt.Sprintf("%f", avgDepth) + " " + strconv.FormatUint(uint64(maxDepth), 10)
-	fmt.Println(result)
-	fmt.Println()
-	return result
 }
 
 func inspectEthaneTries(blockNum uint64) {
@@ -1101,27 +1123,50 @@ func inspectEthaneTries(blockNum uint64) {
 	}
 	endKey := trie.KeybytesToHex(common.HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff").Bytes())
 
-	// total trie
-	fmt.Println()
-	fmt.Println("print total trie")
-	totalResult := InspectTrieWithinRange(stateRoot, startKey, endKey)
+	var totalResult, activeResult, inactiveResult string
 
-	// active trie
-	fmt.Println()
-	fmt.Println("print active trie")
-	activeResult := InspectTrieWithinRange(stateRoot, inactiveBoundary, endKey)
+	if common.InactiveTrieExist {
+		// active trie
+		fmt.Println()
+		fmt.Println("print active trie at block num", blockNum)
+		activeNodeStat := inspectTrieDisk(stateRoot)
+		// activeNodeStat.Print()
+		_ = activeNodeStat
 
-	// inactive trie
-	fmt.Println()
-	fmt.Println("print inactive trie")
-	if inactiveBoundaryKey == 0 {
-		// there is no inactive account
-		inactiveBoundarySubOne = startKey
-	}
-	inactiveResult := InspectTrieWithinRange(stateRoot, startKey, inactiveBoundarySubOne)
-	if inactiveBoundaryKey == 0 {
-		// there is no inactive account
-		inactiveResult = "0 0 0 0 0 0 0 0 0 0 0"
+		// inactive trie
+		fmt.Println()
+		fmt.Println("print inactive trie at block num", blockNum)
+		inactiveRoot := common.Blocks[blockNum].InactiveRoot
+		inactiveNodeStat := inspectTrieDisk(inactiveRoot)
+		// inactiveNodeStat.Print()
+		_ = inactiveNodeStat
+	} else {
+		// TODO(jmlee): implement below
+		_, _, _ = inactiveBoundary, inactiveBoundarySubOne, endKey
+
+		// // total trie
+		// fmt.Println()
+		// fmt.Println("print total trie at block num", blockNum)
+		// totalNodeStat := inspectTrieDisk(stateRoot)
+		// totalResult = totalNodeStat.ToString(" ")
+
+		// // active trie part
+		// fmt.Println()
+		// fmt.Println("print active trie part at block num", blockNum)
+		// activeResult := InspectTrieWithinRange(stateRoot, inactiveBoundary, endKey)
+
+		// // inactive trie part
+		// fmt.Println()
+		// fmt.Println("print inactive trie at block num", blockNum)
+		// if common.InactiveTrieExist {
+		// 	inactiveResult = InspectTrieWithinRange(subNormTrie.Hash(), startKey, inactiveBoundarySubOne)
+		// } else {
+		// 	inactiveResult = InspectTrieWithinRange(stateRoot, startKey, inactiveBoundarySubOne)
+		// }
+		// if inactiveBoundaryKey == 0 {
+		// 	// there is no inactive account
+		// 	inactiveResult = "0 0 0 0 0 0 0 0 0 0 0"
+		// }
 	}
 
 	fmt.Println(totalResult, activeResult, inactiveResult)
@@ -1152,14 +1197,14 @@ func printEthaneState() {
 	// current NextKey = # of state trie updates
 	fmt.Println("current NextKey:", common.NextKey, "/ NextKey(hex):", common.Uint64ToHash(common.NextKey).Hex())
 
+	fmt.Println("restoed nodes in inactive trie:", common.RestoredNodeNum)
+	fmt.Println("deleted nodes in active trie:", common.DeletedNodeNum)
+
 	// print total/active/inactive trie stats (size, node num, node types, depths)
-	inspectEthaneTries(latestBlockNum)
+	// inspectEthaneTries(latestBlockNum)
 	latestCheckpointBlockNum := latestBlockNum - (latestBlockNum % common.InactivateEpoch) - 1
 	inspectEthaneTries(latestCheckpointBlockNum)     // relatively small state trie after delete/inactivate
 	inspectEthaneTries(latestCheckpointBlockNum - 1) // relatively large state trie before delete/inactivate
-
-	fmt.Println("restoed nodes in inactive trie:", common.RestoredNodeNum)
-	fmt.Println("deleted nodes in active trie:", common.DeletedNodeNum)
 }
 
 func setEthaneOptions(deleteEpoch, inactivateEpoch, inactivateCriterion uint64) {
@@ -1249,24 +1294,31 @@ func connHandler(conn net.Conn) {
 				// rawdb.InspectDatabase(rawdb.NewDatabase(diskdb), nil, nil)
 				inspectDatabase(diskdb)
 
-				tir := normTrie.InspectTrie()
-				tir.PrintTrieInspectResult(0, 0)
-
 				response = []byte("success")
 
 			case "inspectTrie":
 				fmt.Println("execute inspectTrie()")
 				rootHash := normTrie.Hash()
 				fmt.Println("root hash:", rootHash.Hex())
-				inspectTrie(rootHash)
-				nodeInfo, exist := common.TrieNodeInfos[rootHash]
-				if !exist {
-					nodeInfo, exist = common.TrieNodeInfosDirty[rootHash]
-				}
-				fmt.Println("print inspectTrie result")
-				nodeInfo.SubTrieNodeStat.Print()
 
-				response = []byte(rootHash.Hex() + "," + nodeInfo.SubTrieNodeStat.ToString(","))
+				var nodeStat common.NodeStat
+				if common.CollectNodeInfos {
+					inspectTrieMem(rootHash)
+					var nodeInfo common.NodeInfo
+					var exist bool
+					nodeInfo, exist = common.TrieNodeInfos[rootHash]
+					if !exist {
+						nodeInfo, exist = common.TrieNodeInfosDirty[rootHash]
+					}
+					nodeStat = nodeInfo.SubTrieNodeStat
+				} else {
+					nodeStat = inspectTrieDisk(rootHash)
+				}
+
+				fmt.Println("print inspectTrie result")
+				nodeStat.Print()
+
+				response = []byte(rootHash.Hex() + "," + nodeStat.ToString(","))
 
 			case "inspectTrieWithinRange":
 				fmt.Println("execute InspectTrieWithinRange()")
@@ -1286,15 +1338,25 @@ func connHandler(conn net.Conn) {
 				fmt.Println("execute inspectSubTrie()")
 				rootHash := common.HexToHash(params[1])
 				fmt.Println("rootHash:", rootHash.Hex())
-				inspectTrie(rootHash)
-				nodeInfo, exist := common.TrieNodeInfos[rootHash]
-				if !exist {
-					nodeInfo, exist = common.TrieNodeInfosDirty[rootHash]
-				}
-				fmt.Println("print inspectSubTrie result")
-				nodeInfo.SubTrieNodeStat.Print()
 
-				response = []byte(rootHash.Hex() + "," + nodeInfo.SubTrieNodeStat.ToString(","))
+				var nodeStat common.NodeStat
+				if common.CollectNodeInfos {
+					inspectTrieMem(rootHash)
+					var nodeInfo common.NodeInfo
+					var exist bool
+					nodeInfo, exist = common.TrieNodeInfos[rootHash]
+					if !exist {
+						nodeInfo, exist = common.TrieNodeInfosDirty[rootHash]
+					}
+					nodeStat = nodeInfo.SubTrieNodeStat
+				} else {
+					nodeStat = inspectTrieDisk(rootHash)
+				}
+
+				fmt.Println("print inspectSubTrie result")
+				nodeStat.Print()
+
+				response = []byte(rootHash.Hex() + "," + nodeStat.ToString(","))
 
 			case "flush":
 				fmt.Println("execute flushTrieNodes()")
@@ -1620,15 +1682,23 @@ func connHandler(conn net.Conn) {
 				delimiter := " "
 
 				rootHash := normTrie.Hash()
-				inspectTrie(rootHash)
-				nodeInfo, exist := common.TrieNodeInfos[rootHash]
-				if !exist {
-					nodeInfo, exist = common.TrieNodeInfosDirty[rootHash]
+				var nodeStat common.NodeStat
+				if common.CollectNodeInfos {
+					inspectTrieMem(rootHash)
+					var nodeInfo common.NodeInfo
+					var exist bool
+					nodeInfo, exist = common.TrieNodeInfos[rootHash]
+					if !exist {
+						nodeInfo, exist = common.TrieNodeInfosDirty[rootHash]
+					}
+					nodeStat = nodeInfo.SubTrieNodeStat
+				} else {
+					nodeStat = inspectTrieDisk(rootHash)
 				}
 
 				totalResult := common.TotalNodeStat.ToString(delimiter)
 				totalStorageResult := common.TotalStorageNodeStat.ToString(delimiter)
-				subTrieResult := nodeInfo.SubTrieNodeStat.ToString(delimiter)
+				subTrieResult := nodeStat.ToString(delimiter)
 
 				fmt.Print(totalResult)
 				fmt.Print(totalStorageResult)
