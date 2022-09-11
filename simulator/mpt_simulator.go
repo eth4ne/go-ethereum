@@ -71,6 +71,8 @@ var (
 	diskdb ethdb.KeyValueStore
 	// normal state trie
 	normTrie *trie.Trie
+	// additional inactive trie for Ethane
+	subNormTrie *trie.Trie
 	// secure state trie
 	secureTrie *trie.SecureTrie
 	// storage tries which have unflushed trie updates
@@ -124,6 +126,7 @@ func reset() {
 		diskdb = memorydb.New()
 	}
 	normTrie, _ = trie.New(common.Hash{}, trie.NewDatabase(diskdb))
+	subNormTrie, _ = trie.New(common.Hash{}, trie.NewDatabase(diskdb))
 
 	// reset secure trie
 	secureTrie, _ = trie.NewSecure(common.Hash{}, trie.NewDatabase(memorydb.New()))
@@ -397,6 +400,11 @@ func flushTrieNodes() {
 	common.FlushStorageTries = false
 	normTrie.Commit(nil)
 	normTrie.TrieDB().Commit(normTrie.Hash(), false, nil)
+	if common.InactiveTrieExist {
+		subNormTrie.Commit(nil)
+		subNormTrie.TrieDB().Commit(subNormTrie.Hash(), false, nil)
+		blockInfo.InactiveRoot = subNormTrie.Hash()
+	}
 
 	// flush storage trie nodes
 	common.FlushStorageTries = true
@@ -914,10 +922,15 @@ func deletePrevLeafNodes() {
 
 // delete already used merkle proofs in inactive trie
 func deleteRestoredLeafNodes() {
+	// check if inactive trie exist
+	inactiveTrie := normTrie
+	if common.InactiveTrieExist {
+		inactiveTrie = subNormTrie
+	}
 
 	// delete all used merkle proofs for restoration
 	for _, keyToDelete := range common.RestoredKeys {
-		err := normTrie.TryDelete(keyToDelete[:])
+		err := inactiveTrie.TryDelete(keyToDelete[:])
 		if err != nil {
 			fmt.Println("ERROR deleteRestoredLeafNodes(): trie.TryDelete ->", err)
 			os.Exit(1)
@@ -933,6 +946,14 @@ func deleteRestoredLeafNodes() {
 
 // move inactive accounts from active trie to inactive trie
 func inactivateLeafNodes(firstKeyToCheck, lastKeyToCheck common.Hash) {
+	fmt.Println("inactivate leaf nodes() executed")
+
+	// check if inactive trie exist
+	inactiveTrie := normTrie
+	if common.InactiveTrieExist {
+		inactiveTrie = subNormTrie
+	}
+
 	// fmt.Println("do inactivation -> firstKey:", firstKeyToCheck.Big().Int64(), "lastKey:", lastKeyToCheck.Big().Int64())
 
 	// find accounts to inactivate (i.e., all leaf nodes in the range after delete prev leaf nodes)
@@ -954,7 +975,7 @@ func inactivateLeafNodes(firstKeyToCheck, lastKeyToCheck common.Hash) {
 		keyToInsert := common.Uint64ToHash(common.InactiveBoundaryKey)
 		common.InactiveBoundaryKey++
 		// fmt.Println("(Inactivate)insert -> key:", keyToInsert.Hex())
-		err = normTrie.TryUpdate(keyToInsert[:], accountsToInactivate[index])
+		err = inactiveTrie.TryUpdate(keyToInsert[:], accountsToInactivate[index])
 		if err != nil {
 			fmt.Println("inactivateLeafNodes insert error:", err)
 			os.Exit(1)
@@ -969,6 +990,11 @@ func inactivateLeafNodes(firstKeyToCheck, lastKeyToCheck common.Hash) {
 // restore all inactive accounts of given address (for Ethane)
 // TODO(jmlee): check correctness
 func restoreAccount(restoreAddr common.Address) {
+	// check if inactive trie exist
+	inactiveTrie := normTrie
+	if common.InactiveTrieExist {
+		inactiveTrie = subNormTrie
+	}
 
 	if len(common.AddrToKeyInactive[restoreAddr]) == 0 {
 		fmt.Println("there is no account to restore")
@@ -987,7 +1013,7 @@ func restoreAccount(restoreAddr common.Address) {
 	for _, key := range common.AddrToKeyInactive[restoreAddr] {
 
 		// get inactive account
-		enc, err := normTrie.TryGet(key[:])
+		enc, err := inactiveTrie.TryGet(key[:])
 		if err != nil {
 			fmt.Println("TryGet() error:", err)
 			os.Exit(1)

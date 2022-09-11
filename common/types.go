@@ -97,6 +97,8 @@ var (
 
 	// run as a Ethane or normal Ethereum
 	IsEthane = true
+	// active trie & inactive trie vs one state trie
+	InactiveTrieExist = true
 
 	// temp map for verifying compactTrie idea(jmlee)
 	// map storing active address list (AddrToKeyActive[addr] = counter key in trie's active part)
