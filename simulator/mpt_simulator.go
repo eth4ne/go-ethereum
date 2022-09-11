@@ -460,10 +460,13 @@ func inspectDB(diskdb ethdb.KeyValueStore) (uint64, uint64) {
 		)
 		// fmt.Println("node hash:", hex.EncodeToString(key), "/ value:", it.Value(), "/ size: ", size)
 		// fmt.Println("node hash:", hex.EncodeToString(key), "/ size: ", size)
-		totalNodes++
-		totalSize += size
+		if len(key) == 32 {
+			// this is trie node
+			totalNodes++
+			totalSize += size
+		}
 	}
-	fmt.Println("total nodes:", totalNodes, "/ total size:", totalSize)
+	fmt.Println("total nodes:", totalNodes, "/ total size:", totalSize, "(", uint64(totalSize), "B )")
 	return totalNodes, uint64(totalSize)
 }
 
