@@ -1004,7 +1004,7 @@ func restoreAccount(restoreAddr common.Address) {
 	// get active account if exist & merge it
 	addrKey, exist := common.AddrToKeyActive[restoreAddr]
 	if exist {
-		// get inactive account
+		// get active account
 		enc, err := normTrie.TryGet(addrKey[:])
 		if err != nil {
 			fmt.Println("TryGet() error:", err)
@@ -1041,6 +1041,8 @@ func restoreAccount(restoreAddr common.Address) {
 	// RESTORE_ALL: restore all inactive leaf nodes of this address
 	common.RestoredKeys = append(common.RestoredKeys, common.AddrToKeyInactive[restoreAddr]...)
 	delete(common.AddrToKeyInactive, restoreAddr)
+
+	// fmt.Println("success restore:", restoreAddr.Hex())
 }
 
 // InspectTrieWithinRange prints trie stats (size, node num, node types, depths) within range
@@ -1093,6 +1095,10 @@ func inspectEthaneTries(blockNum uint64) {
 	startKey := trie.KeybytesToHex(common.HexToHash("0x0").Bytes())
 	inactiveBoundary := trie.KeybytesToHex(common.Uint64ToHash(inactiveBoundaryKey).Bytes())
 	inactiveBoundarySubOne := trie.KeybytesToHex(common.Uint64ToHash(inactiveBoundaryKey - 1).Bytes())
+	if inactiveBoundaryKey == 0 {
+		// there is no inactive account
+		inactiveBoundarySubOne = startKey
+	}
 	endKey := trie.KeybytesToHex(common.HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff").Bytes())
 
 	// total trie
