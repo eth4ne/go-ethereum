@@ -50,10 +50,19 @@ var (
 	// db stats for trie nodes (jmlee)
 	//
 
+	// collect flushed node infos or not
+	// (if CollectNodeInfos is false, then several functionalities will be deprecated, ex. inspectTrieMem())
+	CollectNodeInfos = true
 	// TrieNodeInfos[nodeHash] = node's information (containing all nodes flushed to diskdb)
 	TrieNodeInfos = make(map[Hash]NodeInfo)
 	// infos for dirty trie nodes, that will be flushed or discarded
 	TrieNodeInfosDirty = make(map[Hash]NodeInfo)
+	// collect flushed node hashes or not
+	// (if CollectNodeInfos is true, then TrieNodeHashes is empty, since TrieNodeInfos will collect hashes)
+	// (if CollectNodeHahes, CollectNodeInfos are both false, then TotalNodeStat, TotalStorageNodeStat might be wrong)
+	CollectNodeHashes = true
+	// all flushed nodes' hashes
+	TrieNodeHashes = make(map[Hash]struct{})
 
 	// stats for all state trie's nodes in db (archive data)
 	TotalNodeStat NodeStat

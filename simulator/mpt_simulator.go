@@ -134,6 +134,7 @@ func reset() {
 	common.NewNodeStat.Reset()
 	common.NewStorageNodeStat.Reset()
 
+	common.TrieNodeHashes = make(map[common.Hash]struct{})
 	common.TrieNodeInfos = make(map[common.Hash]common.NodeInfo)
 	common.TrieNodeInfosDirty = make(map[common.Hash]common.NodeInfo)
 

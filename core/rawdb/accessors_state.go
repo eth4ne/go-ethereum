@@ -102,7 +102,15 @@ func WriteTrieNode(db ethdb.KeyValueWriter, hash common.Hash, node []byte) {
 
 	// measuring db stat: # of trie nodes & db size for trie nodes (jmlee)
 	// fmt.Println("WriteTrieNode() -> node hash:", hash.Hex())
-	if _, exist := common.TrieNodeInfos[hash]; !exist {
+
+	var alreadyFlushed bool
+	if common.CollectNodeInfos {
+		_, alreadyFlushed = common.TrieNodeInfos[hash]
+	} else {
+		_, alreadyFlushed = common.TrieNodeHashes[hash]
+	}
+
+	if !alreadyFlushed {
 		// this new dirty node will be flushed
 		nodeInfoDirty, existDirty := common.TrieNodeInfosDirty[hash]
 		if !existDirty {
@@ -144,13 +152,21 @@ func WriteTrieNode(db ethdb.KeyValueWriter, hash common.Hash, node []byte) {
 		blockInfo.FlushedNodeHashes = append(blockInfo.FlushedNodeHashes, hash)
 		common.Blocks[common.NextBlockNum] = blockInfo
 
-		// confirm dirty node
+		// check size is correct
 		if nodeInfoDirty.Size != uint(32+len(node)) {
 			fmt.Println("error! different size, this should not happen")
 			fmt.Println(nodeInfoDirty.Size, uint(nodeSize))
 			os.Exit(1)
 		}
-		common.TrieNodeInfos[hash] = nodeInfoDirty
+
+		// confirm dirty node
+		if common.CollectNodeInfos {
+			common.TrieNodeInfos[hash] = nodeInfoDirty
+		} else {
+			if common.CollectNodeHashes {
+				common.TrieNodeHashes[hash] = struct{}{}
+			}
+		}
 	}
 
 	if err := db.Put(hash.Bytes(), node); err != nil {
