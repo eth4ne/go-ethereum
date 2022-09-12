@@ -7,6 +7,7 @@ import json
 from datetime import datetime
 from os.path import exists
 import pymysql.cursors
+import csv
 
 # ethereum tx data DB options
 db_host = 'localhost'
@@ -25,6 +26,10 @@ SERVER_IP = "localhost"
 deleteDisk = True
 doStorageTrieUpdate = True
 stopWhenErrorOccurs = True
+
+# file paths
+blockInfosLogFilePath = "/home/jmlee/go-ethereum/simulator/blockInfos/"
+trieInspectsLogFilePath = "/home/jmlee/go-ethereum/simulator/trieInspects/"
 
 # maximum byte length of response from the simulator
 maxResponseLen = 4096
@@ -929,6 +934,81 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
     print("create log file:", logFileName)
     saveBlockInfos(blockInfosLogFileName)
     print("create log file:", blockInfosLogFileName)
+
+# inspect tries after simulation for ethereum
+def inspectTriesEthereum(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion):
+
+    delimiter = " "
+
+    #
+    # for ethereum
+    #
+
+    blockInfosLogFileName = "ethereum_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + ".txt"
+    trieInspectLogFileName = "ethereum_simulate_trie_inspect_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateEpoch) + ".txt"
+
+    blockInfosFile = open(blockInfosLogFilePath+blockInfosLogFileName, 'r')
+    trieInspectFile = open(trieInspectsLogFilePath+trieInspectLogFileName, 'a')
+    rdr = csv.reader(blockInfosFile)
+    blockNum = 0
+    for line in rdr:
+        if len(line) == 0:
+            continue
+
+        # parsing
+        params = line[0].split(delimiter)[:-1]
+        blockNum = int(params[2])
+        # print("blockNum:", blockNum)
+
+        # inspect trie
+        if (blockNum+1) % inactivateEpoch == 0:
+            activeTrieRoot = params[0]
+            nodeStat = inspectSubTrie(activeTrieRoot)[0]
+            print("at block", blockNum, ", node stat:", nodeStat)
+
+            # save result
+            log = str(blockNum) + delimiter + activeTrieRoot + delimiter + nodeStat + "\n"
+            trieInspectFile.write(log)
+    
+    trieInspectFile.close()
+
+# inspect tries after simulation for ethane
+def inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion):
+
+    delimiter = " "
+
+    blockInfosLogFileName = "ethane_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) \
+        + "_" + str(deleteEpoch) + "_" + str(inactivateEpoch) + "_" + str(inactivateCriterion) + ".txt"
+    trieInspectLogFileName = "ethane_simulate_trie_inspect_" + str(startBlockNum) + "_" + str(endBlockNum) \
+        + "_" + str(deleteEpoch) + "_" + str(inactivateEpoch) + "_" + str(inactivateCriterion) + ".txt"
+    
+    blockInfosFile = open(blockInfosLogFilePath+blockInfosLogFileName, 'r')
+    trieInspectFile = open(trieInspectsLogFilePath+trieInspectLogFileName, 'a')
+    rdr = csv.reader(blockInfosFile)
+    blockNum = 0
+    for line in rdr:
+        if len(line) == 0:
+            continue
+
+        # parsing
+        params = line[0].split(delimiter)[:-1]
+        blockNum = int(params[2])
+        # print("blockNum:", blockNum)
+
+        # inspect trie
+        if (blockNum+1) % inactivateEpoch == 0 or (blockNum+2) % inactivateEpoch == 0:
+            activeTrieRoot = params[0]
+            inactiveTrieRoot = params[1]
+            activeNodeStat = inspectSubTrie(activeTrieRoot)[0]
+            print("at block", blockNum, ", active node stat:", activeNodeStat)
+            inactiveNodeStat = inspectSubTrie(inactiveTrieRoot)[0]
+            print("at block", blockNum, ", inactive node stat:", inactiveNodeStat)
+
+            # save result
+            log = str(blockNum) + delimiter + activeTrieRoot + delimiter + activeNodeStat + delimiter + inactiveTrieRoot + delimiter + inactiveNodeStat + "\n"
+            trieInspectFile.write(log)
+
+    trieInspectFile.close()
 
 
 
