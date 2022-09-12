@@ -1249,25 +1249,43 @@ func setEthaneOptions(deleteEpoch, inactivateEpoch, inactivateCriterion uint64) 
 
 // save block infos
 func saveBlockInfos(fileName string, startBlockNum, endBlockNum uint64) {
+	// delete prev log file if exist
+	os.Remove(blockInfosLogFilePath + fileName)
+	// open new log file
 	f, _ := os.OpenFile(blockInfosLogFilePath+fileName, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 	defer f.Close()
 
 	delimiter := " "
-	for blockNum := startBlockNum; blockNum<= endBlockNum; blockNum++ {
+	for blockNum := startBlockNum; blockNum <= endBlockNum; blockNum++ {
 		blockInfo, exist := common.Blocks[blockNum]
 		if !exist {
 			fmt.Println("there is no block", blockNum)
 			os.Exit(1)
 		}
+
+		// generate log
 		log := ""
+		log += blockInfo.Root.Hex() + delimiter
+		log += blockInfo.InactiveRoot.Hex() + delimiter
+		log += strconv.FormatUint(blockNum, 10) + delimiter
+
 		log += blockInfo.NewNodeStat.ToString(delimiter)
 		log += blockInfo.NewStorageNodeStat.ToString(delimiter)
 		log += blockInfo.TotalNodeStat.ToString(delimiter)
 		log += blockInfo.TotalStorageNodeStat.ToString(delimiter)
+
+		log += strconv.FormatInt(blockInfo.TimeToFlush, 10) + delimiter
+		log += strconv.FormatInt(blockInfo.TimeToDelete, 10) + delimiter
+		log += strconv.FormatInt(blockInfo.TimeToInactivate, 10) + delimiter
+		log += strconv.FormatUint(blockInfo.DeletedNodeNum, 10) + delimiter
+		log += strconv.FormatUint(blockInfo.RestoredNodeNum, 10) + delimiter
+		log += strconv.FormatUint(blockInfo.InactivatedNodeNum, 10) + delimiter
 		// fmt.Println("log at block", blockNum, ":", log)
+
+		// write log to file
 		fmt.Fprintln(f, log)
 	}
-	
+
 }
 
 func getTrieLastKey() {
