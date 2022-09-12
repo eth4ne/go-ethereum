@@ -22,6 +22,7 @@ cursor = conn.cursor()
 SERVER_IP = "localhost"
 
 # simulator options
+deleteDisk = True
 doStorageTrieUpdate = True
 stopWhenErrorOccurs = True
 
@@ -321,7 +322,13 @@ def updateStorageTrieEthane(contractAddr, slot, value):
 
 # reset simulator
 def reset():
+    doDeleteDisk = 0
+    if deleteDisk:
+        doDeleteDisk = 1
     cmd = str("reset")
+    cmd += str(",")
+    cmd += str(doDeleteDisk)
+    print("cmd:", cmd)
     client_socket.send(cmd.encode())
     data = client_socket.recv(1024)
     print("reset response:", data.decode())
@@ -934,6 +941,7 @@ if __name__ == "__main__":
     #
 
     # set simulation options
+    deleteDisk = True
     doStorageTrieUpdate = False
     stopWhenErrorOccurs = False
     

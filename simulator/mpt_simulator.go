@@ -86,7 +86,7 @@ var (
 	hashKeyBuf = make([]byte, common.HashLength)
 )
 
-func reset() {
+func reset(deleteDisk bool) {
 
 	// set maximum number of open files
 	limit, err := fdlimit.Maximum()
@@ -113,9 +113,14 @@ func reset() {
 	if useLeveldb {
 		fmt.Println("set leveldb")
 		// if do not delete directory, this just reopens existing db
-		err := os.RemoveAll(leveldbPath)
-		if err != nil {
-			fmt.Println("RemoveAll error ! ->", err)
+		if deleteDisk {
+			fmt.Println("delete disk, open new disk")
+			err := os.RemoveAll(leveldbPath)
+			if err != nil {
+				fmt.Println("RemoveAll error ! ->", err)
+			}
+		} else {
+			fmt.Println("do not delete disk, open old db if it exist")
 		}
 
 		diskdb, err = leveldb.New(leveldbPath, leveldbCache, leveldbHandles, leveldbNamespace, leveldbReadonly)
@@ -177,7 +182,7 @@ func reset() {
 func rollbackUncommittedUpdates() {
 	// there is no block, just reset
 	if common.NextBlockNum == 0 {
-		reset()
+		reset(true)
 		return
 	}
 
@@ -215,7 +220,7 @@ func rollbackToBlock(targetBlockNum uint64) bool {
 	}
 	if targetBlockNum == 0 {
 		// just execute reset(), when we rollback to block 0
-		reset()
+		reset(true)
 		return true
 	}
 
@@ -1246,7 +1251,6 @@ func setEthaneOptions(deleteEpoch, inactivateEpoch, inactivateCriterion uint64) 
 func saveBlockInfos(fileName string, startBlockNum, endBlockNum uint64) {
 	f, _ := os.OpenFile(blockInfosLogFilePath+fileName, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 	defer f.Close()
-	// fmt.Fprintln(f, "checkpoint key -> bn:" + strconv.FormatUint(bn, 10) + " / cpk:" + strconv.FormatUint(common.CheckpointKey, 10))
 
 	delimiter := " "
 	for blockNum := startBlockNum; blockNum<= endBlockNum; blockNum++ {
@@ -1302,7 +1306,13 @@ func connHandler(conn net.Conn) {
 
 			case "reset":
 				fmt.Println("execute reset()")
-				reset()
+				deleteDisk, _ := strconv.ParseUint(params[1], 10, 64)
+				if deleteDisk == 0 {
+					reset(false)
+				} else {
+					reset(true)
+				}
+				
 				response = []byte("reset success")
 
 			case "getBlockNum":
@@ -1780,7 +1790,9 @@ func connHandler(conn net.Conn) {
 				response = []byte("success")
 
 			case "saveBlockInfos":
+				fmt.Println("execute saveBlockInfos()")
 				logFileName := params[1]
+				fmt.Println("block infos log file name:", logFileName)
 				saveBlockInfos(logFileName, 0, common.NextBlockNum-1)
 
 				response = []byte("success")
@@ -1937,7 +1949,7 @@ func makeTestTrie() {
 func main() {
 
 	// initialize
-	reset()
+	reset(false)
 
 	// for test, run this function
 	// makeTestTrie()
