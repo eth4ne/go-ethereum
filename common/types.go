@@ -52,7 +52,7 @@ var (
 
 	// collect flushed node infos or not
 	// (if CollectNodeInfos is false, then several functionalities will be deprecated, ex. inspectTrieMem())
-	CollectNodeInfos = true
+	CollectNodeInfos = false
 	// TrieNodeInfos[nodeHash] = node's information (containing all nodes flushed to diskdb)
 	TrieNodeInfos = make(map[Hash]NodeInfo)
 	// infos for dirty trie nodes, that will be flushed or discarded
@@ -64,6 +64,7 @@ var (
 	// all flushed nodes' hashes
 	TrieNodeHashes = make(map[Hash]struct{})
 
+	// TODO(jmlee): change name to TotalStateNodeStat
 	// stats for all state trie's nodes in db (archive data)
 	TotalNodeStat NodeStat
 	// stats for all storage tries' nodes in db (archive data)
@@ -168,10 +169,11 @@ type NodeStat struct {
 
 // BlockInfo stores block related information
 type BlockInfo struct {
-	Root                 Hash     // root hash of trie
-	InactiveRoot         Hash     // root hash of inactive trie for Ethane
-	FlushedNodeHashes    []Hash   // hashes of flushed nodes
-	MaxAccountNonce      uint64   // biggest nonce amoung accounts (just to regenerate same state root, not essential field)
+	Root              Hash   // root hash of trie
+	InactiveRoot      Hash   // root hash of inactive trie for Ethane
+	FlushedNodeHashes []Hash // hashes of flushed nodes
+	MaxAccountNonce   uint64 // biggest nonce amoung accounts (just to regenerate same state root, not essential field)
+
 	NewNodeStat          NodeStat // stats for newly flushed state trie nodes in this block
 	NewStorageNodeStat   NodeStat // stats for newly flushed storage trie nodes in this block
 	TotalNodeStat        NodeStat // stats for total state trie data until this block

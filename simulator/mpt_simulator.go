@@ -524,7 +524,11 @@ func inspectDatabase(diskdb ethdb.KeyValueStore) (uint64, uint64) {
 func inspectTrieDisk(hash common.Hash) common.NodeStat {
 
 	// open trie to inspect
-	trieToInsepct, _ := trie.New(hash, trie.NewDatabase(diskdb))
+	trieToInsepct, err := trie.New(hash, trie.NewDatabase(diskdb))
+	if err != nil {
+		fmt.Println("inspectTrieDisk() err:", err)
+		os.Exit(1)
+	}
 
 	// inspect trie
 	tir := trieToInsepct.InspectTrie()
@@ -1330,7 +1334,7 @@ func connHandler(conn net.Conn) {
 				} else {
 					reset(true)
 				}
-				
+
 				response = []byte("reset success")
 
 			case "getBlockNum":
@@ -1399,7 +1403,7 @@ func connHandler(conn net.Conn) {
 					nodeStat.Print()
 				} else {
 					nodeStat = inspectTrieDisk(rootHash)
-				}				
+				}
 
 				response = []byte(rootHash.Hex() + "," + nodeStat.ToString(","))
 
@@ -1439,7 +1443,8 @@ func connHandler(conn net.Conn) {
 				fmt.Println("print inspectSubTrie result")
 				nodeStat.Print()
 
-				response = []byte(rootHash.Hex() + "," + nodeStat.ToString(","))
+				delimiter := " "
+				response = []byte(nodeStat.ToString(delimiter))
 
 			case "flush":
 				fmt.Println("execute flushTrieNodes()")
