@@ -850,6 +850,8 @@ func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGro
 
 			}
 		}
+	case nil:
+		return
 	default:
 		// should not reach here! maybe there is something wrong
 		fmt.Println("ERROR: unknown trie node type? node:", n)
