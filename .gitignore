@@ -7,6 +7,8 @@
 /simulator/logFiles/*
 /simulator/trieGraphs/*
 /simulator/blockInfos/*
+/simulator/trieInspects/*
+/simulator/graphs/*
 
 /tmp
 */**/*un~
