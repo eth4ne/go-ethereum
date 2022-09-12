@@ -945,7 +945,7 @@ def inspectTriesEthereum(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoc
     #
 
     blockInfosLogFileName = "ethereum_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + ".txt"
-    trieInspectLogFileName = "ethereum_simulate_trie_inspect_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateEpoch) + ".txt"
+    trieInspectLogFileName = "ethereum_simulate_trie_inspects_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateEpoch) + ".txt"
 
     blockInfosFile = open(blockInfosLogFilePath+blockInfosLogFileName, 'r')
     trieInspectFile = open(trieInspectsLogFilePath+trieInspectLogFileName, 'a')
@@ -979,7 +979,7 @@ def inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch,
 
     blockInfosLogFileName = "ethane_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) \
         + "_" + str(deleteEpoch) + "_" + str(inactivateEpoch) + "_" + str(inactivateCriterion) + ".txt"
-    trieInspectLogFileName = "ethane_simulate_trie_inspect_" + str(startBlockNum) + "_" + str(endBlockNum) \
+    trieInspectLogFileName = "ethane_simulate_trie_inspects_" + str(startBlockNum) + "_" + str(endBlockNum) \
         + "_" + str(deleteEpoch) + "_" + str(inactivateEpoch) + "_" + str(inactivateCriterion) + ".txt"
     
     blockInfosFile = open(blockInfosLogFilePath+blockInfosLogFileName, 'r')

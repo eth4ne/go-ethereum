@@ -29,6 +29,7 @@ def makeDir(path):
 
 # draw stack plot for NodeStat
 def drawNodeStatGraphs(xAxis, yAxis1, yAxis2, yAxis3, xLabelName, yLabelName, graphTitle):
+    print("start drawing graph:", graphTitle)
 
     # set graph
     plt.figure()
@@ -57,6 +58,8 @@ def drawNodeStatGraphs(xAxis, yAxis1, yAxis2, yAxis3, xLabelName, yLabelName, gr
     makeDir(graphPath)
     graphName = graphTitle + ".png"
     plt.savefig(graphPath+graphName, format="png")
+
+    print("success to draw graph:", graphTitle, "\n")
 
 
 
@@ -139,15 +142,103 @@ def drawGraphsForBlockInfos(startBlockNum, endBlockNum, deleteEpoch=0, inactivat
 
 
 
+# draw graphs for block infos log file
+def drawGraphsForTrieInspects(startBlockNum, endBlockNum, deleteEpoch=0, inactivateEpoch=0, inactivateCriterion=0):
+    
+    # get log file name
+    trieInspectsLogFileName = ""
+    if isEthane:
+        trieInspectsLogFileName += "ethane_simulate_trie_inspects_" + str(startBlockNum) + "_" + str(endBlockNum) \
+        + "_" + str(deleteEpoch) + "_" + str(inactivateEpoch) + "_" + str(inactivateCriterion) + ".txt"
+    else:
+        trieInspectsLogFileName += "ethereum_simulate_trie_inspects_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateEpoch) + ".txt"
+
+    # NodeStat.ToString() = totalNum, totalSize, fullNodeNum, fullNodeSize, shortNodeNum, shortNodeSize, leafNodeNum, leafNodeSize
+    # logs[0~7][blockNum] = active trie NodeStat.ToString()
+    # logs[8~15][blockNum] = inactive trie NodeStat.ToString()
+
+    columnNum = 16
+    logs = TwoD(endBlockNum-startBlockNum+1, columnNum, True)
+
+    # parse trie inspects log file
+    f = open(trieInspectsLogFilePath+trieInspectsLogFileName, 'r')
+    rdr = csv.reader(f)
+    blockNums = []
+    cnt = 0
+    for line in rdr:
+        if len(line) == 0:
+            continue
+
+        # parse line
+        params = line[0].split(" ")[:-1]
+        
+        # get block num
+        blockNum = int(params[0])
+        blockNums.append(blockNum)
+
+        # get node stats
+        activeNodeStat = [int(x) for x in params[2:10]] # covert string to int ()
+        inactiveNodeStat = [0, 0, 0, 0, 0, 0, 0, 0]
+        if isEthane:
+            inactiveNodeStat = [int(x) for x in params[12:20]] # covert string to int ()
+        # print("active node stat:", activeNodeStat)
+        # print("inactive node stat:", inactiveNodeStat)
+        params = activeNodeStat + inactiveNodeStat
+        # print("params:", params)
+        for i in range(columnNum):
+            logs[i][cnt] = params[i]
+
+        cnt += 1
+        # if cnt > 100000:
+        #     return
+
+    f.close()
+
+    #
+    # draw graphs
+    #
+
+    # set title
+    graphTitlePrefix = "ethereum "
+    if isEthane:
+        graphTitlePrefix = "ethane "
+
+    # TODO(jmlee): set names correctly
+    # draw graph: active current state trie node nums
+    title = 'current state trie node num'
+    drawNodeStatGraphs(blockNums, logs[2][:len(blockNums)], logs[4][:len(blockNums)], logs[6][:len(blockNums)], 'block num', 'state trie node num', graphTitlePrefix+title)
+
+    # draw graph: active current state trie node sizes
+    title = 'current state trie node size'
+    drawNodeStatGraphs(blockNums, logs[3][:len(blockNums)], logs[5][:len(blockNums)], logs[7][:len(blockNums)], 'block num', 'state trie node size (B)', graphTitlePrefix+title)
+
+    if isEthane:
+        # draw graph: inactive current state trie node nums
+        title = 'current inactive state trie node num'
+        drawNodeStatGraphs(blockNums, logs[10][:len(blockNums)], logs[12][:len(blockNums)], logs[14][:len(blockNums)], 'block num', 'state trie node num', graphTitlePrefix+title)
+
+        # draw graph: inactive current state trie node sizes
+        title = 'current inactive state trie node size'
+        drawNodeStatGraphs(blockNums, logs[11][:len(blockNums)], logs[13][:len(blockNums)], logs[15][:len(blockNums)], 'block num', 'state trie node size (B)', graphTitlePrefix+title)
+
+
+
 if __name__ == "__main__":
     print("start")
 
-    # set options
-    isEthane = False
-    # draw graph
-    drawGraphsForBlockInfos(0, 100000, 315, 315, 315)
+    # set params
+    deleteEpoch = 10000
+    inactivateEpoch = 10000
+    inactivateCriterion = 10000
 
-    # isEthane = True
-    # drawGraphsForBlockInfos(0, 100000)
+    # for ethereum
+    isEthane = False
+    drawGraphsForBlockInfos(0, 100000, deleteEpoch, inactivateEpoch, inactivateCriterion)
+    drawGraphsForTrieInspects(0, 100000, deleteEpoch, inactivateEpoch, inactivateCriterion)
+
+    # for ethane
+    isEthane = True
+    drawGraphsForBlockInfos(0, 100000, deleteEpoch, inactivateEpoch, inactivateCriterion)
+    drawGraphsForTrieInspects(0, 100000, deleteEpoch, inactivateEpoch, inactivateCriterion)
 
     print("end")
