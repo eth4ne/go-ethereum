@@ -227,18 +227,20 @@ if __name__ == "__main__":
     print("start")
 
     # set params
+    startBlockNum = 0
+    endBlockNum = 100000
     deleteEpoch = 10000
     inactivateEpoch = 10000
     inactivateCriterion = 10000
 
     # for ethereum
     isEthane = False
-    drawGraphsForBlockInfos(0, 100000, deleteEpoch, inactivateEpoch, inactivateCriterion)
-    drawGraphsForTrieInspects(0, 100000, deleteEpoch, inactivateEpoch, inactivateCriterion)
+    drawGraphsForBlockInfos(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
+    drawGraphsForTrieInspects(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
 
     # for ethane
     isEthane = True
-    drawGraphsForBlockInfos(0, 100000, deleteEpoch, inactivateEpoch, inactivateCriterion)
-    drawGraphsForTrieInspects(0, 100000, deleteEpoch, inactivateEpoch, inactivateCriterion)
+    drawGraphsForBlockInfos(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
+    drawGraphsForTrieInspects(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
 
     print("end")
