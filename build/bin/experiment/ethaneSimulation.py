@@ -23,9 +23,9 @@ cursor = conn.cursor()
 SERVER_IP = "localhost"
 
 # simulator options
-deleteDisk = True
-doStorageTrieUpdate = True
-stopWhenErrorOccurs = True
+deleteDisk = True # delete disk when reset simulator or not
+doStorageTrieUpdate = True # update storage tries or state trie only
+stopWhenErrorOccurs = True # stop simulation when state/storage trie root is generated incorrectly
 
 # file paths
 blockInfosLogFilePath = "/home/jmlee/go-ethereum/simulator/blockInfos/"
@@ -1049,9 +1049,9 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateEpoch):
                 # restore accounts
                 blockNumKey = str(item['blocknumber'])
                 if blockNumKey in restoreList:
-                    print("restore list in block", blockNumKey, ":", restoreList[blockNumKey])
+                    # print("restore list in block", blockNumKey, ":", restoreList[blockNumKey])
                     for addr in restoreList[blockNumKey]:
-                        print("restore addr:", addr)
+                        # print("restore addr:", addr)
                         restoreAccountForEthanos(addr)
                         restoreCount += 1
 
@@ -1158,15 +1158,12 @@ def inspectTriesEthereum(startBlockNum, endBlockNum, inactivateEpoch):
 
     delimiter = " "
 
-    #
-    # for ethereum
-    #
-
     blockInfosLogFileName = "ethereum_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + ".txt"
     trieInspectLogFileName = "ethereum_simulate_trie_inspects_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateEpoch) + ".txt"
 
     blockInfosFile = open(blockInfosLogFilePath+blockInfosLogFileName, 'r')
-    os.remove(trieInspectsLogFilePath+trieInspectLogFileName)
+    if os.path.exists(trieInspectsLogFilePath+trieInspectLogFileName):
+        os.remove(trieInspectsLogFilePath+trieInspectLogFileName)
     trieInspectFile = open(trieInspectsLogFilePath+trieInspectLogFileName, 'a')
     rdr = csv.reader(blockInfosFile)
     blockNum = 0
@@ -1182,8 +1179,10 @@ def inspectTriesEthereum(startBlockNum, endBlockNum, inactivateEpoch):
         # inspect trie
         if (blockNum+1) % inactivateEpoch == 0:
             activeTrieRoot = params[0]
+            startTime = datetime.now()
             nodeStat = inspectSubTrie(activeTrieRoot)[0]
-            print("at block", blockNum, ", node stat:", nodeStat)
+            endTime = datetime.now()
+            print("at block", blockNum, ", node stat:", nodeStat, "elapsed time:", endTime-startTime)
 
             # save result
             log = str(blockNum) + delimiter + activeTrieRoot + delimiter + nodeStat + "\n"
@@ -1202,7 +1201,8 @@ def inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch,
         + "_" + str(deleteEpoch) + "_" + str(inactivateEpoch) + "_" + str(inactivateCriterion) + ".txt"
     
     blockInfosFile = open(blockInfosLogFilePath+blockInfosLogFileName, 'r')
-    os.remove(trieInspectsLogFilePath+trieInspectLogFileName)
+    if os.path.exists(trieInspectsLogFilePath+trieInspectLogFileName):
+        os.remove(trieInspectsLogFilePath+trieInspectLogFileName)
     trieInspectFile = open(trieInspectsLogFilePath+trieInspectLogFileName, 'a')
     rdr = csv.reader(blockInfosFile)
     blockNum = 0
@@ -1219,10 +1219,16 @@ def inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch,
         if (blockNum+1) % inactivateEpoch == 0 or (blockNum+2) % inactivateEpoch == 0:
             activeTrieRoot = params[0]
             inactiveTrieRoot = params[1]
+
+            startTime = datetime.now()
             activeNodeStat = inspectSubTrie(activeTrieRoot)[0]
-            print("at block", blockNum, ", active node stat:", activeNodeStat)
+            endTime = datetime.now()
+            print("at block", blockNum, ", active node stat:", activeNodeStat, "elapsed time:", endTime-startTime)
+
+            startTime = datetime.now()
             inactiveNodeStat = inspectSubTrie(inactiveTrieRoot)[0]
-            print("at block", blockNum, ", inactive node stat:", inactiveNodeStat)
+            endTime = datetime.now()
+            print("at block", blockNum, ", inactive node stat:", inactiveNodeStat, "elapsed time:", endTime-startTime)
 
             # save result
             log = str(blockNum) + delimiter + activeTrieRoot + delimiter + activeNodeStat + delimiter + inactiveTrieRoot + delimiter + inactiveNodeStat + "\n"
@@ -1243,7 +1249,8 @@ def inspectTriesEthanos(startBlockNum, endBlockNum, inactivateEpoch):
     trieInspectLogFileName = "ethanos_simulate_trie_inspects_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateEpoch) + ".txt"
 
     blockInfosFile = open(blockInfosLogFilePath+blockInfosLogFileName, 'r')
-    os.remove(trieInspectsLogFilePath+trieInspectLogFileName)
+    if os.path.exists(trieInspectsLogFilePath+trieInspectLogFileName):
+        os.remove(trieInspectsLogFilePath+trieInspectLogFileName)
     trieInspectFile = open(trieInspectsLogFilePath+trieInspectLogFileName, 'a')
     rdr = csv.reader(blockInfosFile)
     blockNum = 0

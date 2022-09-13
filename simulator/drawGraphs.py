@@ -14,7 +14,8 @@ trieInspectsLogFilePath = "./trieInspects/"
 graphPath = "./graphs/"
 
 # options
-isEthane = True
+simulationMode = 0 # (0: original ethereum, 1: Ethane, 2: Ethanos)
+maxTickNum = 10
 
 # make empty 2d list -> list[b][a]
 def TwoD(a, b, isInt):
@@ -51,15 +52,15 @@ def drawNodeStatGraphs(xAxis, yAxis1, yAxis2, yAxis3, xLabelName, yLabelName, gr
     plt.legend(loc='upper left')
 
     # set num of ticks
-    ax.xaxis.set_major_locator(MaxNLocator(5)) # set # of ticks
-    ax.yaxis.set_major_locator(MaxNLocator(5)) # set # of ticks
+    ax.xaxis.set_major_locator(MaxNLocator(maxTickNum)) # set # of ticks
+    ax.yaxis.set_major_locator(MaxNLocator(maxTickNum)) # set # of ticks
 
     # save graph
     makeDir(graphPath)
     graphName = graphTitle + ".png"
     plt.savefig(graphPath+graphName, format="png")
 
-    print("success to draw graph:", graphTitle, "\n")
+    print("  -> success\n")
 
 
 
@@ -68,11 +69,16 @@ def drawGraphsForBlockInfos(startBlockNum, endBlockNum, deleteEpoch=0, inactivat
     
     # get log file name
     blockInfosLogFileName = ""
-    if isEthane:
+    if simulationMode == 0:
+        blockInfosLogFileName += "ethereum_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + ".txt"
+    elif simulationMode == 1:
         blockInfosLogFileName += "ethane_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) \
         + "_" + str(deleteEpoch) + "_" + str(inactivateEpoch) + "_" + str(inactivateCriterion) + ".txt"
+    elif simulationMode == 2:
+        blockInfosLogFileName += "ethanos_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateEpoch) + ".txt"
     else:
-        blockInfosLogFileName += "ethereum_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + ".txt"
+        print("wrong mode:", simulationMode)
+        sys.exit()
 
     # NodeStat.ToString() = totalNum, totalSize, fullNodeNum, fullNodeSize, shortNodeNum, shortNodeSize, leafNodeNum, leafNodeSize
     # logs[0~7][blockNum] = NewNodeStat.ToString()
@@ -120,9 +126,18 @@ def drawGraphsForBlockInfos(startBlockNum, endBlockNum, deleteEpoch=0, inactivat
     blockNums = blockNums[:len(logs[0])]
 
     # set title
-    graphTitlePrefix = "ethereum "
-    if isEthane:
+    if simulationMode == 0:
+        graphTitlePrefix = "ethereum "
+        graphTitleSuffix = " (epoch: " + str(inactivateEpoch) + ")"
+    elif simulationMode == 1:
         graphTitlePrefix = "ethane "
+        graphTitleSuffix = " (de: " + str(deleteEpoch) + ", ie: " + str(inactivateEpoch) + ", ic: " + str(inactivateCriterion) + ")"
+    elif simulationMode == 2:
+        graphTitlePrefix = "ethanos "
+        graphTitleSuffix = " (epoch: " + str(inactivateEpoch) + ")"
+    else:
+        print("wrong mode:", simulationMode)
+        sys.exit()
     
     # draw graph: NewNodeStat -> nums
     # title = 'new state trie node num'
@@ -133,12 +148,12 @@ def drawGraphsForBlockInfos(startBlockNum, endBlockNum, deleteEpoch=0, inactivat
     # drawNodeStatGraphs(blockNums, logs[3], logs[5], logs[7], 'block num', 'state trie node size (B)', graphTitlePrefix+title)
 
     # draw graph: TotalNodeStat -> nums
-    title = 'archive state trie node num'
-    drawNodeStatGraphs(blockNums, logs[18], logs[20], logs[22], 'block num', 'state trie node num', graphTitlePrefix+title)
+    title = graphTitlePrefix + 'archive state trie node num' + graphTitleSuffix
+    drawNodeStatGraphs(blockNums, logs[18], logs[20], logs[22], 'block num', 'state trie node num', title)
 
     # draw graph: TotalNodeStat -> sizes
-    title = 'archive state trie node size'
-    drawNodeStatGraphs(blockNums, logs[19], logs[21], logs[23], 'block num', 'state trie node size (B)', graphTitlePrefix+title)
+    title = graphTitlePrefix + 'archive state trie node size' + graphTitleSuffix
+    drawNodeStatGraphs(blockNums, logs[19], logs[21], logs[23], 'block num', 'state trie node size (B)', title)
 
 
 
@@ -147,11 +162,16 @@ def drawGraphsForTrieInspects(startBlockNum, endBlockNum, deleteEpoch=0, inactiv
     
     # get log file name
     trieInspectsLogFileName = ""
-    if isEthane:
+    if simulationMode == 0:
+        trieInspectsLogFileName += "ethereum_simulate_trie_inspects_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateEpoch) + ".txt"
+    elif simulationMode == 1:
         trieInspectsLogFileName += "ethane_simulate_trie_inspects_" + str(startBlockNum) + "_" + str(endBlockNum) \
         + "_" + str(deleteEpoch) + "_" + str(inactivateEpoch) + "_" + str(inactivateCriterion) + ".txt"
+    elif simulationMode == 2:
+        trieInspectsLogFileName += "ethanos_simulate_trie_inspects_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateEpoch) + ".txt"
     else:
-        trieInspectsLogFileName += "ethereum_simulate_trie_inspects_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateEpoch) + ".txt"
+        print("wrong mode:", simulationMode)
+        sys.exit()
 
     # NodeStat.ToString() = totalNum, totalSize, fullNodeNum, fullNodeSize, shortNodeNum, shortNodeSize, leafNodeNum, leafNodeSize
     # logs[0~7][blockNum] = active trie NodeStat.ToString()
@@ -179,7 +199,7 @@ def drawGraphsForTrieInspects(startBlockNum, endBlockNum, deleteEpoch=0, inactiv
         # get node stats
         activeNodeStat = [int(x) for x in params[2:10]] # covert string to int ()
         inactiveNodeStat = [0, 0, 0, 0, 0, 0, 0, 0]
-        if isEthane:
+        if simulationMode == 1:
             inactiveNodeStat = [int(x) for x in params[12:20]] # covert string to int ()
         # print("active node stat:", activeNodeStat)
         # print("inactive node stat:", inactiveNodeStat)
@@ -199,48 +219,87 @@ def drawGraphsForTrieInspects(startBlockNum, endBlockNum, deleteEpoch=0, inactiv
     #
 
     # set title
-    graphTitlePrefix = "ethereum "
-    if isEthane:
+    if simulationMode == 0:
+        graphTitlePrefix = "ethereum "
+        graphTitleSuffix = " (epoch: " + str(inactivateEpoch) + ")"
+    elif simulationMode == 1:
         graphTitlePrefix = "ethane "
+        graphTitleSuffix = " (de: " + str(deleteEpoch) + ", ie: " + str(inactivateEpoch) + ", ic: " + str(inactivateCriterion) + ")"
+    elif simulationMode == 2:
+        graphTitlePrefix = "ethanos "
+        graphTitleSuffix = " (epoch: " + str(inactivateEpoch) + ")"
+    else:
+        print("wrong mode:", simulationMode)
+        sys.exit()
 
-    # TODO(jmlee): set names correctly
-    # draw graph: active current state trie node nums
-    title = 'current state trie node num'
-    drawNodeStatGraphs(blockNums, logs[2][:len(blockNums)], logs[4][:len(blockNums)], logs[6][:len(blockNums)], 'block num', 'state trie node num', graphTitlePrefix+title)
+    # draw graph
+    if simulationMode == 0:
+        # draw graph: state trie node nums
+        title = graphTitlePrefix + 'state trie node num' + graphTitleSuffix
+        drawNodeStatGraphs(blockNums, logs[2][:len(blockNums)], logs[4][:len(blockNums)], logs[6][:len(blockNums)], 'block num', 'state trie node num', title)
 
-    # draw graph: active current state trie node sizes
-    title = 'current state trie node size'
-    drawNodeStatGraphs(blockNums, logs[3][:len(blockNums)], logs[5][:len(blockNums)], logs[7][:len(blockNums)], 'block num', 'state trie node size (B)', graphTitlePrefix+title)
+        # draw graph: state trie node sizes
+        title = graphTitlePrefix + 'state trie node size' + graphTitleSuffix
+        drawNodeStatGraphs(blockNums, logs[3][:len(blockNums)], logs[5][:len(blockNums)], logs[7][:len(blockNums)], 'block num', 'state trie node size (B)', title)
 
-    if isEthane:
-        # draw graph: inactive current state trie node nums
-        title = 'current inactive state trie node num'
-        drawNodeStatGraphs(blockNums, logs[10][:len(blockNums)], logs[12][:len(blockNums)], logs[14][:len(blockNums)], 'block num', 'state trie node num', graphTitlePrefix+title)
+    elif simulationMode == 1:
+        # draw graph: max active current state trie node nums (at every checkpoint - 1 block)
+        title = graphTitlePrefix + 'max state trie node num' + graphTitleSuffix
+        print("blockNums:", blockNums[0::2])
+        drawNodeStatGraphs(blockNums[0::2], logs[2][:len(blockNums)][0::2], logs[4][:len(blockNums)][0::2], logs[6][:len(blockNums)][0::2], 'block num', 'state trie node num', title)
 
-        # draw graph: inactive current state trie node sizes
-        title = 'current inactive state trie node size'
-        drawNodeStatGraphs(blockNums, logs[11][:len(blockNums)], logs[13][:len(blockNums)], logs[15][:len(blockNums)], 'block num', 'state trie node size (B)', graphTitlePrefix+title)
+        # draw graph: max active current state trie node sizes
+        title = graphTitlePrefix + 'max state trie node size' + graphTitleSuffix
+        drawNodeStatGraphs(blockNums[0::2], logs[3][:len(blockNums)][0::2], logs[5][:len(blockNums)][0::2], logs[7][:len(blockNums)][0::2], 'block num', 'state trie node size (B)', title)
+
+        # draw graph: min active current state trie node nums (at every checkpoint block)
+        title = graphTitlePrefix + 'min state trie node num' + graphTitleSuffix
+        print("blockNums:", blockNums[1::2])
+        drawNodeStatGraphs(blockNums[1::2], logs[2][:len(blockNums)][1::2], logs[4][:len(blockNums)][1::2], logs[6][:len(blockNums)][1::2], 'block num', 'state trie node num', title)
+
+        # draw graph: min active current state trie node sizes
+        title = graphTitlePrefix + 'min state trie node size' + graphTitleSuffix
+        drawNodeStatGraphs(blockNums[1::2], logs[3][:len(blockNums)][1::2], logs[5][:len(blockNums)][1::2], logs[7][:len(blockNums)][1::2], 'block num', 'state trie node size (B)', title)
+
+        # draw graph: inactive state trie node nums
+        title = graphTitlePrefix + 'inactive state trie node num' + graphTitleSuffix
+        drawNodeStatGraphs(blockNums, logs[10][:len(blockNums)], logs[12][:len(blockNums)], logs[14][:len(blockNums)], 'block num', 'state trie node num', title)
+
+        # draw graph: inactive state trie node sizes
+        title = graphTitlePrefix + 'inactive state trie node size' + graphTitleSuffix
+        drawNodeStatGraphs(blockNums, logs[11][:len(blockNums)], logs[13][:len(blockNums)], logs[15][:len(blockNums)], 'block num', 'state trie node size (B)', title)
+
+    elif simulationMode == 2:
+        # draw graph: cached state trie node nums
+        title = graphTitlePrefix + 'cached state trie node num' + graphTitleSuffix
+        drawNodeStatGraphs(blockNums, logs[2][:len(blockNums)], logs[4][:len(blockNums)], logs[6][:len(blockNums)], 'block num', 'state trie node num', title)
+
+        # draw graph: cached state trie node sizes
+        title = graphTitlePrefix + 'cached state trie node size' + graphTitleSuffix
+        drawNodeStatGraphs(blockNums, logs[3][:len(blockNums)], logs[5][:len(blockNums)], logs[7][:len(blockNums)], 'block num', 'state trie node size (B)', title)
 
 
 
 if __name__ == "__main__":
     print("start")
 
-    # set params
+    # set simulation mode
+    simulationMode = 0
+    # set simulation params
     startBlockNum = 0
     endBlockNum = 100000
     deleteEpoch = 10000
     inactivateEpoch = 10000
     inactivateCriterion = 10000
 
-    # for ethereum
-    isEthane = False
-    drawGraphsForBlockInfos(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
-    drawGraphsForTrieInspects(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
+    # draw graphs
+    # drawGraphsForBlockInfos(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
+    # drawGraphsForTrieInspects(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
 
-    # for ethane
-    isEthane = True
-    drawGraphsForBlockInfos(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
-    drawGraphsForTrieInspects(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
+    # draw graphs for all modes
+    for i in range(3):
+        simulationMode = i
+        drawGraphsForBlockInfos(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
+        drawGraphsForTrieInspects(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
 
     print("end")
