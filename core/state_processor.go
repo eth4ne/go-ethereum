@@ -125,7 +125,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 
 		common.BlockTxList[common.GlobalBlockNumber] = append(common.BlockTxList[common.GlobalBlockNumber], tx.Hash())
 		common.GlobalTxHash = tx.Hash() // jhkim: set global variable
-
+		// fmt.Println("common.GlobalTxHash 1 ", common.GlobalTxHash)
 		msg, err := tx.AsMessage(types.MakeSigner(p.config, header.Number), header.BaseFee)
 		if err != nil {
 			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)

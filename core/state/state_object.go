@@ -97,6 +97,8 @@ type stateObject struct {
 	// jhkim: read를 위한 touch와 write를 위한 touch를 구분하자?
 	ResearchTouched      map[common.Hash]struct{}
 	ResearchTouchedWrite map[common.Hash]struct{}
+
+	TxStorage map[common.Hash]Storage
 }
 
 // empty returns whether the account is considered empty.
@@ -128,6 +130,7 @@ func newObject(db *StateDB, address common.Address, data types.StateAccount) *st
 		// stage1-substate: init stateObject.ResearchTouched
 		ResearchTouched:      make(map[common.Hash]struct{}),
 		ResearchTouchedWrite: make(map[common.Hash]struct{}),
+		TxStorage:            make(map[common.Hash]Storage),
 	}
 }
 
@@ -300,6 +303,11 @@ func (s *stateObject) SetState(db Database, key, value common.Hash) {
 		key:      key,
 		prevalue: prev,
 	})
+	if _, exist := s.TxStorage[common.GlobalTxHash]; !exist {
+		s.TxStorage[common.GlobalTxHash] = make(Storage)
+	}
+	s.TxStorage[common.GlobalTxHash][key] = value
+
 	s.setState(key, value)
 }
 
@@ -323,7 +331,10 @@ func (s *stateObject) SetStorage(storage map[common.Hash]common.Hash) {
 
 func (s *stateObject) setState(key, value common.Hash) {
 	// fmt.Println("      setstate", key, value)
-
+	if _, exist := s.TxStorage[common.GlobalTxHash]; !exist {
+		s.TxStorage[common.GlobalTxHash] = make(Storage)
+	}
+	s.TxStorage[common.GlobalTxHash][key] = value
 	s.dirtyStorage[key] = value
 	// fmt.Println("      setstate: dirtyStorage", s.dirtyStorage)
 }
@@ -335,7 +346,6 @@ func (s *stateObject) finalise(prefetch bool) {
 	for key, value := range s.dirtyStorage {
 		// fmt.Println("    stateObject.finalise move key value from dirty to pending", key, value)
 		s.pendingStorage[key] = value
-
 		if value != s.originStorage[key] {
 			slotsToPrefetch = append(slotsToPrefetch, common.CopyBytes(key[:])) // Copy needed for closure
 		}
@@ -385,15 +395,24 @@ func (s *stateObject) updateTrie(db Database) Trie {
 			s.setError(tr.TryDelete(key[:]))
 			// fmt.Println(" DELETE")
 			if s.txHash != common.HexToHash("0x0") {
-				// fmt.Println("     ", common.GlobalBlockNumber, common.GlobalTxHash)
+				// fmt.Println("     ", common.GlobalBlockNumber, s.txHash)
 				// fmt.Println("     MyTryUpdate", s.address, key, common.Bytes2Hex(v))
 				// fmt.Println("     MyTryUpdate", common.TxWriteList[common.GlobalTxHash])
 				// fmt.Println("     MyTryUpdate", common.TxWriteList[common.GlobalTxHash][s.address])
 				// fmt.Println("     MyTryUpdate", common.TxWriteList[common.GlobalTxHash][s.address].Storage)
 				// fmt.Println("     MyTryUpdate", common.TxWriteList[common.GlobalTxHash][s.address].Storage[key])
-				common.TxWriteList[common.GlobalTxHash][s.address].Storage[key] = value
+				// common.TxWriteList[s.txHash][s.address].Storage[key] = value
+				for txhash, storage := range s.TxStorage {
+					if storage[key] == value {
+						// fmt.Println("WHy1", txhash, s.address, key, value)
+						if _, exist := common.TxWriteList[txhash][s.address]; exist {
+							common.TxWriteList[txhash][s.address].Storage[key] = value
+
+						}
+					}
+				}
 			} else {
-				// fmt.Println("delete hardfork obj ", common.GlobalTxHash, key)
+				fmt.Println("delete hardfork obj ", common.GlobalTxHash, key)
 				common.HardFork[s.address].Storage[key] = value
 			}
 
@@ -403,19 +422,43 @@ func (s *stateObject) updateTrie(db Database) Trie {
 			v, _ = rlp.EncodeToBytes(common.TrimLeftZeroes(value[:]))
 			// fmt.Println(" UPDATE")
 			if s.txHash != common.HexToHash("0x0") {
-				// fmt.Println("     ", common.GlobalBlockNumber, common.GlobalTxHash)
-				// fmt.Println("     MyTryUpdate", s.address, key, common.Bytes2Hex(v))
-				// fmt.Println("     MyTryUpdate", common.TxWriteList[common.GlobalTxHash])
-				// fmt.Println("     MyTryUpdate", common.TxWriteList[common.GlobalTxHash][s.address])
-				// fmt.Println("     MyTryUpdate", common.TxWriteList[common.GlobalTxHash][s.address].Storage)
-				// fmt.Println("     MyTryUpdate", common.TxWriteList[common.GlobalTxHash][s.address].Storage[key])
-				common.TxWriteList[common.GlobalTxHash][s.address].Storage[key] = value
+				// if s.address == common.HexToAddress("0x3dBDc81a6edc94c720B0B88FB65dBD7e395fDcf6") {
+				// 	fmt.Println("check ", s.address, s.txHash, key, value)
+				// }
+				// // fmt.Println("     ", common.GlobalBlockNumber, s.txHash, common.GlobalTxHash)
+				// fmt.Println("     MyTryUpdate", s.txHash, key, common.Bytes2Hex(v))
+				// fmt.Println("     MyTryUpdate", common.TxWriteList[s.txHash])
+				// fmt.Println("     MyTryUpdate", common.TxWriteList[s.txHash][s.address])
+				// fmt.Println("     MyTryUpdate", common.TxWriteList[s.txHash][s.address].Storage)
+				// fmt.Println("     MyTryUpdate", common.TxWriteList[s.txHash][s.address].Storage[key])
+				for txhash, storage := range s.TxStorage {
+					if storage[key] == value {
+						// fmt.Println()
+						// fmt.Println("WHy2", txhash, s.address, key, value)
+
+						if _, exist := common.TxWriteList[txhash][s.address]; exist {
+							// fmt.Println("    WHy2")
+							common.TxWriteList[txhash][s.address].Storage[key] = value
+							sa := common.TxWriteList[txhash][s.address]
+							if s.address == common.HexToAddress("0xbaa54d6e90c3f4d7ebec11bd180134c7ed8ebb52") {
+								fmt.Println("Fy.", s.txHash, txhash, s.address, sa.StorageRoot, sa.Storage)
+								fmt.Println("  insertTrie", key, value, common.TxWriteList[txhash][s.address].Storage[key])
+							}
+							// fmt.Println("    Fuckyou", sa.Balance, sa.StorageRoot, sa.Storage, common.TxWriteList[txhash][s.address].Storage[key])
+
+						}
+
+					}
+				}
+
 			} else {
-				// fmt.Println("update hardfork obj ", common.GlobalTxHash, key)
+				fmt.Println("update hardfork obj ", common.GlobalTxHash, key)
 				common.HardFork[s.address].Storage[key] = value
 			}
 
 			s.setError(tr.MyTryUpdate(key[:], v, s.txHash, s.address)) //jhkim
+			// fmt.Println(" after updatetrie/address", s.address, " storageroot", tr.Hash())
+
 			s.db.StorageUpdated += 1
 		}
 		// If state snapshotting is active, cache the data til commit
@@ -437,6 +480,21 @@ func (s *stateObject) updateTrie(db Database) Trie {
 	if len(s.pendingStorage) > 0 {
 		s.pendingStorage = make(Storage)
 	}
+	if s.address == common.HexToAddress("0xbaa54d6e90c3f4d7ebec11bd180134c7ed8ebb52") {
+		fmt.Println("txhash", s.txHash)
+		fmt.Println("address", s.address)
+		fmt.Println("substatealloc", common.TxWriteList[s.txHash])
+		fmt.Println("substate account", common.TxWriteList[s.txHash][s.address])
+		fmt.Println("s.balance", s.Balance())
+		fmt.Println("s.nonce", s.Nonce())
+
+		fmt.Println("s.dirty Storage", s.dirtyStorage)
+	}
+	// fmt.Println("common.TxWriteList[s.txHash]", common.TxWriteList[s.txHash])
+	if _, exist := common.TxWriteList[s.txHash][s.address]; exist {
+		common.TxWriteList[s.txHash][s.address].StorageRoot = tr.Hash()
+	}
+	// fmt.Println("plz", s.txHash, s.address, common.TxWriteList[s.txHash][s.address].Storage)
 	return tr
 }
 

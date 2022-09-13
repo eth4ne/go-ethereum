@@ -1344,7 +1344,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		common.BlockTxList = make(map[int][]common.Hash)
 		// os.Exit(0)
 	}
-	// if common.GlobalBlockNumber == 200000 {
+	// if common.GlobalBlockNumber == 1900001 {
 	// 	os.Exit(0)
 	// }
 	if common.GlobalBlockNumber != 0 && common.GlobalBlockNumber%1000000 == 0 {
@@ -1375,7 +1375,7 @@ func PrintTxSubstate(blocknumber, distance int, chainconfig params.ChainConfig) 
 
 	for i := blocknumber - distance + 1; i <= blocknumber; i++ {
 		// s := fmt.Sprintln("##########################################################################")
-		if i%(distance/10) == 0 {
+		if i%(distance/5) == 0 {
 			elapsed := time.Since(start)
 			fmt.Println("Writing file.. Block #:", i, "elapsed", elapsed.Seconds(), "s")
 		}
@@ -1526,7 +1526,9 @@ func PrintTxSubstate(blocknumber, distance int, chainconfig params.ChainConfig) 
 				}
 
 				for addr, stateAccount := range writelist {
-
+					// if addr == common.HexToAddress("0xbaa54d6e90c3f4d7ebec11bd180134c7ed8ebb52") {
+					// 	fmt.Println("writing..", tx, addr, stateAccount.StorageRoot, stateAccount.Storage)
+					// }
 					if stateAccount != nil {
 						// s = ""
 

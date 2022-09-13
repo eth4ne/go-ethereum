@@ -53,3 +53,4 @@ profile.cov
 /txDetail
 /build/bin/keystore
 /build/bin/experiment
+/build/bin/correctcheck
