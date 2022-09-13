@@ -18,6 +18,9 @@ import (
 var path = "/home/jhkim/go/src/github.com/ethereum/go-ethereum/txDetail/" // used absolute path
 var _ = os.MkdirAll(path, 0777)
 
+// inspect storage tries or not (jmlee)
+var DoInspectStorageTrie = false
+
 func increaseSize(nodeSize int, node string, tir *TrieInspectResult, depth int) {
 	rwMutex.Lock()
 	defer rwMutex.Unlock()
@@ -799,6 +802,11 @@ func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGro
 						if acc.Root.Hex() != storageTrieRootHash.Hex() {
 							fmt.Println("maybe this is problem")
 							fmt.Println("saved storage root:", acc.Root.Hex(), "/ rehashed storage root:", storageTrieRootHash.Hex())
+						}
+
+						// Ethane has too many duplicated storage tries, just do not inspect storage tries or do something (jmlee)
+						if !DoInspectStorageTrie {
+							return
 						}
 
 						// storage trie inspect
