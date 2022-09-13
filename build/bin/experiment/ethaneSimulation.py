@@ -30,6 +30,7 @@ stopWhenErrorOccurs = True
 # file paths
 blockInfosLogFilePath = "/home/jmlee/go-ethereum/simulator/blockInfos/"
 trieInspectsLogFilePath = "/home/jmlee/go-ethereum/simulator/trieInspects/"
+restoreListFilePath = "./restoreList/"
 
 # maximum byte length of response from the simulator
 maxResponseLen = 4096
@@ -374,7 +375,7 @@ def inspectTrieWithinRange():
     print("inspectTrieWithinRangeResult result:", inspectTrieWithinRangeResult)
     return inspectTrieWithinRangeResult
 
-# select simulation mode (0: Geth, 1: Ethane)
+# select simulation mode (0: Geth, 1: Ethane, 2: Ethanos)
 def switchSimulationMode(mode):
     cmd = str("switchSimulationMode")
     cmd += str(",")
@@ -478,14 +479,14 @@ def updateTrieForEthaneSimple(addr):
     return updateResult
 
 # restore all inactive accounts of given address (for Ethane)
-def restoreAccount(addr):
-    cmd = str("restoreAccount")
+def restoreAccountForEthane(addr):
+    cmd = str("restoreAccountForEthane")
     cmd += str(",")
     cmd += str(addr)
     client_socket.send(cmd.encode())
     data = client_socket.recv(1024)
     restoreResult = data.decode()
-    # print("restoreAccount result:", restoreResult)
+    # print("restoreAccountForEthane result:", restoreResult)
     return restoreResult
 
 # print Ethane related stats
@@ -519,6 +520,53 @@ def setEthaneOptions(deleteEpoch, inactivateEpoch, inactivateCriterion):
     setOptionResult = data.decode()
     # print("setOptionResult result:", setOptionResult)
     return setOptionResult
+
+# -----------------------------------------------------
+
+# update account with detailed values
+def updateTrieForEthanos(nonce, balance, root, codeHash, addr):
+    cmd = str("updateTrieForEthanos")
+    cmd += str(",")
+    cmd += str(nonce)
+    cmd += str(",")
+    cmd += str(balance)
+    cmd += str(",")
+    cmd += str(root)
+    cmd += str(",")
+    cmd += str(codeHash)
+    cmd += str(",")
+    cmd += str(addr)
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    updateResult = data.decode()
+    # print("updateTrieForEthanos result:", updateResult)
+    return updateResult
+
+# restore all inactive accounts of given address (for Ethanos)
+def restoreAccountForEthanos(addr):
+    cmd = str("restoreAccountForEthanos")
+    cmd += str(",")
+    cmd += str(addr)
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    restoreResult = data.decode()
+    # print("restoreAccountForEthanos result:", restoreResult)
+    return restoreResult
+
+# update stroage trie for Ethanos
+def updateStorageTrieEthanos(contractAddr, slot, value):
+    cmd = str("updateStorageTrieEthanos")
+    cmd += str(",")
+    cmd += str(contractAddr)
+    cmd += str(",")
+    cmd += str(slot)
+    cmd += str(",")
+    cmd += str(value)
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    currentStorageRoot = data.decode()
+    # print("updateStorageTrieEthanos result:", currentStorageRoot)
+    return currentStorageRoot
 
 # -----------------------------------------------------
 
@@ -773,11 +821,11 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
     # check restore list exist
     restoreFileName = "restore_list_" + str(startBlockNum) + "_" + str(endBlockNum) \
         + "_"  + str(inactivateEpoch) + "_" + str(inactivateCriterion) + ".json"
-    restoreFilePath = "./restoreList/"
-    if not os.path.exists(restoreFilePath + restoreFileName):
-        print("there is no restore list in:", restoreFilePath + restoreFileName)
+    # restoreFileName = "restore_list_0_1000000_315_315.json" # temp code: do not hardcoding later
+    if not os.path.exists(restoreListFilePath + restoreFileName):
+        print("there is no restore list in:", restoreListFilePath + restoreFileName)
         sys.exit()
-    with open(restoreFilePath + restoreFileName, "r") as rl_json:
+    with open(restoreListFilePath + restoreFileName, "r") as rl_json:
         restoreList = json.load(rl_json)
 
     # initialize
@@ -797,9 +845,6 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
     oldblocknumber = startBlockNum
     start = time.time()
     blockcount = 0
-
-    # set log file name
-    logFileName = "ethane_simulate_" + str(startBlockNum) + "_" + str(endBlockNum) + ".txt"
 
     currentStorageRoot = ""
     # insert random accounts
@@ -834,7 +879,7 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
                     # print("restore list in block", blockNumKey, ":", restoreList[blockNumKey])
                     for addr in restoreList[blockNumKey]:
                         # print("restore addr:", addr)
-                        restoreAccount(addr)
+                        restoreAccountForEthane(addr)
                         restoreCount += 1
 
             if item['blocknumber'] > endBlockNum:
@@ -935,8 +980,181 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
     saveBlockInfos(blockInfosLogFileName)
     print("create log file:", blockInfosLogFileName)
 
+# replay txs in Ethereum with Ethanos client
+def simulateEthanos(startBlockNum, endBlockNum, inactivateEpoch):
+    
+    # set Ethanos's options
+    switchSimulationMode(2) # 2: Ethanos mode
+    setEthaneOptions(inactivateEpoch, inactivateEpoch, inactivateEpoch)
+
+    # set log file name
+    logFileName = "ethanos_simulate_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateEpoch) + ".txt"
+    blockInfosLogFileName = "ethanos_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateEpoch) + ".txt"
+
+    # check restore list exist
+    restoreFileName = "restore_list_" + str(startBlockNum) + "_" + str(endBlockNum) \
+        + "_"  + str(inactivateEpoch) + "_" + str(inactivateEpoch) + ".json"
+    # restoreFileName = "restore_list_0_1000000_315_315.json" # temp code: do not hardcoding later
+    if not os.path.exists(restoreListFilePath + restoreFileName):
+        print("there is no restore list in:", restoreListFilePath + restoreFileName)
+        sys.exit()
+    with open(restoreListFilePath + restoreFileName, "r") as rl_json:
+        restoreList = json.load(rl_json)
+
+    # initialize
+    reset()
+    updateCount = 0
+    stateReadCount = 0
+    stateWriteCount = 0
+    storageWriteCount = 0
+    restoreCount = 0
+    startTime = datetime.now()
+
+    # block batch size for db query
+    batchsize = 1000
+    # print log interval
+    loginterval = 2000
+
+    oldblocknumber = startBlockNum
+    start = time.time()
+    blockcount = 0
+
+    currentStorageRoot = ""
+    # insert random accounts
+    for blockNum in range(startBlockNum, endBlockNum+2, batchsize):
+        #print("do block", blockNum ,"\n")
+        # get read/write list from DB
+        rwList = select_account_read_write_lists(cursor, blockNum, blockNum+batchsize)
+        if len(rwList) > 0:
+            slotList = select_slot_write_lists(cursor, rwList[0]['id'], rwList[-1]['id']+1)
+        else:
+            slotlist = []
+        
+        # replay writes
+        for item in rwList:
+            # print("item:", item)
+            if item['blocknumber'] != oldblocknumber:
+                # printCurrentTrie()
+                # flush
+                blockcount += 1
+                flush()
+                # print("flush finished -> generated block", oldblocknumber, "\n\n\n")
+
+                if oldblocknumber % loginterval == 0:
+                    seconds = time.time() - start
+                    print('#{}, Blkn: {}({:.2f}/s), Writen: {}({:.2f}/s), Readn: {}({:.2f}/s), Time: {}ms'.format(oldblocknumber, blockcount, blockcount/seconds, stateWriteCount+storageWriteCount, (stateWriteCount+storageWriteCount)/seconds, stateReadCount, stateReadCount/seconds, int(seconds*1000)))
+                oldblocknumber += 1
+                #print("do block", oldblocknumber ,"\n")
+
+                # restore accounts
+                blockNumKey = str(item['blocknumber'])
+                if blockNumKey in restoreList:
+                    print("restore list in block", blockNumKey, ":", restoreList[blockNumKey])
+                    for addr in restoreList[blockNumKey]:
+                        print("restore addr:", addr)
+                        restoreAccountForEthanos(addr)
+                        restoreCount += 1
+
+            if item['blocknumber'] > endBlockNum:
+                print("reaching end block num, stop writing")
+                break
+
+            if item['type'] % 2 == 1:
+                # print("do writes in block", item['blocknumber'])
+                # print("item:", item)
+
+                addrId = item['address_id']
+                addr = select_address(cursor, addrId)
+
+                if item['type'] == 63:
+                    # delete this address
+                    updateTrieDelete(addr)
+                    continue
+
+                nonce = item['nonce']
+                balance = item['balance']
+                codeHash = emptyCodeHash
+                storageRoot = emptyRoot
+                if item['codehash'] != None:
+                    codeHash = item['codehash'].hex()
+                if item['storageroot'] != None:
+                    storageRoot = item['storageroot'].hex()
+
+                # print("in block", blockNum)
+                # print("write account ->")
+                # print("  addr:", addr)
+                # print("  nonce:", nonce)
+                # print("  balance:", balance)
+                # print("  codeHash:", codeHash)
+                # print("  storageRoot:", storageRoot)
+                # print("\n")
+
+                # update storage trie
+                if doStorageTrieUpdate:
+                    if item['id'] in slotList:
+                        slotWriteList = slotList[item['id']]
+                        # print("item:", item)
+                        # print("txHash:", item['txhash'].hex())
+                        for slotWrite in slotWriteList:
+                            contractAddrId = slotWrite['address_id']
+                            contractAddress = select_address(cursor, contractAddrId)
+
+                            slotId = slotWrite['slot_id']
+                            slot = select_slot(cursor, slotId)
+
+                            slotValue = []
+                            # slotValue = 0x0 # 
+                            if slotWrite['slotvalue'] != None:
+                                slotValue = slotWrite['slotvalue'].hex()
+
+                            # print("item:", slotWrite)
+                            # print("contractAddress:", contractAddress)
+                            # print("slot:", slot)
+                            # print("slotValue:", slotValue)
+                            # print("\n")
+                            # TODO(jmlee): is it right? or need updateStorageTrieEthanos()?
+                            currentStorageRoot = updateStorageTrieEthanos(contractAddress, slot, slotValue)
+                            storageWriteCount += 1
+
+                        # check current storage trie is made correctly
+                        if currentStorageRoot[2:] != storageRoot:
+                            print("@@fail: storage trie is wrong")
+                            print("blocknum:", oldblocknumber)
+                            # print("txindex:", item['txindex'])
+                            # print("tx hash:", select_tx_hash(cursor, blockNum, item['txindex']))
+                            print("item:", item)
+                            print("  addr:", addr)
+                            print("  nonce:", nonce)
+                            print("  balance:", balance)
+                            print("  codeHash:", codeHash)
+                            print("  storageRoot:", storageRoot)
+                            print(currentStorageRoot[2:], "vs", storageRoot)
+                            if stopWhenErrorOccurs:
+                                sys.exit()
+                
+                # update state trie
+                updateTrieForEthanos(nonce, balance, storageRoot, codeHash, addr)
+                stateWriteCount += 1
+            else:
+                stateReadCount += 1
+
+    # show final result
+    print("simulateEthanos() finished -> from block", startBlockNum, "to", endBlockNum)
+    print("total elapsed time:", datetime.now()-startTime)
+    print("state reads:", stateReadCount,"/ state writes:", stateWriteCount, "/ storage writes:", storageWriteCount)
+    print("restored accounts:", restoreCount)
+    print(stateReadCount, stateWriteCount, storageWriteCount)
+    # inspectTrie()
+    # printCurrentTrie()
+    getDBStatistics()
+    saveBlockInfos(blockInfosLogFileName)
+    print("create log file:", blockInfosLogFileName)
+    # inspectDatabase()
+    printAllStats(logFileName)
+    print("create log file:", logFileName)
+
 # inspect tries after simulation for ethereum
-def inspectTriesEthereum(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion):
+def inspectTriesEthereum(startBlockNum, endBlockNum, inactivateEpoch):
 
     delimiter = " "
 
@@ -948,6 +1166,7 @@ def inspectTriesEthereum(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoc
     trieInspectLogFileName = "ethereum_simulate_trie_inspects_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateEpoch) + ".txt"
 
     blockInfosFile = open(blockInfosLogFilePath+blockInfosLogFileName, 'r')
+    os.remove(trieInspectsLogFilePath+trieInspectLogFileName)
     trieInspectFile = open(trieInspectsLogFilePath+trieInspectLogFileName, 'a')
     rdr = csv.reader(blockInfosFile)
     blockNum = 0
@@ -983,6 +1202,7 @@ def inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch,
         + "_" + str(deleteEpoch) + "_" + str(inactivateEpoch) + "_" + str(inactivateCriterion) + ".txt"
     
     blockInfosFile = open(blockInfosLogFilePath+blockInfosLogFileName, 'r')
+    os.remove(trieInspectsLogFilePath+trieInspectLogFileName)
     trieInspectFile = open(trieInspectsLogFilePath+trieInspectLogFileName, 'a')
     rdr = csv.reader(blockInfosFile)
     blockNum = 0
@@ -1010,6 +1230,46 @@ def inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch,
 
     trieInspectFile.close()
 
+# inspect tries after simulation for Ethanos (same as inspectTriesEthereum())
+def inspectTriesEthanos(startBlockNum, endBlockNum, inactivateEpoch):
+
+    delimiter = " "
+
+    #
+    # for Ethanos
+    #
+
+    blockInfosLogFileName = "ethanos_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateEpoch) +".txt"
+    trieInspectLogFileName = "ethanos_simulate_trie_inspects_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateEpoch) + ".txt"
+
+    blockInfosFile = open(blockInfosLogFilePath+blockInfosLogFileName, 'r')
+    os.remove(trieInspectsLogFilePath+trieInspectLogFileName)
+    trieInspectFile = open(trieInspectsLogFilePath+trieInspectLogFileName, 'a')
+    rdr = csv.reader(blockInfosFile)
+    blockNum = 0
+    for line in rdr:
+        if len(line) == 0:
+            continue
+
+        # parsing
+        params = line[0].split(delimiter)[:-1]
+        blockNum = int(params[2])
+        # print("blockNum:", blockNum)
+
+        # inspect trie
+        if (blockNum+1) % inactivateEpoch == 0:
+            activeTrieRoot = params[0]
+            startTime = datetime.now()
+            nodeStat = inspectSubTrie(activeTrieRoot)[0]
+            endTime = datetime.now()
+            print("at block", blockNum, ", node stat:", nodeStat, "elapsed time:", endTime-startTime)
+
+            # save result
+            log = str(blockNum) + delimiter + activeTrieRoot + delimiter + nodeStat + "\n"
+            trieInspectFile.write(log)
+    
+    trieInspectFile.close()
+
 
 
 if __name__ == "__main__":
@@ -1022,17 +1282,31 @@ if __name__ == "__main__":
 
     # set simulation options
     deleteDisk = True
-    doStorageTrieUpdate = False
-    stopWhenErrorOccurs = False
-    
-    # ex1. strategy: random
-    # strategy_random(100, 1000, 10)
-    # printEthaneState()
+    doStorageTrieUpdate = True
+    stopWhenErrorOccurs = True
+    # set simulation mode
+    simulationMode = 0
+    # set simulation params
+    startBlockNum = 0
+    endBlockNum = 100000
+    deleteEpoch = 10000
+    inactivateEpoch = 10000
+    inactivateCriterion = 10000
 
-    # ex2. replay txs in Ethereum for Ethereum
-    simulateEthereum(0, 10000)
-
-    # ex3. replay txs in Ethereum for Ethane
-    # simulateEthane(1, 1000000, 40320, 40320, 40320)
+    # run simulation
+    if simulationMode == 0:
+        # replay txs in Ethereum for Ethereum
+        simulateEthereum(startBlockNum, endBlockNum)
+        inspectTriesEthereum(startBlockNum, endBlockNum, inactivateEpoch)
+    elif simulationMode == 1:
+         # replay txs in Ethereum for Ethane
+        simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
+        inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
+    elif simulationMode == 2:
+        # replay txs in Ethereum for Ethanos
+        simulateEthanos(startBlockNum, endBlockNum, inactivateEpoch)
+        inspectTriesEthanos(startBlockNum, endBlockNum, inactivateEpoch)
+    else:
+        print("wrong mode:", simulationMode)
 
     print("end")

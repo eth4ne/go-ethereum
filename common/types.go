@@ -89,6 +89,9 @@ var (
 
 	// to convert trie to graph representation
 	TrieGraph TrieGraphInfo
+
+	// simulation mode (0: original ethereum, 1: Ethane, 2: Ethanos)
+	SimulationMode = 0
 )
 
 var (
@@ -96,8 +99,6 @@ var (
 	// vars for Ethane simulation (jmlee)
 	//
 
-	// run as a Ethane or normal Ethereum
-	IsEthane = true
 	// active trie & inactive trie vs one state trie
 	InactiveTrieExist = true
 

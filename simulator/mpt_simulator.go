@@ -21,6 +21,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/fdlimit"
+	"github.com/ethereum/go-ethereum/core/state/pruner"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -73,7 +74,7 @@ var (
 	diskdb ethdb.KeyValueStore
 	// normal state trie
 	normTrie *trie.Trie
-	// additional inactive trie for Ethane
+	// additional inactive trie for Ethane / cached trie for Ethanos
 	subNormTrie *trie.Trie
 	// secure state trie
 	secureTrie *trie.SecureTrie
@@ -175,6 +176,11 @@ func reset(deleteDisk bool) {
 	common.RestoredKeys = make([]common.Hash, 0)
 	common.DeletedNodeNum = uint64(0)
 	common.RestoredNodeNum = uint64(0)
+
+	// TODO(jmlee): init for Ethanos
+	// reset Ethanos related vars
+	pruner.InitBloomFilters()
+
 }
 
 // rollbackUncommittedUpdates goes back to latest flushed trie (i.e., undo all uncommitted trie updates)
@@ -333,15 +339,15 @@ func estimateIncrement(hash common.Hash) (uint64, uint64) {
 // flushTrieNodes flushes dirty trie nodes to the db
 func flushTrieNodes() {
 
-	fmt.Println("flush start: generate block number", common.NextBlockNum)
-	blockInfo, _ := common.Blocks[common.NextBlockNum] // for logging block info
+	bn := common.NextBlockNum
+	fmt.Println("flush start: generate block number", bn)
+	blockInfo, _ := common.Blocks[bn] // for logging block info
 	flushStartTime := time.Now()
 
-	// do inactivate or delete previous leaf nodes
-	if common.IsEthane {
+	// if Ethane simulation, do inactivate or delete previous leaf nodes
+	if common.SimulationMode == 1 {
 
 		// update checkpoint key
-		bn := common.NextBlockNum
 		common.CheckpointKeys[bn] = common.CheckpointKey
 		common.CheckpointKey = common.NextKey
 
@@ -407,9 +413,13 @@ func flushTrieNodes() {
 	common.FlushStorageTries = false
 	normTrie.Commit(nil)
 	normTrie.TrieDB().Commit(normTrie.Hash(), false, nil)
-	if common.InactiveTrieExist {
+	if common.SimulationMode == 1 && common.InactiveTrieExist {
 		subNormTrie.Commit(nil)
 		subNormTrie.TrieDB().Commit(subNormTrie.Hash(), false, nil)
+		blockInfo.InactiveRoot = subNormTrie.Hash()
+	}
+	if common.SimulationMode == 2 {
+		// this is cached trie's root for Ethanos
 		blockInfo.InactiveRoot = subNormTrie.Hash()
 	}
 
@@ -435,11 +445,11 @@ func flushTrieNodes() {
 	blockInfo.NewStorageNodeStat = common.NewStorageNodeStat
 	blockInfo.TotalNodeStat = common.TotalNodeStat
 	blockInfo.TotalStorageNodeStat = common.TotalStorageNodeStat
-	common.Blocks[common.NextBlockNum] = blockInfo
+	common.Blocks[bn] = blockInfo
 	// delete too old block to store
-	blockNumToDelete := common.NextBlockNum - common.MaxBlocksToStore - 1
+	blockNumToDelete := bn - common.MaxBlocksToStore - 1
 	if _, exist := common.Blocks[blockNumToDelete]; exist {
-		// fmt.Println("current block num:", common.NextBlockNum, "/ block num to delete:", blockNumToDelete)
+		// fmt.Println("current block num:", bn, "/ block num to delete:", blockNumToDelete)
 		delete(common.Blocks, blockNumToDelete)
 	}
 
@@ -456,6 +466,13 @@ func flushTrieNodes() {
 	// fmt.Println("  new storage trie nodes:", newStorageNodesNum, "/ increased db size:", newStorageNodesSize)
 	// fmt.Println("  total trie nodes:", totalNodesNum, "/ db size:", totalNodesSize)
 	// fmt.Println("  total storage trie nodes:", totalStorageNodesNum, "/ db size:", totalStorageNodesSize)
+
+	// if Ethanos simulation, sweep state trie
+	if common.SimulationMode == 2 {
+		if (bn+1)%common.InactivateEpoch == 0 {
+			sweepStateTrie()
+		}
+	}
 
 	// increase next block number after flush
 	common.NextBlockNum++
@@ -851,6 +868,99 @@ func updateStorageTrie(storageTrie *trie.SecureTrie, key, value common.Hash) err
 }
 
 //
+// functions for Ethanos
+//
+
+// TODO(jmlee): implement this
+func updateTrieForEthanos(addr common.Address, key, value []byte) error {
+	// update state trie
+	err := normTrie.TryUpdate(key, value)
+	if err != nil {
+		return err
+	}
+
+	// update bloom filter with address
+	pruner.LatestBloomFilter.Add(addr.Bytes())
+
+	return nil
+}
+
+// TODO(jmlee): implement this correctly
+// current version just finds latest account state and set restored flag (similar to Ethane's)
+// to be correct, need to search checkpoint block's tries and bloom filters
+// (to measure restore proof's size)
+// ex. how to use bloom filter
+// exist, _ := pruner.LatestBloomFilter.Contain(restoreAddr.Bytes())
+func restoreAccountForEthanos(restoreAddr common.Address) {
+
+	blockNum := common.NextBlockNum
+	currentEpochNum := blockNum / common.InactivateEpoch
+	if currentEpochNum < 2 {
+		fmt.Println("there is no inactive account at epoch 0~1")
+		os.Exit(1)
+	}
+
+	restoreSuccess := false
+	addrHash := crypto.Keccak256Hash(restoreAddr[:])
+	checkpointBlockNum := currentEpochNum*common.InactivateEpoch - 1
+
+	for ; int(checkpointBlockNum) >= 0; checkpointBlockNum -= common.InactivateEpoch {
+
+		// open checkpoint block's state trie
+		checkpointRoot := common.Blocks[checkpointBlockNum].Root
+		checkpointTrie, err := trie.New(checkpointRoot, trie.NewDatabase(diskdb))
+		if err != nil {
+			fmt.Println("restoreAccountForEthanos() error:", err)
+			os.Exit(1)
+		}
+
+		// search checkpoint block's state trie
+		enc, _ := checkpointTrie.TryGet(addrHash[:])
+		if enc != nil {
+			// decode latest account
+			var acc types.EthanosStateAccount
+			if err := rlp.DecodeBytes(enc, &acc); err != nil {
+				fmt.Println("Failed to decode state object:", err)
+				fmt.Println("restoreAddr:", restoreAddr)
+				fmt.Println("enc:", enc)
+				os.Exit(1)
+			}
+
+			// set restored flag
+			acc.Restored = true
+
+			// encode restored account
+			data, _ := rlp.EncodeToBytes(acc)
+
+			// insert to current state trie
+			updateTrieForEthanos(restoreAddr, addrHash[:], data)
+			restoreSuccess = true
+			break
+		}
+
+	}
+
+	if !restoreSuccess {
+		fmt.Println("there is no account to restore for Ethanos -> addr:", restoreAddr.Hex())
+		os.Exit(1)
+	}
+
+	fmt.Println("restoreAccountForEthanos for", restoreAddr.Hex(), "finish")
+}
+
+// TODO(jmlee): implement this
+func sweepStateTrie() {
+	// set cached trie
+	subNormTrie = normTrie
+
+	// open new empty state trie
+	normTrie, _ = trie.New(common.Hash{}, trie.NewDatabase(diskdb))
+
+	// save current bloom filter, and make new one for new epoch
+	pruner.SweepBloomFilter()
+}
+
+//
 // functions for Ethane
 //
 
@@ -1000,7 +1110,8 @@ func inactivateLeafNodes(firstKeyToCheck, lastKeyToCheck common.Hash) {
 
 // restore all inactive accounts of given address (for Ethane)
 // TODO(jmlee): check correctness
-func restoreAccount(restoreAddr common.Address) {
+// TODO(jmlee): measure multi proof size
+func restoreAccountForEthane(restoreAddr common.Address) {
 	// check if inactive trie exist
 	inactiveTrie := normTrie
 	if common.InactiveTrieExist {
@@ -1541,27 +1652,30 @@ func connHandler(conn net.Conn) {
 				storageTrie, doExist := dirtyStorageTries[contractAddr]
 				if !doExist {
 					// get storage trie root
+					storageRoot := common.Hash{}
 					addrHash := crypto.Keccak256Hash(contractAddr[:])
 					enc, err := normTrie.TryGet(addrHash[:])
 					if err != nil {
 						fmt.Println("TryGet() error:", err)
 						os.Exit(1)
 					}
-					var acc types.StateAccount
-					if err := rlp.DecodeBytes(enc, &acc); err != nil {
-						fmt.Println("Failed to decode state object:", err)
-						fmt.Println("contractAddr:", contractAddr)
-						fmt.Println("enc:", enc)
-						fmt.Println("this address might be newly appeared address")
-						acc.Root = common.Hash{}
+					if enc != nil {
+						var acc types.StateAccount
+						if err := rlp.DecodeBytes(enc, &acc); err != nil {
+							fmt.Println("Failed to decode state object in updateStorageTrie():", err)
+							fmt.Println("contractAddr:", contractAddr)
+							fmt.Println("enc:", enc)
+							os.Exit(1)
+						}
+						storageRoot = acc.Root
 					}
 
 					// open storage trie
-					storageTrie, err = trie.NewSecure(acc.Root, trie.NewDatabase(diskdb))
+					storageTrie, err = trie.NewSecure(storageRoot, trie.NewDatabase(diskdb))
 					if err != nil {
 						fmt.Println("trie.NewSecure() failed:", err)
 						fmt.Println("contractAddr:", contractAddr)
-						fmt.Println("acc.Root:", acc.Root.Hex())
+						fmt.Println("storageRoot:", storageRoot.Hex())
 						os.Exit(1)
 					}
 
@@ -1602,7 +1716,7 @@ func connHandler(conn net.Conn) {
 							os.Exit(1)
 						}
 						if err := rlp.DecodeBytes(enc, &acc); err != nil {
-							fmt.Println("Failed to decode state object:", err)
+							fmt.Println("Failed to decode state object in updateStorageTrieEthane():", err)
 							fmt.Println("contractAddr:", contractAddr)
 							fmt.Println("enc:", enc)
 							fmt.Println("ERROR: AddrToKeyActive exists but account is not there")
@@ -1616,6 +1730,74 @@ func connHandler(conn net.Conn) {
 						fmt.Println("trie.NewSecure() failed:", err)
 						fmt.Println("contractAddr:", contractAddr)
 						fmt.Println("acc.Root:", acc.Root.Hex())
+						os.Exit(1)
+					}
+
+					// add to dirty storage tries
+					dirtyStorageTries[contractAddr] = storageTrie
+				}
+
+				// update storage trie
+				updateStorageTrie(storageTrie, slot, value)
+
+				response = []byte(storageTrie.Hash().Hex())
+
+			case "updateStorageTrieEthanos":
+				// get params
+				// fmt.Println("execute updateStorageTrieEthanos()")
+
+				contractAddr := common.HexToAddress(params[1])
+				slot := common.HexToHash(params[2])
+				value := common.HexToHash(params[3])
+				// fmt.Println("contractAddr:", contractAddr)
+				// fmt.Println("slot:", slot)
+				// fmt.Println("value:", value)
+				// fmt.Println()
+
+				// get storage trie to update
+				storageTrie, doExist := dirtyStorageTries[contractAddr]
+				if !doExist {
+					// get storage trie root
+					storageRoot := common.Hash{}
+					var acc types.EthanosStateAccount
+					addrHash := crypto.Keccak256Hash(contractAddr[:])
+					enc, err := normTrie.TryGet(addrHash[:])
+					if err != nil {
+						fmt.Println("TryGet() error:", err)
+						os.Exit(1)
+					}
+					if enc != nil {
+						if err := rlp.DecodeBytes(enc, &acc); err != nil {
+							fmt.Println("Failed to decode state object in updateStorageTrie():", err)
+							fmt.Println("contractAddr:", contractAddr)
+							fmt.Println("enc:", enc)
+							os.Exit(1)
+						}
+						storageRoot = acc.Root
+					} else {
+						// check cached trie
+						enc, err := subNormTrie.TryGet(addrHash[:])
+						if err != nil {
+							fmt.Println("TryGet() error:", err)
+							os.Exit(1)
+						}
+						if enc != nil {
+							if err := rlp.DecodeBytes(enc, &acc); err != nil {
+								fmt.Println("Failed to decode state object in updateStorageTrie():", err)
+								fmt.Println("contractAddr:", contractAddr)
+								fmt.Println("enc:", enc)
+								os.Exit(1)
+							}
+							storageRoot = acc.Root
+						}
+					}
+
+					// open storage trie
+					storageTrie, err = trie.NewSecure(storageRoot, trie.NewDatabase(diskdb))
+					if err != nil {
+						fmt.Println("trie.NewSecure() failed:", err)
+						fmt.Println("contractAddr:", contractAddr)
+						fmt.Println("storageRoot:", storageRoot.Hex())
 						os.Exit(1)
 					}
 
@@ -1823,10 +2005,9 @@ func connHandler(conn net.Conn) {
 			case "switchSimulationMode":
 				fmt.Println("execute updateTrieForEthane()")
 				mode, _ := strconv.ParseUint(params[1], 10, 64)
-				if mode == 0 {
-					common.IsEthane = false
-				} else if mode == 1 {
-					common.IsEthane = true
+
+				if mode == 0 || mode == 1 || mode == 2 {
+					common.SimulationMode = int(mode)
 				} else {
 					fmt.Println("Error switchSimulationMode: invalid mode ->", mode)
 					os.Exit(1)
@@ -1884,13 +2065,13 @@ func connHandler(conn net.Conn) {
 
 				response = []byte("success")
 
-			case "restoreAccount":
+			case "restoreAccountForEthane":
 				// get params
-				// fmt.Println("execute restoreAccount()")
+				// fmt.Println("execute restoreAccountForEthane()")
 				addr := common.HexToAddress(params[1])
 				fmt.Println("addr to restore:", addr.Hex())
 
-				restoreAccount(addr)
+				restoreAccountForEthane(addr)
 
 				response = []byte("success")
 
@@ -1909,6 +2090,69 @@ func connHandler(conn net.Conn) {
 				inactivateEpoch, _ := strconv.ParseUint(params[2], 10, 64)
 				inactivateCriterion, _ := strconv.ParseUint(params[3], 10, 64)
 				setEthaneOptions(deleteEpoch, inactivateEpoch, inactivateCriterion)
+
+				response = []byte("success")
+
+			case "updateTrieForEthanos":
+				// get params
+				// fmt.Println("execute updateTrieForEthanos()")
+				nonce, _ := strconv.ParseUint(params[1], 10, 64)
+				balance := new(big.Int)
+				balance, _ = balance.SetString(params[2], 10)
+				root := common.HexToHash(params[3])
+				codeHash := common.Hex2Bytes(params[4])
+				addr := common.HexToAddress(params[5])
+				addrHash := crypto.Keccak256Hash(addr[:])
+				// fmt.Println("nonce:", nonce)
+				// fmt.Println("balance:", balance)
+				// fmt.Println("root:", root)
+				// fmt.Println("codeHash:", codeHash)
+				// fmt.Println("codeHashHex:", common.Bytes2Hex(codeHash))
+				// fmt.Println("addr:", addr.Hex())
+				// fmt.Println("addrHash:", addrHash.Hex())
+
+				// read Restored field from cached trie
+				restored := false
+				enc, _ := subNormTrie.TryGet(addrHash[:])
+				if enc != nil {
+					// decode latest account
+					var acc types.EthanosStateAccount
+					if err := rlp.DecodeBytes(enc, &acc); err != nil {
+						fmt.Println("Failed to decode state object:", err)
+						fmt.Println("addr:", addr)
+						fmt.Println("enc:", enc)
+						os.Exit(1)
+					}
+					restored = acc.Restored
+				}
+
+				// encoding account
+				var account types.EthanosStateAccount
+				account.Nonce = nonce
+				account.Balance = balance
+				account.Root = root
+				account.CodeHash = codeHash
+				account.Restored = restored
+				data, _ := rlp.EncodeToBytes(account)
+
+				err := updateTrieForEthanos(addr, addrHash[:], data)
+				if err != nil {
+					fmt.Println("updateTrieForEthanos() failed:", err)
+					os.Exit(1)
+				}
+				normTrie.Hash()
+				// fmt.Println("print state trie\n")
+				// normTrie.Print()
+
+				response = []byte("success")
+
+			case "restoreAccountForEthanos":
+				// get params
+				// fmt.Println("execute restoreAccountForEthanos()")
+				addr := common.HexToAddress(params[1])
+				fmt.Println("addr to restore:", addr.Hex())
+
+				restoreAccountForEthanos(addr)
 
 				response = []byte("success")
 

@@ -306,12 +306,25 @@ type EthaneStateAccount struct {
 	Addr     common.Address // address of this account
 }
 
+// same struct copied from state_account.go to decode data
+type EthanosStateAccount struct {
+	Nonce    uint64
+	Balance  *big.Int
+	Root     common.Hash // merkle root of the storage trie
+	CodeHash []byte
+	Restored bool // flag whether this account is restored or not (default: false)
+}
+
 func (n valueNode) toString(ind string, db *Database) string {
 	// decode data into account & print account
-	if common.IsEthane {
+	if common.SimulationMode == 1 {
 		var acc EthaneStateAccount
 		rlp.DecodeBytes([]byte(n), &acc)
 		return fmt.Sprintf("[ Nonce: %d / Balance: %s / Addr: %s ]", acc.Nonce, acc.Balance.String(), acc.Addr.Hex())
+	} else if common.SimulationMode == 2 {
+		var acc EthanosStateAccount
+		rlp.DecodeBytes([]byte(n), &acc)
+		return fmt.Sprintf("[ Nonce: %d / Balance: %s ]", acc.Nonce, acc.Balance.String())
 	} else {
 		var acc Account
 		rlp.DecodeBytes([]byte(n), &acc)

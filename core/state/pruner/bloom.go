@@ -19,6 +19,7 @@ package pruner
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"os"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -26,6 +27,34 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	bloomfilter "github.com/holiman/bloomfilter/v2"
 )
+
+var (
+	//
+	// bloom filters for Ethanos (jmlee)
+	//
+
+	BloomFilterSize = uint64(512) // KB
+
+	// latest epoch's bloom filter
+	LatestBloomFilter *stateBloom
+
+	// bloom filters for Ethanos
+	// in Ethanos paper, bloom filter's size is 512KB
+	BloomFilters = make([]*stateBloom, 0)
+)
+
+// Init bloom filters for Ethanos (jmlee)
+func InitBloomFilters() {
+	BloomFilters = make([]*stateBloom, 0)
+	LatestBloomFilter, _ = newStateBloomWithSize(BloomFilterSize)
+	BloomFilters = append(BloomFilters, LatestBloomFilter)
+}
+
+// save current bloom filter, and make new one for new Ethanos epoch (jmlee)
+func SweepBloomFilter() {
+	BloomFilters = append(BloomFilters, LatestBloomFilter)
+	LatestBloomFilter, _ = newStateBloomWithSize(BloomFilterSize)
+}
 
 // stateBloomHasher is a wrapper around a byte blob to satisfy the interface API
 // requirements of the bloom library used. It's used to convert a trie hash or
@@ -62,12 +91,14 @@ type stateBloom struct {
 // The bloom filter will be created by the passing bloom filter size. According
 // to the https://hur.st/bloomfilter/?n=600000000&p=&m=2048MB&k=4, the parameters
 // are picked so that the false-positive rate for mainnet is low enough.
+// size: KB (jmlee)
 func newStateBloomWithSize(size uint64) (*stateBloom, error) {
-	bloom, err := bloomfilter.New(size*1024*1024*8, 4)
+	bloom, err := bloomfilter.New(size*1000*8, 4)
 	if err != nil {
 		return nil, err
 	}
 	log.Info("Initialized state bloom", "size", common.StorageSize(float64(bloom.M()/8)))
+	fmt.Println("bloom filter size:", common.StorageSize(float64(bloom.M()/8)))
 	return &stateBloom{bloom: bloom}, nil
 }
 
@@ -129,4 +160,9 @@ func (bloom *stateBloom) Delete(key []byte) error { panic("not supported") }
 // - If it says no, the key is definitely not contained.
 func (bloom *stateBloom) Contain(key []byte) (bool, error) {
 	return bloom.bloom.Contains(stateBloomHasher(key)), nil
+}
+
+// add item to bloom filter (jmlee)
+func (bloom *stateBloom) Add(key []byte) {
+	bloom.bloom.Add(stateBloomHasher(key))
 }

@@ -40,3 +40,13 @@ type EthaneStateAccount struct {
 	CodeHash []byte
 	Addr     common.Address // address of this account
 }
+
+// EthanostateAccount is the Ethanos consensus representation of accounts. (jmlee)
+// These objects are stored in the main account trie.
+type EthanosStateAccount struct {
+	Nonce    uint64
+	Balance  *big.Int
+	Root     common.Hash // merkle root of the storage trie
+	CodeHash []byte
+	Restored bool // flag whether this account is restored or not (default: false)
+}

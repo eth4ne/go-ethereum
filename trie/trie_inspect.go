@@ -748,7 +748,7 @@ func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGro
 		var acc types.StateAccount
 		var ethaneAcc types.EthaneStateAccount
 		isStorageTrie := false
-		if common.IsEthane {
+		if common.SimulationMode == 1 {
 			err := rlp.DecodeBytes(n, &ethaneAcc)
 			if err != nil {
 				isStorageTrie = true
