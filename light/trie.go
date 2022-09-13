@@ -259,3 +259,6 @@ func nibblesToKey(nib []byte) []byte {
 	}
 	return key
 }
+
+// temp function for correct build, this will not be called in Ethane (joonha)
+func (t *odrTrie) Print() {}

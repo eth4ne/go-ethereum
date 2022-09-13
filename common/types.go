@@ -43,6 +43,11 @@ const (
 var (
 	hashT    = reflect.TypeOf(Hash{})
 	addressT = reflect.TypeOf(Address{})
+
+	// ethane test
+	InspectEpoch = int64(1)
+
+	// ethane essential
 )
 
 // Hash represents the 32 byte Keccak256 hash of arbitrary data.

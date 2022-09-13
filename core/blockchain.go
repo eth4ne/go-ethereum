@@ -1308,6 +1308,24 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	} else {
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
 	}
+
+	// print database inspect result (jmlee)
+	//fmt.Println("\nblock inserted -> blocknumber:", block.Header().Number.Int64())
+	// fmt.Println("InactiveBoundaryKey:", common.InactiveBoundaryKey)
+	// fmt.Println("common.CheckpointKeys:", common.CheckpointKeys)
+	if block.Header().Number.Int64()%common.InspectEpoch == 0 {
+		// print state trie (jmlee)
+		fmt.Println("$$$ print state trie at block", bc.CurrentBlock().Header().Number)
+		ldb := trie.NewDatabase(bc.db)
+		stateTrie, _ := trie.NewSecure(bc.CurrentBlock().Root(), ldb)
+		// stateTrie.Print()
+		if stateTrie == nil {
+			fmt.Println("stateTrie is nil")
+		} else {
+			stateTrie.Print()
+		}
+	}
+
 	return status, nil
 }
 
