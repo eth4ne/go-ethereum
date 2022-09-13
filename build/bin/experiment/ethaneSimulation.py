@@ -801,10 +801,10 @@ def simulateEthereum(startBlockNum, endBlockNum):
     # printCurrentTrie()
     # inspectTrie()
     getDBStatistics()
-    printAllStats(logFileName)
-    print("create log file:", logFileName)
     saveBlockInfos(blockInfosLogFileName)
     print("create log file:", blockInfosLogFileName)
+    printAllStats(logFileName)
+    print("create log file:", logFileName)
 
 # replay txs in Ethereum with Ethane client
 def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion):
@@ -975,10 +975,10 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
     printEthaneState()
     getDBStatistics()
     # inspectDatabase()
-    printAllStats(logFileName)
-    print("create log file:", logFileName)
     saveBlockInfos(blockInfosLogFileName)
     print("create log file:", blockInfosLogFileName)
+    printAllStats(logFileName)
+    print("create log file:", logFileName)
 
 # replay txs in Ethereum with Ethanos client
 def simulateEthanos(startBlockNum, endBlockNum, inactivateEpoch):
