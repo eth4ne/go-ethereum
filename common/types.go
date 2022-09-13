@@ -85,7 +85,7 @@ var (
 	// latest flushed block num = next block num - 1 (if next block num == 0, then no block exists)
 	NextBlockNum = uint64(0)
 	// max number of blocks to store in "Blocks" (i.e., rollback limit)
-	MaxBlocksToStore = uint64(1000000)
+	MaxBlocksToStore = uint64(100000000)
 
 	// to convert trie to graph representation
 	TrieGraph TrieGraphInfo
