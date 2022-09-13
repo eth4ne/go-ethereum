@@ -19,6 +19,7 @@ package state
 import (
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -45,6 +46,8 @@ type DumpCollector interface {
 	OnRoot(common.Hash)
 	// OnAccount is called once for each account in the trie
 	OnAccount(common.Address, DumpAccount)
+	// (joonha)
+	getAccount(common.Address) (DumpAccount, bool)
 }
 
 // DumpAccount represents an account in the state.
@@ -76,6 +79,12 @@ func (d *Dump) OnAccount(addr common.Address, account DumpAccount) {
 	d.Accounts[addr] = account
 }
 
+// getAccount returns dumpAccount of a given address (joonha)
+func (d *Dump) getAccount(addr common.Address) (DumpAccount, bool) {
+	acc, doExist := d.Accounts[addr]
+	return acc, doExist
+}
+
 // IteratorDump is an implementation for iterating over data.
 type IteratorDump struct {
 	Root     string                         `json:"root"`
@@ -91,6 +100,12 @@ func (d *IteratorDump) OnRoot(root common.Hash) {
 // OnAccount implements DumpCollector interface
 func (d *IteratorDump) OnAccount(addr common.Address, account DumpAccount) {
 	d.Accounts[addr] = account
+}
+
+// getAccount returns dumpAccount of a given address (joonha)
+func (d *IteratorDump) getAccount(addr common.Address) (DumpAccount, bool) {
+	acc, doExist := d.Accounts[addr]
+	return acc, doExist
 }
 
 // iterativeDump is a DumpCollector-implementation which dumps output line-by-line iteratively.
@@ -121,6 +136,13 @@ func (d iterativeDump) OnRoot(root common.Hash) {
 	d.Encode(struct {
 		Root common.Hash `json:"root"`
 	}{root})
+}
+
+// getAccount returns dumpAccount of a given address (joonha)
+func (d iterativeDump) getAccount(addr common.Address) (DumpAccount, bool) {
+	// acc, doExist := d.Accounts[addr]
+	// return d.getAccount(addr)
+	return DumpAccount{}, false
 }
 
 // DumpToCollector iterates the state according to the given options and inserts
@@ -201,6 +223,100 @@ func (s *StateDB) DumpToCollector(c DumpCollector, conf *DumpConfig) (nextKey []
 	return nextKey
 }
 
+/*
+* DumpToCollector_Ethane iterates the state according to the given options and inserts
+* the items into a collector for aggregation or serialization.
+* Different from original DumpToCollector, DumpToCollector_Ethane merges crumb accounts.
+* Only for this dump test, crumb's nonce should be set to zero not to blockNum * 64.
+* (commenter: joonha)
+ */
+func (s *StateDB) DumpToCollector_Ethane(c DumpCollector, conf *DumpConfig) (nextKey []byte) {
+	// Sanitize the input to allow nil configs
+	if conf == nil {
+		conf = new(DumpConfig)
+	}
+	var (
+		missingPreimages int
+		accounts         uint64
+		start            = time.Now()
+		// logged           = time.Now()
+	)
+	// map을 sorted order로 iterate하려면 key를 sort()한 후에 iterate해야 한다고 함.
+	// https://www.educative.io/answers/how-to-iterate-over-a-golang-map-in-sorted-order
+
+	// 그 최종값은 dump의 root로 할 필요는 없을 것 같음.
+	// dump의 account를 sorting해서 json 파일에 적는다.
+	// 그런 다음에 그냥 그 json 파일 두 개가 일치하는지를 살피면 됨.
+
+	it := trie.NewIterator(s.trie.NodeIterator(conf.Start))
+	for it.Next() {
+		var data types.StateAccount
+		if err := rlp.DecodeBytes(it.Value, &data); err != nil {
+			panic(err)
+		}
+		account := DumpAccount{ // incoming account
+			Balance:  data.Balance.String(),
+			Nonce:    data.Nonce,
+			Root:     data.Root[:],
+			CodeHash: data.CodeHash,
+			// SecureKey: it.Key,
+		}
+
+		// merge crumbs
+		addr := data.Addr
+		prevDumpAccount, doExist := c.getAccount(addr)
+		if doExist {
+			prevBalance := new(big.Int)
+			prevBalance, _ = prevBalance.SetString(prevDumpAccount.Balance, 10)
+
+			// var n int
+			// n, _ = strconv.Atoi(prevDumpAccount.Balance) // string to int
+			// prevBalance = big.NewInt(int64(n)) // int to int64 to big
+			prevBalance_1 := new(big.Int)
+			account.Balance = prevBalance_1.Add(data.Balance, prevBalance).String()
+			// // debugging
+			// if addr == common.HexToAddress("0x0000000000000000000000000000000000000000") {
+			// 	fmt.Println("\n\nprevDumpAccount.Balance: ", prevDumpAccount.Balance)
+			// 	// fmt.Println("n: ", n)
+			// 	fmt.Println("prevBalance: ", prevBalance)
+			// 	fmt.Println("data.Balance: ", data.Balance)
+			// 	fmt.Println("account.Balance:, ", account.Balance)
+			// }
+
+			account.Nonce += prevDumpAccount.Nonce // warn: do not be confused by the nonce not at the delete epoch
+
+			if common.BytesToHash(prevDumpAccount.Root) != common.HexToHash("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421") { // CA's valid root
+				account.Root = prevDumpAccount.Root
+			}
+			if common.BytesToHash(prevDumpAccount.CodeHash) != common.HexToHash("c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470") { // CA's valid codeHash
+				account.CodeHash = prevDumpAccount.CodeHash
+			}
+		}
+
+		// write dump
+		c.OnAccount(addr, account)
+		accounts++
+		// if time.Since(logged) > 8*time.Second {
+		// 	log.Info("Trie dumping in progress", "at", it.Key, "accounts", accounts,
+		// 		"elapsed", common.PrettyDuration(time.Since(start)))
+		// 	logged = time.Now()
+		// }
+		if conf.Max > 0 && accounts >= conf.Max {
+			if it.Next() {
+				nextKey = it.Key
+			}
+			break
+		}
+	}
+	if missingPreimages > 0 {
+		log.Warn("Dump incomplete due to missing preimages", "missing", missingPreimages)
+	}
+	log.Info("Trie dumping complete", "accounts", accounts,
+		"elapsed", common.PrettyDuration(time.Since(start)))
+
+	return nextKey
+}
+
 // RawDump returns the entire state an a single large object
 func (s *StateDB) RawDump(opts *DumpConfig) Dump {
 	dump := &Dump{
@@ -210,9 +326,28 @@ func (s *StateDB) RawDump(opts *DumpConfig) Dump {
 	return *dump
 }
 
+// RawDump returns the entire state an a single large object
+func (s *StateDB) RawDump_Ethane(opts *DumpConfig) Dump {
+	dump := &Dump{
+		Accounts: make(map[common.Address]DumpAccount),
+	}
+	s.DumpToCollector_Ethane(dump, opts)
+	return *dump
+}
+
 // Dump returns a JSON string representing the entire state as a single json-object
 func (s *StateDB) Dump(opts *DumpConfig) []byte {
 	dump := s.RawDump(opts)
+	json, err := json.MarshalIndent(dump, "", "    ")
+	if err != nil {
+		fmt.Println("Dump err", err)
+	}
+	return json
+}
+
+// Dump returns a JSON string representing the entire state as a single json-object // let's use this func to export Accounts mapping (joonha)
+func (s *StateDB) Dump_Ethane(opts *DumpConfig) []byte {
+	dump := s.RawDump_Ethane(opts)
 	json, err := json.MarshalIndent(dump, "", "    ")
 	if err != nil {
 		fmt.Println("Dump err", err)

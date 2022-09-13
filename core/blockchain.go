@@ -1331,6 +1331,15 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		}
 	}
 
+	// set flags for the next block
+	bn := block.Header().Number.Int64() + 1
+
+	if bn%1 == 0 {
+		common.DoDump = true
+	} else {
+		common.DoDump = false
+	}
+
 	return status, nil
 }
 

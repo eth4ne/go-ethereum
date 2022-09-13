@@ -50,6 +50,7 @@ var (
 
 	// ethane test
 	InspectEpoch = int64(1)
+	DoDump       bool
 
 	// ethane essential
 	AddrToKey = make(map[Address]Hash)
