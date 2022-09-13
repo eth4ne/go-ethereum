@@ -23,10 +23,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"math/rand"
+	"os"
 	"reflect"
+	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"golang.org/x/crypto/sha3"
@@ -48,7 +52,176 @@ var (
 	InspectEpoch = int64(1)
 
 	// ethane essential
+	AddrToKey = make(map[Address]Hash)
+	MapMutex  = sync.RWMutex{} // to avoid fatal error: "concurrent map read and map write"
+
+	NoExistKey  = HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff") // very large key which will not be reached forever (const)
+	ZeroAddress = HexToAddress("0x0")                                                             // (const)
 )
+
+// Marshal is a function that marshals the object into an io.Reader.
+// By default, it uses the JSON marshaller.
+var Marshal = func(v interface{}) (io.Reader, error) {
+	b, err := json.MarshalIndent(v, "", "\t")
+	if err != nil {
+		return nil, err
+	}
+	return bytes.NewReader(b), nil
+}
+
+// Unmarshal is a function that unmarshals the data from the reader into the specified value.
+// By default, it uses the JSON unmarshaller.
+var Unmarshal = func(r io.Reader, v interface{}) error {
+	return json.NewDecoder(r).Decode(v)
+}
+
+// Save saves a representation of v to the file at path.
+func SaveAsFile(path string, v interface{}) error {
+	// lock.Lock()
+	// defer lock.Unlock()
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	r, err := Marshal(v)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(f, r)
+	return err
+}
+
+// Load loads the file at path into v.
+// Use os.IsNotExist() to see if the returned error is due to the file being missing.
+func LoadFromFile(path string, v interface{}) error {
+	// lock.Lock()
+	// defer lock.Unlock()
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return Unmarshal(f, v)
+}
+
+// save AddrToKey as a file (jmlee)
+func SaveAddrToKey(blockHash string) error {
+
+	// debugging code
+	// for k, v := range AddrToKey {
+	// 	fmt.Println("common.AddrToKey -> k:", k, " / v:", v)
+	// }
+
+	// lock & unlock mutex
+	MapMutex.Lock()
+	defer MapMutex.Unlock()
+
+	// AddrToKey
+	path := "a2k-init.map"
+	// save it as a file
+	fmt.Println("save AddrToKey path:", path)
+	err := SaveAsFile(path, AddrToKey)
+	if err != nil {
+		fmt.Println("save AddrToKey fail:", err)
+	} else {
+		fmt.Println("save AddrToKey suceess!")
+	}
+
+	// // AddrToKey_inactive
+	// path1 := "a2k-inact-init.map"
+	// // save it as a file
+	// fmt.Println("save AddrToKey_inactive path1:", path1)
+	// err = SaveAsFile(path1, AddrToKey_inactive)
+	// if err != nil {
+	// 	fmt.Println("save AddrToKey_inactive fail:", err)
+	// } else {
+	// 	fmt.Println("save AddrToKey_inactive suceess!")
+	// }
+
+	return err
+}
+
+// save result AddrToKey as a file (joonha)
+func SaveAddrToKey_result(blockHash string) error {
+
+	// debugging code
+	// for k, v := range AddrToKey {
+	// 	fmt.Println("common.AddrToKey -> k:", k, " / v:", v)
+	// }
+
+	// lock & unlock mutex
+	MapMutex.Lock()
+	defer MapMutex.Unlock()
+
+	// AddrToKey
+	path := "a2k-result.map"
+	// save it as a file
+	fmt.Println("save AddrToKey path:", path)
+	err := SaveAsFile(path, AddrToKey)
+	if err != nil {
+		fmt.Println("save AddrToKey fail:", err)
+	} else {
+		fmt.Println("save AddrToKey suceess!")
+	}
+
+	// // AddrToKey_inactive
+	// path1 := "a2k-inact-result.map"
+	// // save it as a file
+	// fmt.Println("save AddrToKey_inactive path1:", path1)
+	// err = SaveAsFile(path1, AddrToKey_inactive)
+	// if err != nil {
+	// 	fmt.Println("save AddrToKey_inactive fail:", err)
+	// } else {
+	// 	fmt.Println("save AddrToKey_inactive suceess!")
+	// }
+
+	return err
+}
+
+// load AddrToKey from a file (jmlee)
+func LoadAddrToKey(blockHash string) error {
+	MapMutex.Lock()
+	defer MapMutex.Unlock()
+
+	// AddrToKey
+	path := "a2k-init.map" // from 0
+	// path := "a2k-result.map" // from 45501
+	fmt.Println("load AddrToKey path:", path)
+	err := LoadFromFile(path, &AddrToKey)
+	if err != nil {
+		fmt.Println("load AddrToKey fail:", err)
+	} else {
+		fmt.Println("load AddrToKey suceess!")
+	}
+
+	// AddrToKey_inactive
+	// path1 := "a2k-inact-init.map" // from 0
+	// // path1 := "a2k-inact-result.map" // from 45501
+	// fmt.Println("load AddrToKey path:", path1)
+	// err = LoadFromFile(path1, &AddrToKey_inactive)
+	// if err != nil {
+	// 	fmt.Println("load AddrToKey_inactive fail:", err)
+	// } else {
+	// 	fmt.Println("load AddrToKey_inactive suceess!")
+	// }
+
+	// for k, v := range AddrToKey {
+	// 	fmt.Println("common.AddrToKey -> k:", k, " / v:", v)
+	// }
+	return err
+}
+
+// Int64ToHash converts int64 to hex key (ex. 10 -> 0x0...0a) (jmlee)
+func Int64ToHash(i int64) Hash {
+	return HexToHash(strconv.FormatInt(i, 16))
+}
+
+// HashToInt64 converts hash to int64 (ex. 0x0...0a -> 10) (jmlee)
+func HashToInt64(h Hash) int64 {
+	i, _ := strconv.ParseInt(h.Hex()[2:], 16, 64)
+	return i
+}
 
 // Hash represents the 32 byte Keccak256 hash of arbitrary data.
 type Hash [HashLength]byte

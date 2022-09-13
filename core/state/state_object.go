@@ -110,10 +110,20 @@ func newObject(db *StateDB, address common.Address, data types.StateAccount) *st
 		data.Root = emptyRoot
 	}
 	data.Addr = address
+
+	// set addrHash as a specific key value to implement compactTrie (jmlee)
+	addressHash, doExist := db.AddrToKeyDirty[address]
+	if !doExist {
+		common.MapMutex.Lock()
+		addressHash = common.AddrToKey[address]
+		common.MapMutex.Unlock()
+	}
+
 	return &stateObject{
-		db:             db,
-		address:        address,
-		addrHash:       crypto.Keccak256Hash(address[:]),
+		db:      db,
+		address: address,
+		// addrHash:       crypto.Keccak256Hash(address[:]),
+		addrHash:       addressHash,
 		data:           data,
 		originStorage:  make(Storage),
 		pendingStorage: make(Storage),

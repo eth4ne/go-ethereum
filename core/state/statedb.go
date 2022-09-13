@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math/big"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -122,6 +123,12 @@ type StateDB struct {
 	StorageUpdated int
 	AccountDeleted int
 	StorageDeleted int
+
+	// ethane
+	NextKey           int64                          // key of the first 'will be inserted' account
+	CheckpointKey     int64                          // save initial NextKey value to determine whether move leaf nodes or not
+	AddrToKeyDirty    map[common.Address]common.Hash // dirty cache for common.AddrToKey
+	KeysToDeleteDirty []common.Hash                  // dirty cache for common.KeysToDelete
 }
 
 // New creates a new state from a given trie.
@@ -130,6 +137,12 @@ func New(root common.Hash, db Database, snaps *snapshot.Tree) (*StateDB, error) 
 	if err != nil {
 		return nil, err
 	}
+
+	// set NextKey as lastKey+1 (jmlee)
+	lastKey := tr.GetLastKey()
+	nextKey := new(big.Int)
+	nextKey.Add(lastKey, big.NewInt(1))
+
 	sdb := &StateDB{
 		db:                  db,
 		trie:                tr,
@@ -143,6 +156,11 @@ func New(root common.Hash, db Database, snaps *snapshot.Tree) (*StateDB, error) 
 		journal:             newJournal(),
 		accessList:          newAccessList(),
 		hasher:              crypto.NewKeccakState(),
+		// ethane
+		NextKey:           nextKey.Int64(),
+		CheckpointKey:     nextKey.Int64(),
+		AddrToKeyDirty:    make(map[common.Address]common.Hash),
+		KeysToDeleteDirty: make([]common.Hash, 0),
 	}
 	if sdb.snaps != nil {
 		if sdb.snap = sdb.snaps.Snapshot(root); sdb.snap != nil {
@@ -460,8 +478,60 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 	}
 	// Encode the account and update the account trie
 	addr := obj.Address()
-	if err := s.trie.TryUpdateAccount(addr[:], &obj.data); err != nil {
-		s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
+
+	data, err := rlp.EncodeToBytes(obj)
+	if err != nil {
+		panic(fmt.Errorf("can't encode object at %x: %v", addr[:], err))
+	}
+
+	// codes for compact trie (jmlee)
+	// get addrKey of this address
+	addrKey, doExist := s.AddrToKeyDirty[addr]
+	if !doExist {
+		common.MapMutex.Lock()
+		addrKey = common.AddrToKey[addr]
+		common.MapMutex.Unlock()
+	}
+	addrKey_bigint := new(big.Int)
+	addrKey_bigint.SetString(addrKey.Hex()[2:], 16)
+
+	if addrKey_bigint.Int64() >= s.CheckpointKey { // updated at this block
+
+		/*
+		* This account is newly created or already moved at this epoch.
+		* So there is no move.
+		* Creating a crumb is in this case.
+		* (commenter: joonha)
+		 */
+
+		// fmt.Println("insert -> key:", addrKey.Hex(), "/ addr:", addr.Hex())
+		if err = s.trie.TryUpdate_SetKey(addrKey[:], data); err != nil {
+			s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
+		}
+	} else { // not updated yet at this block
+
+		/*
+		* This account was active at previous epoch and touched again at this epoch.
+		* So we have to delete previous leaf node whose key is addrKey
+		* and insert new leaf node to the right most of the active trie setting its key to newAddrKey.
+		* We will not delete previous leaf node now but just append it to s.KeysToDeleteDirty
+		* to delete multiple nodes at once later, periodically.
+		* (commenter: joonha)
+		 */
+
+		// fmt.Println("append this to KeysToDeleteDirty to delete later -> key:", addrKey.Hex(), "/ addr:", addr.Hex())
+		s.KeysToDeleteDirty = append(s.KeysToDeleteDirty, addrKey)
+
+		// insert new leaf node at right side
+		newAddrKey := common.HexToHash(strconv.FormatInt(s.NextKey, 16))
+		s.AddrToKeyDirty[addr] = newAddrKey
+		// fmt.Println("insert -> key:", newAddrKey.Hex(), "/ addr:", addr.Hex())
+		if err = s.trie.TryUpdate_SetKey(newAddrKey[:], data); err != nil {
+			s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
+		}
+		// fmt.Println("move leaf node to right -> addr:", addr.Hex(), "/ keyHash:", newAddrKey)
+		obj.addrHash = newAddrKey // --> is this necessary? (joonha) (review)
+		s.NextKey += 1
 	}
 
 	// If state snapshotting is active, cache the data til commit. Note, this
@@ -532,20 +602,35 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 		}
 	}
 	// If snapshot unavailable or reading from it failed, load from the database
-	if data == nil {
-		start := time.Now()
-		enc, err := s.trie.TryGet(addr.Bytes())
-		if metrics.EnabledExpensive {
-			s.AccountReads += time.Since(start)
+	if s.snap == nil || data == nil {
+
+		// get key
+		key, doExist := s.AddrToKeyDirty[addr]
+		if !doExist {
+			common.MapMutex.Lock()
+			key, doExist = common.AddrToKey[addr]
+			common.MapMutex.Unlock()
+			if !doExist {
+				key = common.NoExistKey
+			}
 		}
+		if key == common.NoExistKey {
+			// fmt.Println("there is no account (retrieved from AddrToKey)")
+			return nil
+		}
+
+		// get key's object
+		enc, err := s.trie.TryGet_SetKey(key[:])
 		if err != nil {
 			s.setError(fmt.Errorf("getDeleteStateObject (%x) error: %v", addr.Bytes(), err))
 			return nil
 		}
 		if len(enc) == 0 {
+			// fmt.Println("cannot find the address outside of the snapshot (2)")
 			return nil
 		}
-		data = new(types.StateAccount)
+		data = new(types.StateAccount) // v1.10.16
+
 		if err := rlp.DecodeBytes(enc, data); err != nil {
 			log.Error("Failed to decode state object", "addr", addr, "err", err)
 			return nil
@@ -573,6 +658,16 @@ func (s *StateDB) GetOrNewStateObject(addr common.Address) *stateObject {
 // createObject creates a new state object. If there is an existing account with
 // the given address, it is overwritten and returned as the second return value.
 func (s *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) {
+
+	// insert to map to make compactTrie (jmlee)
+	_, doExist := common.AddrToKey[addr]
+	if !doExist && addr != common.ZeroAddress { // creating whole-new account
+		newAddrKey := common.HexToHash(strconv.FormatInt(s.NextKey, 16))
+		// fmt.Println("make new account -> addr:", addr.Hex(), "/ keyHash:", newAddrKey)
+		s.AddrToKeyDirty[addr] = newAddrKey
+		s.NextKey += 1
+	}
+
 	prev = s.getDeletedStateObject(addr) // Note, prev might have been deleted, we need that!
 
 	var prevdestruct bool
@@ -657,8 +752,21 @@ func (s *StateDB) Copy() *StateDB {
 		preimages:           make(map[common.Hash][]byte, len(s.preimages)),
 		journal:             newJournal(),
 		hasher:              crypto.NewKeccakState(),
+		// ethane
+		NextKey:           s.NextKey,
+		CheckpointKey:     s.CheckpointKey,
+		AddrToKeyDirty:    make(map[common.Address]common.Hash, len(s.AddrToKeyDirty)),
+		KeysToDeleteDirty: make([]common.Hash, len(s.KeysToDeleteDirty)),
 	}
 	// Copy the dirty states, logs, and preimages
+
+	// (jmlee)
+	for key, value := range s.AddrToKeyDirty {
+		state.AddrToKeyDirty[key] = value
+	}
+	// (joonha)
+	copy(state.KeysToDeleteDirty, s.KeysToDeleteDirty)
+
 	for addr := range s.journal.dirties {
 		// As documented [here](https://github.com/ethereum/go-ethereum/pull/16485#issuecomment-380438527),
 		// and in the Finalise-method, there is a case where an object is in the journal but not
@@ -929,6 +1037,20 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 			log.Crit("Failed to commit dirty codes", "error", err)
 		}
 	}
+
+	// apply dirties to common.AddrToKey (jmlee)
+	for key, value := range s.AddrToKeyDirty {
+		if value == common.NoExistKey {
+			common.MapMutex.Lock()
+			delete(common.AddrToKey, key)
+			common.MapMutex.Unlock()
+		} else {
+			common.MapMutex.Lock()
+			common.AddrToKey[key] = value
+			common.MapMutex.Unlock()
+		}
+	}
+
 	// Write the account trie changes, measuing the amount of wasted time
 	var start time.Time
 	if metrics.EnabledExpensive {

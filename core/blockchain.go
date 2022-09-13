@@ -827,6 +827,11 @@ func (bc *BlockChain) Stop() {
 		triedb := bc.stateCache.TrieDB()
 		triedb.SaveCache(bc.cacheConfig.TrieCleanJournal)
 	}
+
+	// save common.AddrToKey into disk (jmlee)
+	head := rawdb.ReadHeadBlockHash(bc.db)
+	common.SaveAddrToKey_result(head.Hex())
+
 	log.Info("Blockchain stopped")
 }
 

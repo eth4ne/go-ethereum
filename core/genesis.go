@@ -335,6 +335,8 @@ func (g *Genesis) Commit(db ethdb.Database) (*types.Block, error) {
 	rawdb.WriteHeadFastBlockHash(db, block.Hash())
 	rawdb.WriteHeadHeaderHash(db, block.Hash())
 	rawdb.WriteChainConfig(db, block.Hash(), config)
+	// save common.AddrToKey into disk (jmlee)
+	common.SaveAddrToKey(block.Hash().Hex())
 	return block, nil
 }
 
