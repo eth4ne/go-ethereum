@@ -90,11 +90,13 @@ def drawGraphsForBlockInfos(startBlockNum, endBlockNum, deleteEpoch=0, inactivat
     # logs[33][blockNum] = TimeToDelete (ns)
     # logs[34][blockNum] = TimeToInactivate (ns)
 
-    # logs[35][blockNum] = DeletedNodeNum
+    # logs[35][blockNum] = RestorationNum
     # logs[36][blockNum] = RestoredNodeNum
-    # logs[37][blockNum] = InactivatedNodeNum
+    # logs[37][blockNum] = DeletedActiveNodeNum
+    # logs[38][blockNum] = DeletedInactiveNodeNum
+    # logs[39][blockNum] = InactivatedNodeNum
 
-    columnNum = 38
+    columnNum = 40
     logs = TwoD(endBlockNum-startBlockNum+1, columnNum, True)
 
     # parse blockInfos log file
