@@ -980,20 +980,20 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
     printAllStats(logFileName)
     print("create log file:", logFileName)
 
-# replay txs in Ethereum with Ethanos client
-def simulateEthanos(startBlockNum, endBlockNum, inactivateEpoch):
+# replay txs in Ethereum with Ethanos client (in Ethanos, inactivateEpoch = inactivateCriterion)
+def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion):
     
     # set Ethanos's options
     switchSimulationMode(2) # 2: Ethanos mode
-    setEthaneOptions(inactivateEpoch, inactivateEpoch, inactivateEpoch)
+    setEthaneOptions(inactivateCriterion, inactivateCriterion, inactivateCriterion)
 
     # set log file name
-    logFileName = "ethanos_simulate_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateEpoch) + ".txt"
-    blockInfosLogFileName = "ethanos_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateEpoch) + ".txt"
+    logFileName = "ethanos_simulate_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateCriterion) + ".txt"
+    blockInfosLogFileName = "ethanos_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateCriterion) + ".txt"
 
     # check restore list exist
     restoreFileName = "restore_list_" + str(startBlockNum) + "_" + str(endBlockNum) \
-        + "_"  + str(inactivateEpoch) + "_" + str(inactivateEpoch) + ".json"
+        + "_"  + str(inactivateCriterion) + "_" + str(inactivateCriterion) + ".json"
     # restoreFileName = "restore_list_0_1000000_315_315.json" # temp code: do not hardcoding later
     if not os.path.exists(restoreListFilePath + restoreFileName):
         print("there is no restore list in:", restoreListFilePath + restoreFileName)
@@ -1112,7 +1112,6 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateEpoch):
                             # print("slot:", slot)
                             # print("slotValue:", slotValue)
                             # print("\n")
-                            # TODO(jmlee): is it right? or need updateStorageTrieEthanos()?
                             currentStorageRoot = updateStorageTrieEthanos(contractAddress, slot, slotValue)
                             storageWriteCount += 1
 
@@ -1154,12 +1153,12 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateEpoch):
     print("create log file:", logFileName)
 
 # inspect tries after simulation for ethereum
-def inspectTriesEthereum(startBlockNum, endBlockNum, inactivateEpoch):
+def inspectTriesEthereum(startBlockNum, endBlockNum, inactivateCriterion):
 
     delimiter = " "
 
     blockInfosLogFileName = "ethereum_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + ".txt"
-    trieInspectLogFileName = "ethereum_simulate_trie_inspects_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateEpoch) + ".txt"
+    trieInspectLogFileName = "ethereum_simulate_trie_inspects_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateCriterion) + ".txt"
 
     blockInfosFile = open(blockInfosLogFilePath+blockInfosLogFileName, 'r')
     if os.path.exists(trieInspectsLogFilePath+trieInspectLogFileName):
@@ -1177,7 +1176,7 @@ def inspectTriesEthereum(startBlockNum, endBlockNum, inactivateEpoch):
         # print("blockNum:", blockNum)
 
         # inspect trie
-        if (blockNum+1) % inactivateEpoch == 0:
+        if (blockNum+1) % inactivateCriterion == 0:
             activeTrieRoot = params[0]
             startTime = datetime.now()
             nodeStat = inspectSubTrie(activeTrieRoot)[0]
@@ -1216,7 +1215,7 @@ def inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch,
         # print("blockNum:", blockNum)
 
         # inspect trie
-        if (blockNum+1) % inactivateEpoch == 0 or (blockNum+2) % inactivateEpoch == 0:
+        if (blockNum+1) % inactivateCriterion == 0 or (blockNum+2) % inactivateCriterion == 0:
             activeTrieRoot = params[0]
             inactiveTrieRoot = params[1]
 
@@ -1237,7 +1236,7 @@ def inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch,
     trieInspectFile.close()
 
 # inspect tries after simulation for Ethanos (same as inspectTriesEthereum())
-def inspectTriesEthanos(startBlockNum, endBlockNum, inactivateEpoch):
+def inspectTriesEthanos(startBlockNum, endBlockNum, inactivateCriterion):
 
     delimiter = " "
 
@@ -1245,8 +1244,8 @@ def inspectTriesEthanos(startBlockNum, endBlockNum, inactivateEpoch):
     # for Ethanos
     #
 
-    blockInfosLogFileName = "ethanos_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateEpoch) +".txt"
-    trieInspectLogFileName = "ethanos_simulate_trie_inspects_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateEpoch) + ".txt"
+    blockInfosLogFileName = "ethanos_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateCriterion) +".txt"
+    trieInspectLogFileName = "ethanos_simulate_trie_inspects_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateCriterion) + ".txt"
 
     blockInfosFile = open(blockInfosLogFilePath+blockInfosLogFileName, 'r')
     if os.path.exists(trieInspectsLogFilePath+trieInspectLogFileName):
@@ -1264,7 +1263,7 @@ def inspectTriesEthanos(startBlockNum, endBlockNum, inactivateEpoch):
         # print("blockNum:", blockNum)
 
         # inspect trie
-        if (blockNum+1) % inactivateEpoch == 0:
+        if (blockNum+1) % inactivateCriterion == 0:
             activeTrieRoot = params[0]
             startTime = datetime.now()
             nodeStat = inspectSubTrie(activeTrieRoot)[0]
@@ -1304,15 +1303,15 @@ if __name__ == "__main__":
     if simulationMode == 0:
         # replay txs in Ethereum for Ethereum
         simulateEthereum(startBlockNum, endBlockNum)
-        inspectTriesEthereum(startBlockNum, endBlockNum, inactivateEpoch)
+        inspectTriesEthereum(startBlockNum, endBlockNum, inactivateCriterion)
     elif simulationMode == 1:
          # replay txs in Ethereum for Ethane
         simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
         inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
     elif simulationMode == 2:
         # replay txs in Ethereum for Ethanos
-        simulateEthanos(startBlockNum, endBlockNum, inactivateEpoch)
-        inspectTriesEthanos(startBlockNum, endBlockNum, inactivateEpoch)
+        simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion)
+        inspectTriesEthanos(startBlockNum, endBlockNum, inactivateCriterion)
     else:
         print("wrong mode:", simulationMode)
 

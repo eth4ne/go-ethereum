@@ -75,7 +75,7 @@ def drawGraphsForBlockInfos(startBlockNum, endBlockNum, deleteEpoch=0, inactivat
         blockInfosLogFileName += "ethane_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) \
         + "_" + str(deleteEpoch) + "_" + str(inactivateEpoch) + "_" + str(inactivateCriterion) + ".txt"
     elif simulationMode == 2:
-        blockInfosLogFileName += "ethanos_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateEpoch) + ".txt"
+        blockInfosLogFileName += "ethanos_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateCriterion) + ".txt"
     else:
         print("wrong mode:", simulationMode)
         sys.exit()
@@ -128,13 +128,13 @@ def drawGraphsForBlockInfos(startBlockNum, endBlockNum, deleteEpoch=0, inactivat
     # set title
     if simulationMode == 0:
         graphTitlePrefix = "ethereum "
-        graphTitleSuffix = " (epoch: " + str(inactivateEpoch) + ")"
+        graphTitleSuffix = ""
     elif simulationMode == 1:
         graphTitlePrefix = "ethane "
         graphTitleSuffix = " (de: " + str(deleteEpoch) + ", ie: " + str(inactivateEpoch) + ", ic: " + str(inactivateCriterion) + ")"
     elif simulationMode == 2:
         graphTitlePrefix = "ethanos "
-        graphTitleSuffix = " (epoch: " + str(inactivateEpoch) + ")"
+        graphTitleSuffix = " (ic: " + str(inactivateCriterion) + ")"
     else:
         print("wrong mode:", simulationMode)
         sys.exit()
@@ -163,12 +163,12 @@ def drawGraphsForTrieInspects(startBlockNum, endBlockNum, deleteEpoch=0, inactiv
     # get log file name
     trieInspectsLogFileName = ""
     if simulationMode == 0:
-        trieInspectsLogFileName += "ethereum_simulate_trie_inspects_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateEpoch) + ".txt"
+        trieInspectsLogFileName += "ethereum_simulate_trie_inspects_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateCriterion) + ".txt"
     elif simulationMode == 1:
         trieInspectsLogFileName += "ethane_simulate_trie_inspects_" + str(startBlockNum) + "_" + str(endBlockNum) \
         + "_" + str(deleteEpoch) + "_" + str(inactivateEpoch) + "_" + str(inactivateCriterion) + ".txt"
     elif simulationMode == 2:
-        trieInspectsLogFileName += "ethanos_simulate_trie_inspects_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateEpoch) + ".txt"
+        trieInspectsLogFileName += "ethanos_simulate_trie_inspects_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateCriterion) + ".txt"
     else:
         print("wrong mode:", simulationMode)
         sys.exit()
@@ -221,13 +221,13 @@ def drawGraphsForTrieInspects(startBlockNum, endBlockNum, deleteEpoch=0, inactiv
     # set title
     if simulationMode == 0:
         graphTitlePrefix = "ethereum "
-        graphTitleSuffix = " (epoch: " + str(inactivateEpoch) + ")"
+        graphTitleSuffix = " (interval: " + str(inactivateCriterion) + ")"
     elif simulationMode == 1:
         graphTitlePrefix = "ethane "
         graphTitleSuffix = " (de: " + str(deleteEpoch) + ", ie: " + str(inactivateEpoch) + ", ic: " + str(inactivateCriterion) + ")"
     elif simulationMode == 2:
         graphTitlePrefix = "ethanos "
-        graphTitleSuffix = " (epoch: " + str(inactivateEpoch) + ")"
+        graphTitleSuffix = " (ic: " + str(inactivateCriterion) + ")"
     else:
         print("wrong mode:", simulationMode)
         sys.exit()
