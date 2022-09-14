@@ -25,7 +25,7 @@ db_user = 'ethereum'
 db_pass = '1234' #fill in the MariaDB/MySQL password.
 db_name = 'ethereum'
 
-geth_ipc = './bin/data/geth.ipc' #fill in the IPC path.
+geth_ipc = '/ethereum/geth-test/geth.ipc' #fill in the IPC path.
 
 start_block = 1
 end_block = 1000000
@@ -94,7 +94,10 @@ class Worker(threading.Thread):
     self.tx = tx
   
   def run(self):
-    self.web3.eth.send_transaction(self.tx)
+    try:
+      self.web3.eth.send_transaction(self.tx)
+    except:
+      print(self.tx)
   
 
 def run(_from, _to):
