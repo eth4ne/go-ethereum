@@ -123,9 +123,11 @@ var (
 	InactiveBoundaryKey  = uint64(0)               // inactive accounts have keys smaller than InactiveBoundaryKey
 	InactiveBoundaryKeys = make(map[uint64]uint64) // InactiveBoundaryKeys[blockNum] = inactiveBoundaryKey at that block (TODO(jmlee): maybe merge into BlockInfo)
 	RestoredKeys         = make([]Hash, 0)         // merkle proof keys in restore txs, need to be deleted after inactivation
+	RestorationNum       = uint64(0)               // total restore request num
+	RestoredNodeNum      = uint64(0)               // total restored leaf nodes
 
-	DeletedNodeNum  = uint64(0) // total deleted nodes in active trie
-	RestoredNodeNum = uint64(0) // total deleted nodes in inactive trie
+	DeletedActiveNodeNum   = uint64(0) // total deleted leaf nodes in active trie
+	DeletedInactiveNodeNum = uint64(0) // total deleted leaf nodes in inactive trie (# of used Merkle proofs for restoration)
 
 	// very large key which will not be reached forever
 	NoExistKey     = HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
@@ -184,9 +186,11 @@ type BlockInfo struct {
 	TimeToDelete     int64 // time to delete previous leaf nodes in Ethane
 	TimeToInactivate int64 // time to inactivate old leaf nodes in Ethane
 
-	DeletedNodeNum     uint64 // total deleted nodes in active trie
-	RestoredNodeNum    uint64 // total deleted nodes in inactive trie
-	InactivatedNodeNum uint64 // total inactivated nodes in active trie (= InactiveBoundaryKey)
+	RestorationNum         uint64 // total restore request num
+	RestoredNodeNum        uint64 // total restored leaf nodes
+	DeletedActiveNodeNum   uint64 // total deleted leaf nodes in active trie
+	DeletedInactiveNodeNum uint64 // total deleted leaf nodes in inactive trie (# of used Merkle proofs for restoration)
+	InactivatedNodeNum     uint64 // total inactivated leaf nodes in active trie (= InactiveBoundaryKey)
 }
 
 // TrieGraphInfo has edges and features representing trie

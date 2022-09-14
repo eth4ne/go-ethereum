@@ -174,8 +174,10 @@ func reset(deleteDisk bool) {
 	common.InactiveBoundaryKey = uint64(0)
 	common.CheckpointKeys = make(map[uint64]uint64)
 	common.RestoredKeys = make([]common.Hash, 0)
-	common.DeletedNodeNum = uint64(0)
+	common.RestorationNum = uint64(0)
 	common.RestoredNodeNum = uint64(0)
+	common.DeletedActiveNodeNum = uint64(0)
+	common.DeletedInactiveNodeNum = uint64(0)
 
 	// TODO(jmlee): init for Ethanos
 	// reset Ethanos related vars
@@ -357,7 +359,6 @@ func flushTrieNodes() {
 			deletePrevLeafNodes()
 			deleteElapsed := time.Since(deleteStartTime)
 			blockInfo.TimeToDelete = deleteElapsed.Nanoseconds()
-			blockInfo.DeletedNodeNum = common.DeletedNodeNum
 			// fmt.Println("time to delete:", blockInfo.TimeToDelete, "ns")
 		}
 
@@ -393,8 +394,6 @@ func flushTrieNodes() {
 
 					inactivateElapsed := time.Since(inactivateStartTime)
 					blockInfo.TimeToInactivate = inactivateElapsed.Nanoseconds()
-					blockInfo.InactivatedNodeNum = common.InactiveBoundaryKey
-					blockInfo.RestoredNodeNum = common.RestoredNodeNum
 					// fmt.Println("time to inactivate:", blockInfo.TimeToInactivate, "ns")
 				}
 
@@ -445,6 +444,11 @@ func flushTrieNodes() {
 	blockInfo.NewStorageNodeStat = common.NewStorageNodeStat
 	blockInfo.TotalNodeStat = common.TotalNodeStat
 	blockInfo.TotalStorageNodeStat = common.TotalStorageNodeStat
+	blockInfo.RestorationNum = common.RestorationNum
+	blockInfo.RestoredNodeNum = common.RestoredNodeNum
+	blockInfo.DeletedActiveNodeNum = common.DeletedActiveNodeNum
+	blockInfo.DeletedInactiveNodeNum = common.DeletedInactiveNodeNum
+	blockInfo.InactivatedNodeNum = common.InactiveBoundaryKey
 	common.Blocks[bn] = blockInfo
 	// delete too old block to store
 	blockNumToDelete := bn - common.MaxBlocksToStore - 1
@@ -945,6 +949,9 @@ func restoreAccountForEthanos(restoreAddr common.Address) {
 		os.Exit(1)
 	}
 
+	// logging # of restore
+	common.RestorationNum++
+
 	fmt.Println("restoreAccountForEthanos for", restoreAddr.Hex(), "finish")
 }
 
@@ -1035,7 +1042,7 @@ func deletePrevLeafNodes() {
 	}
 
 	// logging
-	common.DeletedNodeNum += uint64(len(common.KeysToDelete))
+	common.DeletedActiveNodeNum += uint64(len(common.KeysToDelete))
 
 	// init keys to delete
 	common.KeysToDelete = make([]common.Hash, 0)
@@ -1059,7 +1066,7 @@ func deleteRestoredLeafNodes() {
 	}
 
 	// logging
-	common.RestoredNodeNum += uint64(len(common.RestoredKeys))
+	common.DeletedInactiveNodeNum += uint64(len(common.RestoredKeys))
 
 	// init keys to delete
 	common.RestoredKeys = make([]common.Hash, 0)
@@ -1198,8 +1205,10 @@ func restoreAccountForEthane(restoreAddr common.Address) {
 	data, _ := rlp.EncodeToBytes(latestAcc) // code for experiment
 	updateTrieForEthane(restoreAddr, data)
 
-	// record merkle proofs for restoration
+	// record merkle proofs for restoration (to delete these later)
 	// RESTORE_ALL: restore all inactive leaf nodes of this address
+	common.RestorationNum++
+	common.RestoredNodeNum += uint64(len(common.AddrToKeyInactive[restoreAddr]))
 	common.RestoredKeys = append(common.RestoredKeys, common.AddrToKeyInactive[restoreAddr]...)
 	delete(common.AddrToKeyInactive, restoreAddr)
 
@@ -1346,8 +1355,8 @@ func printEthaneState() {
 	// current NextKey = # of state trie updates
 	fmt.Println("current NextKey:", common.NextKey, "/ NextKey(hex):", common.Uint64ToHash(common.NextKey).Hex())
 
-	fmt.Println("restoed nodes in inactive trie:", common.RestoredNodeNum)
-	fmt.Println("deleted nodes in active trie:", common.DeletedNodeNum)
+	fmt.Println("deleted nodes in inactive trie:", common.DeletedInactiveNodeNum)
+	fmt.Println("deleted nodes in active trie:", common.DeletedActiveNodeNum)
 
 	// print total/active/inactive trie stats (size, node num, node types, depths)
 	// inspectEthaneTries(latestBlockNum)
@@ -1392,8 +1401,11 @@ func saveBlockInfos(fileName string, startBlockNum, endBlockNum uint64) {
 		log += strconv.FormatInt(blockInfo.TimeToFlush, 10) + delimiter
 		log += strconv.FormatInt(blockInfo.TimeToDelete, 10) + delimiter
 		log += strconv.FormatInt(blockInfo.TimeToInactivate, 10) + delimiter
-		log += strconv.FormatUint(blockInfo.DeletedNodeNum, 10) + delimiter
+
+		log += strconv.FormatUint(blockInfo.RestorationNum, 10) + delimiter
 		log += strconv.FormatUint(blockInfo.RestoredNodeNum, 10) + delimiter
+		log += strconv.FormatUint(blockInfo.DeletedActiveNodeNum, 10) + delimiter
+		log += strconv.FormatUint(blockInfo.DeletedInactiveNodeNum, 10) + delimiter
 		log += strconv.FormatUint(blockInfo.InactivatedNodeNum, 10) + delimiter
 		// fmt.Println("log at block", blockNum, ":", log)
 
