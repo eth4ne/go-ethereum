@@ -47,20 +47,32 @@ var (
 	addressT = reflect.TypeOf(Address{})
 
 	//
+	// general options
+	//
+
+	// option: simulation mode (0: original ethereum, 1: Ethane, 2: Ethanos)
+	SimulationMode = 0
+
+	// option: collect flushed node infos or not
+	// (if CollectNodeInfos is false, then several functionalities will be deprecated, ex. inspectTrieMem())
+	CollectNodeInfos = false
+
+	// option: collect flushed node hashes or not
+	// (if CollectNodeInfos is true, then TrieNodeHashes is empty, since TrieNodeInfos will collect hashes)
+	// (if CollectNodeHahes, CollectNodeInfos are both false, then TotalNodeStat, TotalStorageNodeStat might be wrong)
+	CollectNodeHashes = true
+
+	// option: max number of blocks to store in "Blocks" (i.e., rollback limit)
+	MaxBlocksToStore = uint64(100000000)
+
+	//
 	// db stats for trie nodes (jmlee)
 	//
 
-	// collect flushed node infos or not
-	// (if CollectNodeInfos is false, then several functionalities will be deprecated, ex. inspectTrieMem())
-	CollectNodeInfos = false
 	// TrieNodeInfos[nodeHash] = node's information (containing all nodes flushed to diskdb)
 	TrieNodeInfos = make(map[Hash]NodeInfo)
 	// infos for dirty trie nodes, that will be flushed or discarded
 	TrieNodeInfosDirty = make(map[Hash]NodeInfo)
-	// collect flushed node hashes or not
-	// (if CollectNodeInfos is true, then TrieNodeHashes is empty, since TrieNodeInfos will collect hashes)
-	// (if CollectNodeHahes, CollectNodeInfos are both false, then TotalNodeStat, TotalStorageNodeStat might be wrong)
-	CollectNodeHashes = true
 	// all flushed nodes' hashes
 	TrieNodeHashes = make(map[Hash]struct{})
 
@@ -84,23 +96,31 @@ var (
 	// next block number to generate (which will be increased after flushing trie nodes)
 	// latest flushed block num = next block num - 1 (if next block num == 0, then no block exists)
 	NextBlockNum = uint64(0)
-	// max number of blocks to store in "Blocks" (i.e., rollback limit)
-	MaxBlocksToStore = uint64(100000000)
 
 	// to convert trie to graph representation
 	TrieGraph TrieGraphInfo
-
-	// simulation mode (0: original ethereum, 1: Ethane, 2: Ethanos)
-	SimulationMode = 0
 )
 
 var (
+
+	//
+	// Ethane options
+	//
+
+	// option: active trie & inactive trie vs one state trie
+	InactiveTrieExist = true
+
+	// TODO(jmlee): implement this
+	// option: forcely stop simulation when error occurs or not
+	StopWhenErrorOccurs = false
+
+	DeleteEpoch         = uint64(3) // option: block epoch to delete previous leaf nodes (from active area to temp area)
+	InactivateEpoch     = uint64(3) // option: block epoch to inactivate inactive leaf nodes (from temp area to inactive trie)
+	InactivateCriterion = uint64(3) // option (also for Ethanos): inactive accounts were touched more before than this block timestamp (min: 1) (const)
+
 	//
 	// vars for Ethane simulation (jmlee)
 	//
-
-	// active trie & inactive trie vs one state trie
-	InactiveTrieExist = true
 
 	// temp map for verifying compactTrie idea(jmlee)
 	// map storing active address list (AddrToKeyActive[addr] = counter key in trie's active part)
@@ -117,9 +137,6 @@ var (
 	CheckpointKeys = make(map[uint64]uint64) // initial NextKeys of blocks (CheckpointKeys[blockNumber] = initialNextKeyOfTheBlock)
 
 	KeysToDelete         = make([]Hash, 0)         // store previous leaf nodes' keys to delete later
-	DeleteEpoch          = uint64(3)               // block epoch to delete previous leaf nodes (from active area to temp area)
-	InactivateEpoch      = uint64(3)               // block epoch to inactivate inactive leaf nodes (from temp area to inactive trie)
-	InactivateCriterion  = uint64(3)               // inactive accounts were touched more before than this block timestamp (min: 1) (const)
 	InactiveBoundaryKey  = uint64(0)               // inactive accounts have keys smaller than InactiveBoundaryKey
 	InactiveBoundaryKeys = make(map[uint64]uint64) // InactiveBoundaryKeys[blockNum] = inactiveBoundaryKey at that block (TODO(jmlee): maybe merge into BlockInfo)
 	RestoredKeys         = make([]Hash, 0)         // merkle proof keys in restore txs, need to be deleted after inactivation
