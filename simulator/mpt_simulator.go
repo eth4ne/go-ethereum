@@ -1648,6 +1648,21 @@ func connHandler(conn net.Conn) {
 
 				response = []byte("success")
 
+			case "updateTrieDeleteForEthane":
+				// get params
+				// fmt.Println("execute updateTrieDeleteForEthane()")
+				addr := common.HexToAddress(params[1])
+
+				// get addrKey of this address
+				addrKey, exist := common.AddrToKeyActive[addr]
+				if exist {
+					// delete this account from active state trie
+					normTrie.TryDelete(addrKey[:])
+					delete(common.AddrToKeyActive, addr)
+				}
+
+				response = []byte("success")
+
 			case "updateStorageTrie":
 				// get params
 				// fmt.Println("execute updateStorageTrie()")

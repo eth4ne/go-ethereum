@@ -296,6 +296,17 @@ def updateTrieDelete(addr):
     # print("updateTrieDelete result:", deleteResult)
     return deleteResult
 
+# delete account of this address for Ethane
+def updateTrieDeleteForEthane(addr):
+    cmd = str("updateTrieDeleteForEthane")
+    cmd += str(",")
+    cmd += str(addr)
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    deleteResult = data.decode()
+    # print("updateTrieDeleteForEthane result:", deleteResult)
+    return deleteResult
+
 # update stroage trie 
 def updateStorageTrie(contractAddr, slot, value):
     cmd = str("updateStorageTrie")
@@ -895,7 +906,7 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
 
                 if item['type'] == 63:
                     # delete this address
-                    updateTrieDelete(addr)
+                    updateTrieDeleteForEthane(addr)
                     continue
 
                 nonce = item['nonce']
@@ -1155,6 +1166,8 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion):
 # inspect tries after simulation for ethereum
 def inspectTriesEthereum(startBlockNum, endBlockNum, inactivateCriterion):
 
+    print("inspectTriesEthereum() start")
+
     delimiter = " "
 
     blockInfosLogFileName = "ethereum_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + ".txt"
@@ -1191,6 +1204,8 @@ def inspectTriesEthereum(startBlockNum, endBlockNum, inactivateCriterion):
 
 # inspect tries after simulation for ethane
 def inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion):
+
+    print("inspectTriesEthane() start")
 
     delimiter = " "
 
@@ -1238,11 +1253,9 @@ def inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch,
 # inspect tries after simulation for Ethanos (same as inspectTriesEthereum())
 def inspectTriesEthanos(startBlockNum, endBlockNum, inactivateCriterion):
 
-    delimiter = " "
+    print("inspectTriesEthanos() start")
 
-    #
-    # for Ethanos
-    #
+    delimiter = " "
 
     blockInfosLogFileName = "ethanos_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateCriterion) +".txt"
     trieInspectLogFileName = "ethanos_simulate_trie_inspects_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateCriterion) + ".txt"
