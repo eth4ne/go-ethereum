@@ -473,7 +473,7 @@ func flushTrieNodes() {
 
 	// if Ethanos simulation, sweep state trie
 	if common.SimulationMode == 2 {
-		if (bn+1)%common.InactivateEpoch == 0 {
+		if (bn+1)%common.InactivateCriterion == 0 {
 			sweepStateTrie()
 		}
 	}
@@ -898,7 +898,7 @@ func updateTrieForEthanos(addr common.Address, key, value []byte) error {
 func restoreAccountForEthanos(restoreAddr common.Address) {
 
 	blockNum := common.NextBlockNum
-	currentEpochNum := blockNum / common.InactivateEpoch
+	currentEpochNum := blockNum / common.InactivateCriterion
 	if currentEpochNum < 2 {
 		fmt.Println("there is no inactive account at epoch 0~1")
 		os.Exit(1)
@@ -906,9 +906,9 @@ func restoreAccountForEthanos(restoreAddr common.Address) {
 
 	restoreSuccess := false
 	addrHash := crypto.Keccak256Hash(restoreAddr[:])
-	checkpointBlockNum := currentEpochNum*common.InactivateEpoch - 1
+	checkpointBlockNum := currentEpochNum*common.InactivateCriterion - 1
 
-	for ; int(checkpointBlockNum) >= 0; checkpointBlockNum -= common.InactivateEpoch {
+	for ; int(checkpointBlockNum) >= 0; checkpointBlockNum -= common.InactivateCriterion {
 
 		// open checkpoint block's state trie
 		checkpointRoot := common.Blocks[checkpointBlockNum].Root
