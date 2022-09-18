@@ -58,6 +58,11 @@ var (
 
 	NoExistKey  = HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff") // very large key which will not be reached forever (const)
 	ZeroAddress = HexToAddress("0x0")                                                             // (const)
+
+	DoDeleteLeafNode    bool       // flag to determine whether to delete leaf nodes or not
+	DeleteLeafNodeEpoch = int64(3) // block epoch to delete previous leaf nodes (from active area to temp area) (const)
+
+	KeysToDelete = make([]Hash, 0) // store previous leaf nodes' keys to delete later
 )
 
 // Marshal is a function that marshals the object into an io.Reader.

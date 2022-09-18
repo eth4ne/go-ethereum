@@ -1189,6 +1189,37 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	// Make sure no inconsistent state is leaked during insertion
 	externTd := new(big.Int).Add(block.Difficulty(), ptd)
 
+	// // Irrelevant of the canonical status, write the block itself to the database. // ---> original code location (moved down)
+	// //
+	// // Note all the components of block(td, hash->number map, header, body, receipts)
+	// // should be written atomically. BlockBatch is used for containing all components.
+	// blockBatch := bc.db.NewBatch()
+	// rawdb.WriteTd(blockBatch, block.Hash(), block.NumberU64(), externTd)
+	// rawdb.WriteBlock(blockBatch, block)
+	// rawdb.WriteReceipts(blockBatch, block.Hash(), block.NumberU64(), receipts)
+	// rawdb.WritePreimages(blockBatch, state.Preimages())
+	// if err := blockBatch.Write(); err != nil {
+	// 	log.Crit("Failed to write block into disk", "err", err)
+	// }
+
+	// Commit all cached state changes into underlying memory database.
+	root, err := state.Commit(bc.chainConfig.IsEIP158(block.Number())) // here, statedb.go > Commit() being executed (joonha)
+
+	// fmt.Println("(before) block.Hash(): ", block.Hash())
+	block.SetRoot(root) // set block root to trie root (joonha)
+	// fmt.Println("(after) block.Hash(): ", block.Hash())
+
+	/*
+	* Below code part was moved from above(before state.Commit()) to here(after state.Commit()).
+	* This is because if Deletion or Inactivation occurs, block root becomes different
+	* from the trie root which is the return value of state.Commit().
+	* (Block root is already calculated before state.Commit())
+	* So in Ethane, we set block root after commit with a custom function SetRoot().
+	* Block hash is also re-calculated when block.Hash() is called.
+	* In short, the revision of the state root affects the block root and the hash, and we handled them.
+	* (commenter: joonha)
+	 */
+
 	// Irrelevant of the canonical status, write the block itself to the database.
 	//
 	// Note all the components of block(td, hash->number map, header, body, receipts)
@@ -1201,8 +1232,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	if err := blockBatch.Write(); err != nil {
 		log.Crit("Failed to write block into disk", "err", err)
 	}
-	// Commit all cached state changes into underlying memory database.
-	root, err := state.Commit(bc.chainConfig.IsEIP158(block.Number()))
+
 	if err != nil {
 		return err
 	}
@@ -1334,13 +1364,23 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		}
 	}
 
+	//
 	// set flags for the next block
+	//
 	bn := block.Header().Number.Int64() + 1
 
+	// set common.DoDump
 	if bn%1 == 0 {
 		common.DoDump = true
 	} else {
 		common.DoDump = false
+	}
+
+	// set common.DoDeleteLeafNode
+	if bn%common.DeleteLeafNodeEpoch == common.DeleteLeafNodeEpoch-1 && bn != common.DeleteLeafNodeEpoch-1 {
+		common.DoDeleteLeafNode = true
+	} else {
+		common.DoDeleteLeafNode = false
 	}
 
 	return status, nil

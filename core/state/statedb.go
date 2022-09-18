@@ -668,7 +668,9 @@ func (s *StateDB) GetOrNewStateObject(addr common.Address) *stateObject {
 func (s *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) {
 
 	// insert to map to make compactTrie (jmlee)
+	common.MapMutex.Lock()
 	_, doExist := common.AddrToKey[addr]
+	common.MapMutex.Unlock()
 	if !doExist && addr != common.ZeroAddress { // creating whole-new account
 		newAddrKey := common.HexToHash(strconv.FormatInt(s.NextKey, 16))
 		// fmt.Println("make new account -> addr:", addr.Hex(), "/ keyHash:", newAddrKey)
@@ -1037,6 +1039,18 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 			storageCommitted += committed
 		}
 	}
+
+	// apply dirties to common.KeysToDelete (jmlee)
+	common.KeysToDelete = append(common.KeysToDelete, s.KeysToDeleteDirty...)
+
+	// delete previous leaf nodes
+	if common.DoDeleteLeafNode { // delete Epoch
+		s.DeletePreviousLeafNodes(common.KeysToDelete)
+
+		// reset common.KeysToDelete
+		common.KeysToDelete = make([]common.Hash, 0)
+	}
+
 	if len(s.stateObjectsDirty) > 0 {
 		s.stateObjectsDirty = make(map[common.Address]struct{})
 	}
@@ -1187,4 +1201,19 @@ func (s *StateDB) AddressInAccessList(addr common.Address) bool {
 // SlotInAccessList returns true if the given (address, slot)-tuple is in the access list.
 func (s *StateDB) SlotInAccessList(addr common.Address, slot common.Hash) (addressPresent bool, slotPresent bool) {
 	return s.accessList.Contains(addr, slot)
+}
+
+// DeletePreviousLeafNodes deletes previous leaf nodes from state trie (jmlee)
+func (s *StateDB) DeletePreviousLeafNodes(keysToDelete []common.Hash) {
+	// fmt.Println("\ntrie root before delete leaf nodes:", s.trie.Hash().Hex())
+
+	// delete previous leaf nodes from state trie
+	for i := 0; i < len(keysToDelete); i++ {
+		fmt.Println("delete previous leaf node -> key:", keysToDelete[i].Hex())
+		if err := s.trie.TryUpdate_SetKey(keysToDelete[i][:], nil); err != nil {
+			s.setError(fmt.Errorf("updateStateObject (%x) error: %v", keysToDelete[i][:], err))
+		}
+	}
+
+	// fmt.Println("trie root after delete leaf nodes:", s.trie.Hash().Hex())
 }
