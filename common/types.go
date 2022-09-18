@@ -52,9 +52,10 @@ var (
 	InspectEpoch = int64(1)
 	DoDump       bool
 
-	//
-	// ethane essential
-	//
+	/*
+	* ethane essentials
+	*
+	 */
 	AddrToKey = make(map[Address]Hash)
 	MapMutex  = sync.RWMutex{} // to avoid fatal error: "concurrent map read and map write"
 
@@ -66,7 +67,7 @@ var (
 	DeleteLeafNodeEpoch = int64(3)        // block epoch to delete previous leaf nodes (from active area to temp area) (const)
 	KeysToDelete        = make([]Hash, 0) // store previous leaf nodes' keys to delete later
 
-	// for inactivattion
+	// for inactivation
 	AddrToKey_inactive = make(map[Address][]Hash) // map storing inactive accounts list (joonha)
 
 	DoInactivateLeafNode    bool                    // flag to determine whether to delete leaf nodes or not
@@ -75,6 +76,11 @@ var (
 	CheckpointKeys          = make(map[int64]int64) // initial NextKeys of blocks (CheckpointKeys[blockNumber] = initialNextKeyOfTheBlock)
 	FirstKeyToCheck         int64
 	LastKeyToCheck          int64
+
+	// snapshot option
+	UsingActiveSnapshot          bool
+	UsingInactiveStorageSnapshot bool
+	UsingInactiveAccountSnapshot bool
 )
 
 // Marshal is a function that marshals the object into an io.Reader.

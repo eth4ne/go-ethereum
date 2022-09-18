@@ -231,6 +231,14 @@ var AppHelpFlagGroups = []flags.FlagGroup{
 			cli.HelpFlag,
 		},
 	},
+	{
+		Name: "ETHANE",
+		Flags: []cli.Flag{
+			utils.ActiveSnapshotFlag,          // to turn on/off active snapshot (joonha)
+			utils.InactiveStorageSnapshotFlag, // to turn on/off inactive storage snapshot (joonha)
+			utils.InactiveAccountSnapshotFlag, // to turn on/off inactive account snapshot (joonha)
+		},
+	},
 }
 
 func init() {
