@@ -245,3 +245,13 @@ func (t *SecureTrie) TryGet_SetKey(key []byte) ([]byte, error) {
 	// fmt.Println("at SecureTrie.TryGet_SetKey() -> key:", common.BytesToHash(key).Hex())
 	return t.trie.TryGet(key)
 }
+
+// DFS the range (from inactiveBoundaryKey to lastKeyToCheck) and return the found accounts (joonha)
+func (t *SecureTrie) TryGetAllLeafNodes(firstKey, lastKey []byte) ([][]byte, []common.Hash, error) {
+	return t.trie.TryGetAllLeafNodes(firstKey, lastKey)
+}
+
+// DFS the range (from inactiveBoundaryKey to lastKeyToCheck) and return the found accounts (joonha)
+func (t *SecureTrie) FindLeafNodes(firstKey, lastKey []byte) ([][]byte, []common.Hash, error) {
+	return t.trie.FindLeafNodes(firstKey, lastKey)
+}

@@ -1108,6 +1108,14 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 	if err != nil {
 		return
 	}
+
+	// save this block's initial NextKey
+	if work.header != nil && w.current != nil {
+		common.MapMutex.Lock()
+		common.CheckpointKeys[work.header.Number.Int64()] = w.current.state.NextKey
+		common.MapMutex.Unlock()
+	}
+
 	// Create an empty block based on temporary copied state for
 	// sealing in advance without waiting block execution finished.
 	if !noempty && atomic.LoadUint32(&w.noempty) == 0 {

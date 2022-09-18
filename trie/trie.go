@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"sync"
 
@@ -37,6 +38,13 @@ var (
 
 	// emptyState is the known hash of an empty state trie entry.
 	emptyState = crypto.Keccak256Hash(nil)
+
+	// to save the leaf info while traversing the trie (joonha)
+	Accounts = make([][]byte, 0)
+	Keys     = make([]common.Hash, 0)
+
+	accountsInTrie = make([][]byte, 0)
+	keysToLeafNode = make([]common.Hash, 0)
 )
 
 // LeafCallback is a callback type invoked when a trie operation reaches a leaf
@@ -635,5 +643,219 @@ func (t *Trie) getLastKey(origNode node, lastKey []byte) *big.Int {
 		return t.getLastKey(child, lastKey)
 	default:
 		panic(fmt.Sprintf("%T: invalid node: %v", origNode, origNode))
+	}
+}
+
+// TryGetAllLeafNodes returns all non-nil leaf nodes' accounts and keys between the firstKey and the lastKey (joonha)
+func (t *Trie) TryGetAllLeafNodes(firstKey, lastKey []byte) ([][]byte, []common.Hash, error) {
+	// init
+	Accounts = make([][]byte, 0)
+	Keys = make([]common.Hash, 0)
+
+	leftIsSafe := false  // true means 'bigger than the firstKey'
+	rightIsSafe := false // true means 'smaller than the lastKey'
+
+	t.tryGetAllLeafNodes(t.root, keybytesToHex(firstKey), keybytesToHex(firstKey), keybytesToHex(lastKey), leftIsSafe, rightIsSafe, 0)
+	return Accounts, Keys, nil
+}
+
+// internal function of TryGetAllLeafNodes (joonha)
+func (t *Trie) tryGetAllLeafNodes(currNode node, parentKey, firstKey, lastKey []byte, leftIsSafe, rightIsSafe bool, pos int) {
+
+	/*
+	* Depth-Frist-Search by recursion and find all the non-nil leaf nodes.
+	* Range check occurs at shortNode and fullNode.
+	*
+	* notation:
+	* pos - pointer that pointing each digit of the key
+	* n.Key - n's Key (shortNode's key is just the short common part)
+	* n - encountered node
+	 */
+
+	// TODO (joonha): https://www.geeksforgeeks.org/how-to-compare-two-slices-of-bytes-in-golang/
+	// refer above site and try to use bytes.Compare() function.
+	// it surely will increase the code readability
+
+	switch n := (currNode).(type) {
+	case nil:
+		// fmt.Println("NODE IS NIL\n\n")
+		return
+
+	case valueNode: // in this case, should archive the node into the result array
+		// fmt.Println("\nVALUENODE\n\n")
+		if n != nil {
+			// key of that account
+			k := big.NewInt(0)
+			for i := 0; i < len(parentKey[:pos-1]); i++ {
+				k = k.Add(k, big.NewInt(int64(math.Pow(16, float64(i))*float64(parentKey[len(parentKey[:pos-1])-i-1]))))
+			}
+			hk := common.BigToHash(k)
+
+			// found non-nil account
+			Accounts = append(Accounts, n)
+			// fmt.Println("detected account: ", common.BytesToAddress(n))
+			Keys = append(Keys, hk)
+		}
+		return
+
+	case *shortNode:
+		// fmt.Println("\nSHORTNODE")
+
+		// shortNode Key copy from n.Key to key (direct key edit affects other nodes, so use tempKey)
+		tempKey := make([]byte, len(parentKey))
+		copy(tempKey, parentKey)
+		// fmt.Println("(SN)n.Key: ", n.Key)
+		// fmt.Println("len(n.Key): ", len(n.Key))
+
+		for i := 0; i < len(n.Key); i++ {
+			tempKey[pos+i] = n.Key[i]
+			// fmt.Println("n.Key[",i,"]: ", n.Key[i] )
+
+			// if left is not safe, should compare with the firstKey
+			if !leftIsSafe && firstKey[pos+i] < n.Key[i] {
+				// in the range
+				leftIsSafe = true
+			} else if !leftIsSafe && firstKey[pos+i] > n.Key[i] {
+				// out of range
+				// fmt.Println("left: out of range\n")
+				return
+			}
+
+			// if right is not safe, should compare with the lastKey
+			if !rightIsSafe && lastKey[pos+i] > n.Key[i] {
+				// in the range
+				rightIsSafe = true
+			} else if !rightIsSafe && lastKey[pos+i] < n.Key[i] {
+				// out of range
+				// fmt.Println("right: out of range\n")
+				return
+			}
+		}
+		// this node is in the range, so move on to the child
+		t.tryGetAllLeafNodes(n.Val, tempKey, firstKey, lastKey, leftIsSafe, rightIsSafe, pos+len(n.Key))
+		return
+
+	case *fullNode:
+		// fmt.Println("\nFULLNODE")
+		for i := 0; i < 16; i++ {
+			tempKey := make([]byte, len(parentKey))
+			copy(tempKey, parentKey)
+			tempKey[pos] = byte(i)
+			// fmt.Println("tempKey: ", tempKey)
+
+			leftIsSafe = false
+			rightIsSafe = false
+			leftOut := false  // true means 'smaller than the firstKey' (out of range)
+			rightOut := false // true means 'bigger than the lastKey' (out of range)
+
+			// check if THIS child is between the firstKey and the lastKey
+			for j := 0; j <= pos; j++ {
+				// fmt.Println("firstKey[",j,"]: ", firstKey[j], " / tempKey[",j,"]:", tempKey[j], " / lastKey[",j,"]:", lastKey[j])
+				if !leftIsSafe && firstKey[j] < tempKey[j] {
+					// in the range
+					leftIsSafe = true
+				} else if !leftIsSafe && firstKey[j] > tempKey[j] {
+					// out of range
+					leftOut = true
+				}
+
+				if !rightIsSafe && lastKey[j] > tempKey[j] {
+					// in the range
+					rightIsSafe = true
+				} else if !rightIsSafe && lastKey[j] < tempKey[j] {
+					// out of range
+					rightOut = true
+					break // no need to go more because it already surpassed the lastKey
+				}
+			}
+			// fmt.Println("pos:", pos, " / leftIsSafe:", leftIsSafe, " / rightIsSafe:", rightIsSafe, " / leftOut:", leftOut, " / rightOut:", rightOut)
+			if leftOut || rightOut { // out of range
+				// fmt.Println("X ------> (FN) i:", i, "(out of range)")
+				if rightOut {
+					break // no need to go more because it already surpassed the lastKey
+				} // When just the leftOut is true, should go more because we've not reached the range yet!
+			} else { // this node is in the range, so move on to the child
+				// fmt.Println("O ------> (FN) pos:",pos," / i: ", i)
+				t.tryGetAllLeafNodes(n.Children[i], tempKey, firstKey, lastKey, leftIsSafe, rightIsSafe, pos+1)
+			}
+		}
+		return
+
+	case hashNode:
+		// fmt.Println("HASHNODE")
+		child, err := t.resolveHash(n, parentKey[:pos])
+		if err != nil {
+			return
+		}
+		t.tryGetAllLeafNodes(child, parentKey, firstKey, lastKey, leftIsSafe, rightIsSafe, pos)
+		return
+
+	default:
+		panic(fmt.Sprintf("%T: invalid node: %v", currNode, currNode))
+	}
+}
+
+// FindLeafNodes returns all leaf nodes within range (jmlee)
+// ex. leafNodes, keys, err := normTrie.FindLeafNodes(common.HexToHash("0x0").Bytes(),
+// 					common.HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff").Bytes())
+func (t *Trie) FindLeafNodes(startKey, endKey []byte) ([][]byte, []common.Hash, error) {
+	// reset buffers
+	accountsInTrie = make([][]byte, 0)
+	keysToLeafNode = make([]common.Hash, 0)
+	prefix := []byte{}
+
+	// start iterating
+	t.findLeafNodes(t.root, prefix, keybytesToHex(startKey), keybytesToHex(endKey))
+	return accountsInTrie, keysToLeafNode, nil
+}
+
+func (t *Trie) findLeafNodes(n node, prefix, startKey, endKey []byte) {
+
+	switch n := n.(type) {
+	case *shortNode:
+		// update prefix & range
+		prefix = append(prefix, n.Key...)
+		prefixLen := len(prefix)
+		subStartKey := startKey[:prefixLen]
+		subEndKey := endKey[:prefixLen]
+
+		// keep traversing if we are still in range (subStartKey <= prefix <= subEndKey)
+		if bytes.Compare(subStartKey, prefix) <= 0 && bytes.Compare(subEndKey, prefix) >= 0 {
+			t.findLeafNodes(n.Val, prefix, startKey, endKey)
+		}
+
+	case *fullNode:
+		// update range
+		prefixLen := len(prefix) + 1 // add 1 for fullNode's index
+		subStartKey := startKey[:prefixLen]
+		subEndKey := endKey[:prefixLen]
+
+		for i, childNode := range &n.Children {
+			if childNode != nil {
+				// update prefix
+				indexToByte := common.HexToHash("0x" + indices[i])
+				extendedPrefix := append(prefix, indexToByte[len(indexToByte)-1])
+
+				// keep traversing if we are still in range (subStartKey <= prefix <= subEndKey)
+				if bytes.Compare(subStartKey, extendedPrefix) <= 0 && bytes.Compare(subEndKey, extendedPrefix) >= 0 {
+					t.findLeafNodes(childNode, extendedPrefix, startKey, endKey)
+				}
+			}
+		}
+
+	case hashNode:
+		rn, err := t.resolveHash(n, nil)
+		if err != nil {
+			panic("trie.findLeafNodes(): this node do not exist")
+		}
+		t.findLeafNodes(rn, prefix, startKey, endKey)
+
+	case valueNode:
+		// find leaf node within range
+		accountsInTrie = append(accountsInTrie, n)
+		keysToLeafNode = append(keysToLeafNode, common.BytesToHash(hexToKeybytes(prefix)))
+
+	default:
+		panic(fmt.Sprintf("%T: invalid node: %v", n, n))
 	}
 }

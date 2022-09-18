@@ -1383,6 +1383,17 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		common.DoDeleteLeafNode = false
 	}
 
+	// set common.DoInactivateLeafNode
+	if bn%common.InactivateLeafNodeEpoch == common.InactivateLeafNodeEpoch-1 && bn != common.InactivateLeafNodeEpoch-1 {
+		common.DoInactivateLeafNode = true
+	} else {
+		common.DoInactivateLeafNode = false
+	}
+	common.MapMutex.Lock()
+	common.FirstKeyToCheck = common.CheckpointKeys[bn-(2*common.InactivateLeafNodeEpoch-1)]
+	common.LastKeyToCheck = common.CheckpointKeys[bn-(common.InactivateLeafNodeEpoch-1)] - 1
+	common.MapMutex.Unlock()
+
 	return status, nil
 }
 

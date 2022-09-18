@@ -52,17 +52,29 @@ var (
 	InspectEpoch = int64(1)
 	DoDump       bool
 
+	//
 	// ethane essential
+	//
 	AddrToKey = make(map[Address]Hash)
 	MapMutex  = sync.RWMutex{} // to avoid fatal error: "concurrent map read and map write"
 
 	NoExistKey  = HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff") // very large key which will not be reached forever (const)
 	ZeroAddress = HexToAddress("0x0")                                                             // (const)
 
-	DoDeleteLeafNode    bool       // flag to determine whether to delete leaf nodes or not
-	DeleteLeafNodeEpoch = int64(3) // block epoch to delete previous leaf nodes (from active area to temp area) (const)
+	// for deletion
+	DoDeleteLeafNode    bool              // flag to determine whether to delete leaf nodes or not
+	DeleteLeafNodeEpoch = int64(3)        // block epoch to delete previous leaf nodes (from active area to temp area) (const)
+	KeysToDelete        = make([]Hash, 0) // store previous leaf nodes' keys to delete later
 
-	KeysToDelete = make([]Hash, 0) // store previous leaf nodes' keys to delete later
+	// for inactivattion
+	AddrToKey_inactive = make(map[Address][]Hash) // map storing inactive accounts list (joonha)
+
+	DoInactivateLeafNode    bool                    // flag to determine whether to delete leaf nodes or not
+	InactivateLeafNodeEpoch = int64(3)              // block epoch to inactivate inactive leaf nodes (from temp area to inactive trie) (joonha)
+	InactiveBoundaryKey     = int64(0)              // inactive accounts have keys smaller than this key
+	CheckpointKeys          = make(map[int64]int64) // initial NextKeys of blocks (CheckpointKeys[blockNumber] = initialNextKeyOfTheBlock)
+	FirstKeyToCheck         int64
+	LastKeyToCheck          int64
 )
 
 // Marshal is a function that marshals the object into an io.Reader.
@@ -134,16 +146,16 @@ func SaveAddrToKey(blockHash string) error {
 		fmt.Println("save AddrToKey suceess!")
 	}
 
-	// // AddrToKey_inactive
-	// path1 := "a2k-inact-init.map"
-	// // save it as a file
-	// fmt.Println("save AddrToKey_inactive path1:", path1)
-	// err = SaveAsFile(path1, AddrToKey_inactive)
-	// if err != nil {
-	// 	fmt.Println("save AddrToKey_inactive fail:", err)
-	// } else {
-	// 	fmt.Println("save AddrToKey_inactive suceess!")
-	// }
+	// AddrToKey_inactive
+	path1 := "a2k-inact-init.map"
+	// save it as a file
+	fmt.Println("save AddrToKey_inactive path1:", path1)
+	err = SaveAsFile(path1, AddrToKey_inactive)
+	if err != nil {
+		fmt.Println("save AddrToKey_inactive fail:", err)
+	} else {
+		fmt.Println("save AddrToKey_inactive suceess!")
+	}
 
 	return err
 }
@@ -171,16 +183,16 @@ func SaveAddrToKey_result(blockHash string) error {
 		fmt.Println("save AddrToKey suceess!")
 	}
 
-	// // AddrToKey_inactive
-	// path1 := "a2k-inact-result.map"
-	// // save it as a file
-	// fmt.Println("save AddrToKey_inactive path1:", path1)
-	// err = SaveAsFile(path1, AddrToKey_inactive)
-	// if err != nil {
-	// 	fmt.Println("save AddrToKey_inactive fail:", err)
-	// } else {
-	// 	fmt.Println("save AddrToKey_inactive suceess!")
-	// }
+	// AddrToKey_inactive
+	path1 := "a2k-inact-result.map"
+	// save it as a file
+	fmt.Println("save AddrToKey_inactive path1:", path1)
+	err = SaveAsFile(path1, AddrToKey_inactive)
+	if err != nil {
+		fmt.Println("save AddrToKey_inactive fail:", err)
+	} else {
+		fmt.Println("save AddrToKey_inactive suceess!")
+	}
 
 	return err
 }
@@ -202,15 +214,15 @@ func LoadAddrToKey(blockHash string) error {
 	}
 
 	// AddrToKey_inactive
-	// path1 := "a2k-inact-init.map" // from 0
-	// // path1 := "a2k-inact-result.map" // from 45501
-	// fmt.Println("load AddrToKey path:", path1)
-	// err = LoadFromFile(path1, &AddrToKey_inactive)
-	// if err != nil {
-	// 	fmt.Println("load AddrToKey_inactive fail:", err)
-	// } else {
-	// 	fmt.Println("load AddrToKey_inactive suceess!")
-	// }
+	path1 := "a2k-inact-init.map" // from 0
+	// path1 := "a2k-inact-result.map" // from 45501
+	fmt.Println("load AddrToKey path:", path1)
+	err = LoadFromFile(path1, &AddrToKey_inactive)
+	if err != nil {
+		fmt.Println("load AddrToKey_inactive fail:", err)
+	} else {
+		fmt.Println("load AddrToKey_inactive suceess!")
+	}
 
 	// for k, v := range AddrToKey {
 	// 	fmt.Println("common.AddrToKey -> k:", k, " / v:", v)
