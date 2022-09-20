@@ -85,6 +85,9 @@ var (
 
 	// same as SecureTrie.hashKeyBuf (to mimic SecureTrie)
 	hashKeyBuf = make([]byte, common.HashLength)
+
+	// timer to measure block process time
+	flushStartTime time.Time
 )
 
 func reset(deleteDisk bool) {
@@ -183,6 +186,8 @@ func reset(deleteDisk bool) {
 	// reset Ethanos related vars
 	pruner.InitBloomFilters()
 
+	// set block flush timer
+	flushStartTime = time.Now()
 }
 
 // rollbackUncommittedUpdates goes back to latest flushed trie (i.e., undo all uncommitted trie updates)
@@ -344,7 +349,6 @@ func flushTrieNodes() {
 	bn := common.NextBlockNum
 	fmt.Println("flush start: generate block number", bn)
 	blockInfo, _ := common.Blocks[bn] // for logging block info
-	flushStartTime := time.Now()
 
 	// if Ethane simulation, do inactivate or delete previous leaf nodes
 	if common.SimulationMode == 1 {
@@ -432,8 +436,8 @@ func flushTrieNodes() {
 	dirtyStorageTries = make(map[common.Address]*trie.SecureTrie)
 
 	// logging flush time
-	flushElapsed := time.Since(flushStartTime)
-	blockInfo.TimeToFlush = flushElapsed.Nanoseconds()
+	blockInfo.TimeToFlush = time.Since(flushStartTime).Nanoseconds()
+	flushStartTime = time.Now()
 	// fmt.Println("time to flush:", blockInfo.TimeToFlush, "ns")
 
 	// update block info (to be able to rollback to this state later)
