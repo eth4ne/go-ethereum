@@ -224,11 +224,11 @@ func (s *StateDB) DumpToCollector(c DumpCollector, conf *DumpConfig) (nextKey []
 }
 
 /*
+* [Ethane]
 * DumpToCollector_Ethane iterates the state according to the given options and inserts
 * the items into a collector for aggregation or serialization.
 * Different from original DumpToCollector, DumpToCollector_Ethane merges crumb accounts.
 * Only for this dump test, crumb's nonce should be set to zero not to blockNum * 64.
-* (commenter: joonha)
  */
 func (s *StateDB) DumpToCollector_Ethane(c DumpCollector, conf *DumpConfig) (nextKey []byte) {
 	// Sanitize the input to allow nil configs
@@ -241,12 +241,6 @@ func (s *StateDB) DumpToCollector_Ethane(c DumpCollector, conf *DumpConfig) (nex
 		start            = time.Now()
 		// logged           = time.Now()
 	)
-	// map을 sorted order로 iterate하려면 key를 sort()한 후에 iterate해야 한다고 함.
-	// https://www.educative.io/answers/how-to-iterate-over-a-golang-map-in-sorted-order
-
-	// 그 최종값은 dump의 root로 할 필요는 없을 것 같음.
-	// dump의 account를 sorting해서 json 파일에 적는다.
-	// 그런 다음에 그냥 그 json 파일 두 개가 일치하는지를 살피면 됨.
 
 	it := trie.NewIterator(s.trie.NodeIterator(conf.Start))
 	for it.Next() {

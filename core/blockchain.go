@@ -1382,7 +1382,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	}
 
 	// print database inspect result (jmlee)
-	//fmt.Println("\nblock inserted -> blocknumber:", block.Header().Number.Int64())
+	// fmt.Println("\nblock inserted -> blocknumber:", block.Header().Number.Int64())
 	// fmt.Println("InactiveBoundaryKey:", common.InactiveBoundaryKey)
 	// fmt.Println("common.CheckpointKeys:", common.CheckpointKeys)
 	if block.Header().Number.Int64()%common.InspectEpoch == 0 {
@@ -1398,9 +1398,11 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		}
 	}
 
-	//
-	// set flags for the next block
-	//
+	/* [Ethane]
+	* set flags for the next block
+	 */
+
+	// next block
 	bn := block.Header().Number.Int64() + 1
 
 	// set common.DoDump
