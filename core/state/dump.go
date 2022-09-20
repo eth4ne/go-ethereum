@@ -317,6 +317,142 @@ func (s *StateDB) DumpToCollector_Ethane(c DumpCollector, conf *DumpConfig) (nex
 	return nextKey
 }
 
+/*
+* [Ethane]
+* DumpToCollector_bySnapshot_Ethane iterates the snapshot and inserts
+* the items into a collector for aggregation or serialization.
+* Different from original DumpToCollector, DumpToCollector_bySnapshot_Ethane merges crumb accounts.
+* Only for this dump test, crumb's nonce should be set to zero not to blockNum * 64.
+ */
+func (s *StateDB) DumpToCollector_bySnapshot_Ethane(c DumpCollector, conf *DumpConfig) {
+	// Sanitize the input to allow nil configs
+	if conf == nil {
+		conf = new(DumpConfig)
+	}
+
+	var nilHash common.Hash
+	emptyRoot := common.HexToHash("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
+	emptyCode := common.HexToHash("c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470")
+
+	// active accounts
+	snapRoot := s.snap.Root()                           // un-updated current block root
+	accountList := s.snaps.AccountList_ethane(snapRoot) // get acc's key which is 'hash(addr)'
+
+	// fmt.Println("\n\naccountList:\n", accountList)
+
+	// remove duplicates
+	alreadyInList := make(map[common.Hash]bool)
+	var accountList_no_redundancy []common.Hash
+	for _, accKey := range accountList {
+		if _, doExist := alreadyInList[accKey]; !doExist { // no duplicate
+			alreadyInList[accKey] = true
+			accountList_no_redundancy = append(accountList_no_redundancy, accKey)
+		}
+	}
+
+	// fmt.Println("\n\naccountList_no_redundancy:\n", accountList_no_redundancy)
+
+	for _, accKey := range accountList_no_redundancy {
+		acc := s.snaps.GetAccountFromSnapshots(accKey, snapRoot, false)
+
+		if acc == nil {
+			continue // 0x0000000000000000000000000000000000000000000000000000000000000000
+		}
+
+		// fmt.Println("acc: ", acc)
+		// fmt.Println("acc.Balance: ", acc.Balance)
+		// fmt.Println("acc.Nonce: ", acc.Nonce)
+		// fmt.Println("acc.Root: ", acc.Root)
+		// fmt.Println("acc.CodeHash: ", acc.CodeHash)
+
+		account := DumpAccount{ // incoming account
+			Balance:  acc.Balance.String(),
+			Nonce:    acc.Nonce,
+			Root:     acc.Root[:],  // when no root, it is not an emptyRoot but nil (just in case of snapshot)
+			CodeHash: acc.CodeHash, // when no code, it is not an emptyCode but nil (just in case of snapshot)
+		}
+
+		addr := acc.Addr
+		if common.BytesToHash(account.Root) == nilHash {
+			account.Root = emptyRoot[:]
+		}
+		if common.BytesToHash(account.CodeHash) == nilHash {
+			account.CodeHash = emptyCode[:]
+		}
+
+		// write dump
+		c.OnAccount(addr, account)
+	}
+
+	// inactive accounts
+	snapRoot = s.snap_inactive.Root()
+	accountList = s.snaps_inactive.AccountList_ethane(snapRoot) // get acc's key which is 'counter'
+
+	// remove duplicates
+	alreadyInList = make(map[common.Hash]bool)
+	var accountList_inactive_no_redundancy []common.Hash
+	for _, accKey := range accountList {
+		if _, doExist := alreadyInList[accKey]; !doExist { // no duplicate
+			alreadyInList[accKey] = true
+			accountList_inactive_no_redundancy = append(accountList_inactive_no_redundancy, accKey)
+		}
+	}
+
+	for _, accKey := range accountList_inactive_no_redundancy {
+		acc := s.snaps_inactive.GetAccountFromSnapshots(accKey, snapRoot, false)
+		account := DumpAccount{ // incoming account
+			Balance:  acc.Balance.String(),
+			Nonce:    acc.Nonce,
+			Root:     acc.Root[:],
+			CodeHash: acc.CodeHash,
+		}
+
+		// fmt.Println("acc: ", acc)
+		// fmt.Println("acc.Balance: ", acc.Balance)
+		// fmt.Println("acc.Nonce: ", acc.Nonce)
+		// fmt.Println("acc.Root: ", acc.Root)
+		// fmt.Println("acc.CodeHash: ", acc.CodeHash)
+
+		// merge inactive crumbs
+		addr := acc.Addr
+		prevDumpAccount, doExist := c.getAccount(addr)
+		if doExist {
+			prevBalance := new(big.Int)
+			prevBalance, _ = prevBalance.SetString(prevDumpAccount.Balance, 10)
+			prevBalance_1 := new(big.Int)
+			account.Balance = prevBalance_1.Add(acc.Balance, prevBalance).String()
+			// // debugging
+			// if addr == common.HexToAddress("0xa1e4380a3b1f749673e270229993ee55f35663b4") { // 46147
+			// 	fmt.Println("\n\nprevDumpAccount.Balance: ", prevDumpAccount.Balance)
+			// 	// fmt.Println("n: ", n)
+			// 	fmt.Println("prevBalance: ", prevBalance)
+			// 	fmt.Println("acc.Balance: ", acc.Balance)
+			// 	fmt.Println("account.Balance:, ", account.Balance)
+			// }
+			account.Nonce += prevDumpAccount.Nonce
+			if common.BytesToHash(prevDumpAccount.Root) != nilHash && common.BytesToHash(prevDumpAccount.Root) != emptyRoot { // not empty
+				account.Root = prevDumpAccount.Root
+			} else { // empty
+				account.Root = emptyRoot[:]
+			}
+			if common.BytesToHash(prevDumpAccount.CodeHash) != nilHash && common.BytesToHash(prevDumpAccount.CodeHash) != emptyCode { // not empty
+				account.CodeHash = prevDumpAccount.CodeHash
+			} else { // empty
+				account.CodeHash = emptyCode[:]
+			}
+		}
+		if common.BytesToHash(account.Root) == nilHash {
+			account.Root = emptyRoot[:]
+		}
+		if common.BytesToHash(account.CodeHash) == nilHash {
+			account.CodeHash = emptyCode[:]
+		}
+
+		// write dump
+		c.OnAccount(addr, account)
+	}
+}
+
 // RawDump returns the entire state an a single large object
 func (s *StateDB) RawDump(opts *DumpConfig) Dump {
 	dump := &Dump{
@@ -335,6 +471,15 @@ func (s *StateDB) RawDump_Ethane(opts *DumpConfig) Dump {
 	return *dump
 }
 
+// RawDump returns the entire state an a single large object
+func (s *StateDB) RawDump_bySnapshot_Ethane(opts *DumpConfig) Dump {
+	dump := &Dump{
+		Accounts: make(map[common.Address]DumpAccount),
+	}
+	s.DumpToCollector_bySnapshot_Ethane(dump, opts)
+	return *dump
+}
+
 // Dump returns a JSON string representing the entire state as a single json-object
 func (s *StateDB) Dump(opts *DumpConfig) []byte {
 	dump := s.RawDump(opts)
@@ -348,6 +493,16 @@ func (s *StateDB) Dump(opts *DumpConfig) []byte {
 // Dump returns a JSON string representing the entire state as a single json-object // let's use this func to export Accounts mapping (joonha)
 func (s *StateDB) Dump_Ethane(opts *DumpConfig) []byte {
 	dump := s.RawDump_Ethane(opts)
+	json, err := json.MarshalIndent(dump, "", "    ")
+	if err != nil {
+		fmt.Println("Dump err", err)
+	}
+	return json
+}
+
+// Dump returns a JSON string representing the entire state as a single json-object // let's use this func to export Accounts mapping (joonha)
+func (s *StateDB) Dump_bySnapshot_Ethane(opts *DumpConfig) []byte {
+	dump := s.RawDump_bySnapshot_Ethane(opts)
 	json, err := json.MarshalIndent(dump, "", "    ")
 	if err != nil {
 		fmt.Println("Dump err", err)

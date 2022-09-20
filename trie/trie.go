@@ -45,6 +45,8 @@ var (
 
 	accountsInTrie = make([][]byte, 0)
 	keysToLeafNode = make([]common.Hash, 0)
+
+	Slots = make(map[common.Hash][]byte)
 )
 
 // LeafCallback is a callback type invoked when a trie operation reaches a leaf
@@ -857,5 +859,69 @@ func (t *Trie) findLeafNodes(n node, prefix, startKey, endKey []byte) {
 
 	default:
 		panic(fmt.Sprintf("%T: invalid node: %v", n, n))
+	}
+}
+
+// TryGetAllSlots return all the found slots while traversing storage trie (joonha)
+func (t *Trie) TryGetAllSlots() (map[common.Hash][]byte, error) {
+	// init
+	Slots = make(map[common.Hash][]byte)
+	firstKey := common.Int64ToHash(0)
+
+	t.tryGetAllSlots(t.root, keybytesToHex(firstKey[:]), 0)
+	return Slots, nil
+}
+
+// (joonha)
+func (t *Trie) tryGetAllSlots(currNode node, parentKey []byte, pos int) {
+	switch n := (currNode).(type) {
+	case nil:
+		// fmt.Println("NODE IS NIL")
+		return
+
+	case valueNode: // in this case, should archive the slot into the result array
+		// fmt.Println("VALUENODE")
+		if n != nil {
+			slotKey := common.BytesToHash(hexToKeybytes(parentKey))
+			Slots[slotKey] = n
+		}
+		return
+
+	case *shortNode:
+		// fmt.Println("SHORTNODE")
+
+		// apply shortNode.key(=n.Key) to tempKey
+		// direct key edit affects other nodes, so use tempKey
+		tempKey := make([]byte, len(parentKey)) // parent key is already in hash format
+		copy(tempKey, parentKey)
+		for i := 0; i < len(n.Key); i++ {
+			tempKey[pos+i] = n.Key[i]
+		}
+
+		t.tryGetAllSlots(n.Val, tempKey, pos+len(n.Key))
+		return
+
+	case *fullNode:
+		// fmt.Println("FULLNODE")
+		for i := 0; i < 16; i++ {
+			tempKey := make([]byte, len(parentKey))
+			copy(tempKey, parentKey)
+			tempKey[pos] = byte(i)
+			// fmt.Println("tempKey: ", tempKey)
+			t.tryGetAllSlots(n.Children[i], tempKey, pos+1)
+		}
+		return
+
+	case hashNode:
+		// fmt.Println("HASHNODE")
+		child, err := t.resolveHash(n, parentKey[:pos])
+		if err != nil {
+			return
+		}
+		t.tryGetAllSlots(child, parentKey, pos)
+		return
+
+	default:
+		panic(fmt.Sprintf("%T: invalid node: %v", currNode, currNode))
 	}
 }

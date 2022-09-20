@@ -112,6 +112,7 @@ type Trie interface {
 	TryGet_SetKey(key []byte) ([]byte, error)
 	TryGetAllLeafNodes([]byte, []byte) ([][]byte, []common.Hash, error)
 	FindLeafNodes([]byte, []byte) ([][]byte, []common.Hash, error)
+	TryGetAllSlots() (map[common.Hash][]byte, error)
 }
 
 // NewDatabase creates a backing store for state. The returned database is safe for

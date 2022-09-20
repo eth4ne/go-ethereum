@@ -52,12 +52,11 @@ var (
 	InspectEpoch = int64(1)
 	DoDump       bool
 
-	/*
-	* ethane essentials
-	*
-	 */
-	AddrToKey = make(map[Address]Hash)
-	MapMutex  = sync.RWMutex{} // to avoid fatal error: "concurrent map read and map write"
+	//
+	// ethane essentials (below all)
+	//
+	AddrToKey = make(map[Address]Hash) // temp map for verifying compactTrie idea (address: real address of the account / hash: specific key for the account in the state trie) (jmlee)
+	MapMutex  = sync.RWMutex{}         // to avoid fatal error: "concurrent map read and map write"
 
 	NoExistKey  = HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff") // very large key which will not be reached forever (const)
 	ZeroAddress = HexToAddress("0x0")                                                             // (const)
@@ -81,6 +80,10 @@ var (
 	UsingActiveSnapshot          bool
 	UsingInactiveStorageSnapshot bool
 	UsingInactiveAccountSnapshot bool
+
+	// snapshot for genesis allocation
+	GenesisSnapshot       = make(map[Hash][]byte)
+	UsingActiveSnapshot_1 bool
 )
 
 // Marshal is a function that marshals the object into an io.Reader.

@@ -275,6 +275,8 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
 		for key, value := range account.Storage {
 			statedb.SetState(addr, key, value)
 		}
+		// set GenesisSnapshot for the genesis allocation (joonha)
+		statedb.SetSnapshot(addr, account.Balance, account.Code)
 	}
 	root := statedb.IntermediateRoot(false)
 	head := &types.Header{

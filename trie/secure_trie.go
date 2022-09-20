@@ -255,3 +255,8 @@ func (t *SecureTrie) TryGetAllLeafNodes(firstKey, lastKey []byte) ([][]byte, []c
 func (t *SecureTrie) FindLeafNodes(firstKey, lastKey []byte) ([][]byte, []common.Hash, error) {
 	return t.trie.FindLeafNodes(firstKey, lastKey)
 }
+
+// TryGetAllSlots return all the found slots while traversing storage trie (joonha)
+func (t *SecureTrie) TryGetAllSlots() (map[common.Hash][]byte, error) {
+	return t.trie.TryGetAllSlots()
+}

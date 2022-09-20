@@ -77,11 +77,19 @@ type StateDB struct {
 	trie         Trie
 	hasher       crypto.KeccakState
 
+	// original snapshot -> active snapshot (joonha)
 	snaps         *snapshot.Tree
 	snap          snapshot.Snapshot
 	snapDestructs map[common.Hash]struct{}
 	snapAccounts  map[common.Hash][]byte
 	snapStorage   map[common.Hash]map[common.Hash][]byte
+
+	// inactive storage snapshot (joonha)
+	snaps_inactive         *snapshot.Tree
+	snap_inactive          snapshot.Snapshot
+	snapDestructs_inactive map[common.Hash]struct{}
+	snapAccounts_inactive  map[common.Hash][]byte
+	snapStorage_inactive   map[common.Hash]map[common.Hash][]byte
 
 	// This map holds 'live' objects, which will get modified while processing a state transition.
 	stateObjects        map[common.Address]*stateObject
@@ -180,6 +188,59 @@ func New(root common.Hash, db Database, snaps *snapshot.Tree) (*StateDB, error) 
 	return sdb, nil
 }
 
+// New_inactiveSnapshot is a second New function to get snaps_inactive info from blockchain.go (joonha)
+// Couldn't modify New() directly because there exist functions calling New() and it is not easy to hand-over inactive snapshot every time
+func New_inactiveSnapshot(root common.Hash, db Database, snaps *snapshot.Tree, snaps_inactive *snapshot.Tree) (*StateDB, error) {
+	tr, err := db.OpenTrie(root)
+	if err != nil {
+		return nil, err
+	}
+
+	// set NextKey as lastKey+1 (jmlee)
+	lastKey := tr.GetLastKey()
+	nextKey := new(big.Int)
+	nextKey.Add(lastKey, big.NewInt(1))
+
+	sdb := &StateDB{
+		db:                  db,
+		trie:                tr,
+		originalRoot:        root,
+		snaps:               snaps,
+		snaps_inactive:      snaps_inactive, // (joonha)
+		stateObjects:        make(map[common.Address]*stateObject),
+		stateObjectsPending: make(map[common.Address]struct{}),
+		stateObjectsDirty:   make(map[common.Address]struct{}),
+		logs:                make(map[common.Hash][]*types.Log),
+		preimages:           make(map[common.Hash][]byte),
+		journal:             newJournal(),
+		accessList:          newAccessList(),
+		hasher:              crypto.NewKeccakState(),
+		NextKey:             nextKey.Int64(),
+		CheckpointKey:       nextKey.Int64(),
+		AddrToKeyDirty:      make(map[common.Address]common.Hash),
+		KeysToDeleteDirty:   make([]common.Hash, 0),
+	}
+
+	// active snapstho
+	if sdb.snaps != nil && common.UsingActiveSnapshot {
+		if sdb.snap = sdb.snaps.Snapshot(root); sdb.snap != nil {
+			sdb.snapDestructs = make(map[common.Hash]struct{})
+			sdb.snapAccounts = make(map[common.Hash][]byte)
+			sdb.snapStorage = make(map[common.Hash]map[common.Hash][]byte)
+		}
+	}
+	// inactive snapshot
+	if sdb.snaps_inactive != nil {
+		if common.UsingInactiveStorageSnapshot || common.UsingInactiveAccountSnapshot {
+			sdb.snap_inactive = sdb.snaps_inactive.Snapshot(root)
+			sdb.snapDestructs_inactive = make(map[common.Hash]struct{})
+			sdb.snapAccounts_inactive = make(map[common.Hash][]byte)
+			sdb.snapStorage_inactive = make(map[common.Hash]map[common.Hash][]byte)
+		}
+	}
+	return sdb, nil
+}
+
 // StartPrefetcher initializes a new trie prefetcher to pull in nodes from the
 // state trie concurrently while the state is mutated so that when we reach the
 // commit phase, most of the needed data is already hot.
@@ -188,7 +249,7 @@ func (s *StateDB) StartPrefetcher(namespace string) {
 		s.prefetcher.close()
 		s.prefetcher = nil
 	}
-	if s.snap != nil {
+	if s.snap != nil && common.UsingActiveSnapshot {
 		s.prefetcher = newTriePrefetcher(s.db, s.originalRoot, namespace)
 	}
 }
@@ -453,6 +514,13 @@ func (s *StateDB) SetStorage(addr common.Address, storage map[common.Hash]common
 	}
 }
 
+// SetSnapshot set snapshot for the genesis allocation (ethane)
+func (s *StateDB) SetSnapshot(addr common.Address, amount *big.Int, code []byte) {
+	snapKey := crypto.Keccak256Hash(addr[:])
+	emptyRoot := common.HexToHash("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
+	common.GenesisSnapshot[snapKey] = snapshot.SlimAccountRLP(uint64(0), amount, emptyRoot, code, addr) // genesis alloc has only EOAs
+}
+
 // Suicide marks the given account as suicided.
 // This clears the account balance.
 //
@@ -546,8 +614,10 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 	// update mechanism is not symmetric to the deletion, because whereas it is
 	// enough to track account updates at commit time, deletions need tracking
 	// at transaction boundary level to ensure we capture state clearing.
-	if s.snap != nil {
-		s.snapAccounts[obj.addrHash] = snapshot.SlimAccountRLP(obj.data.Nonce, obj.data.Balance, obj.data.Root, obj.data.CodeHash, obj.data.Addr)
+	if s.snap != nil && common.UsingActiveSnapshot {
+		// snapshot key is hash(addr) not a counter (joonha)
+		snapKey := crypto.Keccak256Hash(addr[:])
+		s.snapAccounts[snapKey] = snapshot.SlimAccountRLP(obj.data.Nonce, obj.data.Balance, obj.data.Root, obj.data.CodeHash, addr)
 	}
 }
 
@@ -585,21 +655,27 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 	}
 	// If no live objects are available, attempt to use snapshots
 	var data *types.StateAccount
-	if s.snap != nil {
+	if s.snap != nil && common.UsingActiveSnapshot_1 {
 		start := time.Now()
-		acc, err := s.snap.Account(crypto.HashData(s.hasher, addr.Bytes()))
+
+		snapKey := crypto.Keccak256Hash(addr[:])
+		acc, err := s.snap.Account(snapKey)
 		if metrics.EnabledExpensive {
 			s.SnapshotAccountReads += time.Since(start)
 		}
 		if err == nil {
 			if acc == nil {
 				return nil
+				// Caution (joonha)
+				// directly return nil (not reaching 'data == nil' below
+				// This might occur an error when getting genesis-allocated account
 			}
 			data = &types.StateAccount{
 				Nonce:    acc.Nonce,
 				Balance:  acc.Balance,
 				CodeHash: acc.CodeHash,
 				Root:     common.BytesToHash(acc.Root),
+				Addr:     acc.Addr, // core/state/snapshot/account.go (joonha)
 			}
 			if len(data.CodeHash) == 0 {
 				data.CodeHash = emptyCodeHash
@@ -681,10 +757,11 @@ func (s *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) 
 	prev = s.getDeletedStateObject(addr) // Note, prev might have been deleted, we need that!
 
 	var prevdestruct bool
-	if s.snap != nil && prev != nil {
-		_, prevdestruct = s.snapDestructs[prev.addrHash]
+	if s.snap != nil && prev != nil && common.UsingActiveSnapshot {
+		snapKey := crypto.Keccak256Hash(prev.address[:])
+		_, prevdestruct = s.snapDestructs[snapKey]
 		if !prevdestruct {
-			s.snapDestructs[prev.addrHash] = struct{}{}
+			s.snapDestructs[snapKey] = struct{}{}
 		}
 	}
 	newobj = newObject(s, addr, types.StateAccount{})
@@ -856,6 +933,29 @@ func (s *StateDB) Copy() *StateDB {
 			state.snapStorage[k] = temp
 		}
 	}
+	// do it also for the inactive snapshot (joonha)
+	if s.snaps_inactive != nil {
+		state.snaps_inactive = s.snaps_inactive
+		state.snap_inactive = s.snap_inactive
+		// deep copy needed
+		state.snapDestructs_inactive = make(map[common.Hash]struct{})
+		for k, v := range s.snapDestructs_inactive {
+			state.snapDestructs_inactive[k] = v
+		}
+		state.snapAccounts_inactive = make(map[common.Hash][]byte)
+		for k, v := range s.snapAccounts_inactive {
+			state.snapAccounts_inactive[k] = v
+		}
+		state.snapStorage_inactive = make(map[common.Hash]map[common.Hash][]byte)
+		for k, v := range s.snapStorage_inactive {
+			temp := make(map[common.Hash][]byte)
+			for kk, vv := range v {
+				temp[kk] = vv
+			}
+			state.snapStorage_inactive[k] = temp
+		}
+	}
+
 	return state
 }
 
@@ -912,9 +1012,11 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 			// transactions within the same block might self destruct and then
 			// ressurrect an account; but the snapshotter needs both events.
 			if s.snap != nil {
-				s.snapDestructs[obj.addrHash] = struct{}{} // We need to maintain account deletions explicitly (will remain set indefinitely)
-				delete(s.snapAccounts, obj.addrHash)       // Clear out any previously updated account data (may be recreated via a ressurrect)
-				delete(s.snapStorage, obj.addrHash)        // Clear out any previously updated storage data (may be recreated via a ressurrect)
+				// snapshot key is hash(addr) not a counter (joonha)
+				snapKey := crypto.Keccak256Hash(addr[:])
+				s.snapDestructs[snapKey] = struct{}{} // We need to maintain account deletions explicitly (will remain set indefinitely)
+				delete(s.snapAccounts, snapKey)       // Clear out any previously updated account data (may be recreated via a ressurrect)
+				delete(s.snapStorage, snapKey)        // Clear out any previously updated storage data (may be recreated via a ressurrect)
 			}
 		} else {
 			obj.finalise(true) // Prefetch slots in the background
@@ -968,11 +1070,22 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 	// Now we're about to start to write changes to the trie. The trie is so far
 	// _untouched_. We can check with the prefetcher, if it can give us a trie
 	// which has the same root, but also has some content loaded into it.
-	if prefetcher != nil {
-		if trie := prefetcher.trie(s.originalRoot); trie != nil {
-			s.trie = trie
+	// // --> comment-out the original code (this hinders inactive node to be restored when snapshot is on) (joonha)
+	// if prefetcher != nil {
+	// 	if trie := prefetcher.trie(s.originalRoot); trie != nil {
+	// 		s.trie = trie
+	// 	}
+	// }
+
+	// so activate this prefetching only when snapshot is off (joonha)
+	if s.snap == nil {
+		if prefetcher != nil {
+			if trie := prefetcher.trie(s.originalRoot); trie != nil {
+				s.trie = trie
+			}
 		}
 	}
+
 	usedAddrs := make([][]byte, 0, len(s.stateObjectsPending))
 	for addr := range s.stateObjectsPending {
 		if obj := s.stateObjects[addr]; obj.deleted {
@@ -1112,17 +1225,27 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 		s.StorageUpdated, s.StorageDeleted = 0, 0
 	}
 
-	// dump - this should be done before s.snap is initialized (joonha)
+	/* [Ethane]
+	* dump - this should be done before s.snap is initialized (joonha)
+	*
+	* When dumping using snapshot, there is one block delay contrast to the default dumping through trie traversing.
+	 */
 	if common.DoDump {
-		f2, err := os.Create("joonha dump Ethane.txt")
-		checkError(err)
-		defer f2.Close()
-		// if common.UsingActiveSnapshot && common.UsingInactiveAccountSnapshot {
-		// 	fmt.Fprintf(f2, string(s.Dump_bySnapshot_Ethane(nil)))
-		// } else {
-		// 	fmt.Fprintf(f2, string(s.Dump_Ethane(nil)))
-		// }
-		fmt.Fprintf(f2, string(s.Dump_Ethane(nil)))
+		if common.UsingActiveSnapshot && common.UsingInactiveAccountSnapshot {
+			f2, err := os.Create("joonha dump Ethane (snapshot).txt") // 한 블록 딜레이가 있음.
+			checkError(err)
+			defer f2.Close()
+			fmt.Fprintf(f2, string(s.Dump_bySnapshot_Ethane(nil)))
+		} else {
+			f2, err := os.Create("joonha dump Ethane (trie).txt")
+			checkError(err)
+			defer f2.Close()
+			fmt.Fprintf(f2, string(s.Dump_Ethane(nil)))
+		}
+		// f2, err := os.Create("joonha dump Ethane (trie).txt")
+		// checkError(err)
+		// defer f2.Close()
+		// fmt.Fprintf(f2, string(s.Dump_Ethane(nil)))
 	}
 
 	// If snapshotting is enabled, update the snapshot tree with this new version
@@ -1145,6 +1268,40 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 		}
 		s.snap, s.snapDestructs, s.snapAccounts, s.snapStorage = nil, nil, nil, nil
 	}
+
+	// update inactive storage snapshot (joonha)
+	if s.snap_inactive != nil {
+		if common.UsingInactiveStorageSnapshot || common.UsingInactiveAccountSnapshot {
+			// s.snap_inactive = s.snaps_inactive.Snapshot(root)
+			if s.snap_inactive != nil {
+
+				// // code for debugging
+				// for k, v := range s.snapAccounts_inactive {
+				// 	fmt.Println("s.snapAccounts_inactive -> k:", k, "/ v:", v)
+				// }
+				// for k, v := range s.snapStorage_inactive {
+				// 	for kk, vv := range v {
+				// 		fmt.Println("s.snapStorage_inactive[", k, "] -> kk:", kk, "/ vv:", vv)
+				// 	}
+				// }
+
+				if parent_inactive := s.snap_inactive.Root(); parent_inactive != root {
+					// here, snapAccounts_inactive might be nil (joonha) // --> modified to using inactive account snapshot (joonha)
+					if err := s.snaps_inactive.Update(root, parent_inactive, s.snapDestructs_inactive, s.snapAccounts_inactive, s.snapStorage_inactive); err != nil {
+						log.Warn("Failed to update snapshot tree", "from", parent_inactive, "to", root, "err", err)
+					}
+					if err := s.snaps_inactive.Cap(root, 128); err != nil {
+						log.Warn("Failed to cap snapshot tree", "root", root, "layers", 128, "err", err)
+					}
+				}
+			} else {
+				// fmt.Println("s.snap_inactive is nil")
+			}
+
+			s.snap_inactive, s.snapDestructs_inactive, s.snapAccounts_inactive, s.snapStorage_inactive = nil, nil, nil, nil
+		}
+	}
+
 	return root, err
 }
 
@@ -1261,6 +1418,108 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 			common.MapMutex.Lock()
 			common.AddrToKey_inactive[addr] = append(common.AddrToKey_inactive[addr], keyToInsert)
 			common.MapMutex.Unlock()
+		}
+
+		/*
+		* [Inactive Snapshot]
+		* Make inactive account snapshots to use to get inactive state.
+		* This can also be used during optimized restoration to know the inactive balances.
+		* Make inactive storage snapshots to use to rebuild storage trie when restoring CA.
+		* If the active snapshot is on, copy.
+		* Else, traverse the storage trie and manually make snapshots.
+		* (commenter: joonha)
+		 */
+
+		// Inactive Account Snapshot
+		if common.UsingInactiveAccountSnapshot {
+			if common.UsingActiveSnapshot { //  temporarily, we make inactive account snapshot when inactiveStorageSnapshot is on
+				// get active snapshot with hash(addr) and put it into inactive snapshot with counter
+				snapKey := crypto.Keccak256Hash(addr[:])
+				acc, err := s.snap.AccountRLP(snapKey)
+				if err != nil {
+					fmt.Println("snapKey: ", snapKey)
+					fmt.Println("ERR! s.snap.AccountRLP(snapKey) cannot find any account! (joonha)\n")
+					continue
+				} else {
+					// fmt.Println("Using both snapshots is successfully done! acc: ", acc, "/ addr: ", addr)
+				}
+				s.snapAccounts_inactive[snapKey] = acc
+
+				// delete previous active snapshot
+				s.snapDestructs[snapKey] = struct{}{}
+				delete(s.snapAccounts, snapKey)
+				delete(s.snapStorage, snapKey)
+			} else {
+				snapKey := crypto.Keccak256Hash(addr[:])
+				enc, err := s.trie.TryGet_SetKey(key[:])
+				if err != nil {
+					s.setError(fmt.Errorf("InactivateLeafNodes (%x) error: %v", addr.Bytes(), err))
+				}
+				data := new(types.StateAccount)
+				if err := rlp.DecodeBytes(enc, data); err != nil {
+					log.Error("Failed to decode state object", "addr", addr, "err", err)
+				}
+				s.snapAccounts_inactive[snapKey] = snapshot.SlimAccountRLP(data.Nonce, data.Balance, data.Root, data.CodeHash, addr)
+			}
+		}
+
+		// Inactive Storage Snapshot
+		if common.UsingInactiveStorageSnapshot {
+			// accountList := s.snaps.AccountList_ethane(snapRoot)
+			// fmt.Println("accountList: ", accountList) // key
+
+			if common.UsingActiveSnapshot { // when activeSnapshot is on, get slotKeyList from actvie snapshot
+
+				// get active snapshot with hash(addr) and put it into inactive snapshot with counter
+				snapKey := crypto.Keccak256Hash(addr[:])
+
+				snapRoot := s.snap.Root()
+
+				// get slotKeyList from active snapshot
+				// if EOA, slotKeyList is nil
+				slotKeyList := s.snaps.StorageList_ethane(snapRoot, snapKey) // active snapshot's storage list
+				// fmt.Println("slotKeyList: ", slotKeyList)
+				temp := make(map[common.Hash][]byte)
+				for _, slotKey := range slotKeyList {
+					// fmt.Println("slotKey is ", slotKey)
+					v, _ := s.snap.Storage(snapKey, slotKey)
+					// fmt.Println("v is", v)
+					temp[slotKey] = v
+				}
+				s.snapStorage_inactive[keyToInsert] = temp
+
+				// delete previous active snapshot
+				s.snapDestructs[snapKey] = struct{}{}
+				delete(s.snapAccounts, snapKey)
+				delete(s.snapStorage, snapKey)
+
+			} else { // get slotKeyList from object's storage trie
+				obj := s.getStateObject(addr)
+				slots := make(map[common.Hash][]byte)
+
+				if obj != nil {
+					storageTrie := obj.getTrie(s.db)
+					// fmt.Println("storageTrie: ", storageTrie)
+					// obj.Print_storageTrie() // this printing should be after getTrie()
+
+					slots, _ = storageTrie.TryGetAllSlots()
+					s.snapStorage_inactive[keyToInsert] = slots
+					// fmt.Println("slots: ", slots)
+
+				}
+			}
+		}
+
+		if !common.UsingInactiveAccountSnapshot && !common.UsingInactiveStorageSnapshot {
+			if common.UsingActiveSnapshot {
+				// get active snapshot with hash(addr) and put it into inactive snapshot with counter
+				snapKey := crypto.Keccak256Hash(addr[:])
+
+				// delete previous active snapshot
+				s.snapDestructs[snapKey] = struct{}{}
+				delete(s.snapAccounts, snapKey)
+				delete(s.snapStorage, snapKey)
+			}
 		}
 
 		// delete account from trie
