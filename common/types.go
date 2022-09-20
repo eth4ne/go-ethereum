@@ -131,6 +131,10 @@ var (
 	AddrToKeyMapMutex = sync.RWMutex{}
 	// disk path to save AddrToKey (will be set as [datadir]/geth/chaindata/) (const)
 	// AddrToKeyPath = ""
+	// restored addresses among active addresses
+	RestoredAddresses = make(map[Address]struct{})
+	// crumb addresses among active addresses
+	CrumbAddresses = make(map[Address]struct{})
 
 	NextKey        = uint64(0)               // key of the first 'will be inserted' account
 	CheckpointKey  = uint64(0)               // save initial NextKey value to determine whether move leaf nodes or not
@@ -213,6 +217,12 @@ type BlockInfo struct {
 	DeletedActiveNodeNum   uint64 // total deleted leaf nodes in active trie
 	DeletedInactiveNodeNum uint64 // total deleted leaf nodes in inactive trie (# of used Merkle proofs for restoration)
 	InactivatedNodeNum     uint64 // total inactivated leaf nodes in active trie (= InactiveBoundaryKey)
+
+	// total address num = active + restored + crumb + inactive address num
+	ActiveAddressNum   int // # of active addressses (but not restored & not crumb)
+	RestoredAddressNum int // # of restored addresses (these are also active addresses)
+	CrumbAddressNum    int // # of crumb addresses these are also active addresses)
+	InactiveAddressNum int // # of inactive addresses
 }
 
 // TrieGraphInfo has edges and features representing trie

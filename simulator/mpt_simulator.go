@@ -171,6 +171,8 @@ func reset(deleteDisk bool) {
 	// reset Ethane related vars
 	common.AddrToKeyActive = make(map[common.Address]common.Hash)
 	common.AddrToKeyInactive = make(map[common.Address][]common.Hash)
+	common.RestoredAddresses = make(map[common.Address]struct{})
+	common.CrumbAddresses = make(map[common.Address]struct{})
 	common.NextKey = uint64(0)
 	common.CheckpointKey = uint64(0)
 	common.KeysToDelete = make([]common.Hash, 0)
@@ -407,6 +409,12 @@ func flushTrieNodes() {
 		// store inactive boundary key in this block
 		common.InactiveBoundaryKeys[bn] = common.InactiveBoundaryKey
 	}
+
+	// logging address stats for Ethane
+	blockInfo.ActiveAddressNum = len(common.AddrToKeyActive) - len(common.RestoredAddresses) - len(common.CrumbAddresses)
+	blockInfo.RestoredAddressNum = len(common.RestoredAddresses)
+	blockInfo.CrumbAddressNum = len(common.CrumbAddresses)
+	blockInfo.InactiveAddressNum = len(common.AddrToKeyInactive)
 
 	// reset db stats before flush
 	common.NewNodeStat.Reset()
@@ -983,6 +991,16 @@ func updateTrieForEthane(addr common.Address, rlpedAccount []byte) error {
 	if !exist {
 		// this is new address or crumb account
 		// fmt.Println("this is new address or crumb account")
+		if _, isCrumb := common.AddrToKeyInactive[addr]; isCrumb {
+			// this is crumb address
+			common.CrumbAddresses[addr] = struct{}{}
+			// since we always restore all inactive accounts, crumb address cannot be restored address
+			delete(common.RestoredAddresses, addr) // (but this may not be happen in RESTORE_ALL scenario)
+		} else {
+			// this is new address
+		}
+
+		// set addrKey for this address
 		addrKey = common.HexToHash(strconv.FormatUint(common.NextKey, 16))
 		// fmt.Println("make new account -> addr:", addr.Hex(), "/ keyHash:", newAddrKey)
 		common.AddrToKeyActive[addr] = addrKey
@@ -1116,6 +1134,10 @@ func inactivateLeafNodes(firstKeyToCheck, lastKeyToCheck common.Hash) {
 		// update AddrToKey (active & inactive)
 		delete(common.AddrToKeyActive, addr)
 		common.AddrToKeyInactive[addr] = append(common.AddrToKeyInactive[addr], keyToInsert)
+
+		// delete from restored & crumb addresses if exist
+		delete(common.RestoredAddresses, addr)
+		delete(common.CrumbAddresses, addr)
 	}
 }
 
@@ -1215,6 +1237,11 @@ func restoreAccountForEthane(restoreAddr common.Address) {
 	common.RestoredNodeNum += uint64(len(common.AddrToKeyInactive[restoreAddr]))
 	common.RestoredKeys = append(common.RestoredKeys, common.AddrToKeyInactive[restoreAddr]...)
 	delete(common.AddrToKeyInactive, restoreAddr)
+
+	// add to RestoredAddresses
+	common.RestoredAddresses[restoreAddr] = struct{}{}
+	// since we always restore all inactive accounts, restored address cannot be crumb address
+	delete(common.CrumbAddresses, restoreAddr)
 
 	// fmt.Println("success restore:", restoreAddr.Hex())
 }
@@ -1411,6 +1438,12 @@ func saveBlockInfos(fileName string, startBlockNum, endBlockNum uint64) {
 		log += strconv.FormatUint(blockInfo.DeletedActiveNodeNum, 10) + delimiter
 		log += strconv.FormatUint(blockInfo.DeletedInactiveNodeNum, 10) + delimiter
 		log += strconv.FormatUint(blockInfo.InactivatedNodeNum, 10) + delimiter
+
+		log += strconv.Itoa(blockInfo.ActiveAddressNum) + delimiter
+		log += strconv.Itoa(blockInfo.RestoredAddressNum) + delimiter
+		log += strconv.Itoa(blockInfo.CrumbAddressNum) + delimiter
+		log += strconv.Itoa(blockInfo.InactiveAddressNum) + delimiter
+
 		// fmt.Println("log at block", blockNum, ":", log)
 
 		// write log to file
@@ -1663,6 +1696,10 @@ func connHandler(conn net.Conn) {
 					// delete this account from active state trie
 					normTrie.TryDelete(addrKey[:])
 					delete(common.AddrToKeyActive, addr)
+
+					// delete from restored & crumb addresses if exist
+					delete(common.RestoredAddresses, addr)
+					delete(common.CrumbAddresses, addr)
 				}
 
 				response = []byte("success")
