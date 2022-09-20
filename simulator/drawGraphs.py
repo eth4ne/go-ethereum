@@ -7,6 +7,7 @@ import sys
 from itertools import zip_longest
 from pathlib import Path
 from matplotlib.ticker import MaxNLocator
+from datetime import datetime
 
 # file paths
 blockInfosLogFilePath = "./blockInfos/"
@@ -61,7 +62,12 @@ def parseBlockInfos(simulMode, startBlockNum, endBlockNum, deleteEpoch, inactiva
     # logs[38][blockNum] = DeletedInactiveNodeNum
     # logs[39][blockNum] = InactivatedNodeNum
 
-    columnNum = 40
+    # logs[40][blockNum] = ActiveAddressNum
+    # logs[41][blockNum] = RestoredAddressNum
+    # logs[42][blockNum] = CrumbAddressNum
+    # logs[43][blockNum] = InactiveAddressNum
+
+    columnNum = 100 # big enough value
     logs = TwoD(endBlockNum-startBlockNum+1, columnNum, True)
 
     # parse blockInfos log file
@@ -75,7 +81,7 @@ def parseBlockInfos(simulMode, startBlockNum, endBlockNum, deleteEpoch, inactiva
         params = line[0].split(" ")[:-1] # parsing
         params = [int(x) for x in params[3:]] # covert string to int (ignore first 3 items: activeTrieRoot, inactiveTrieRoot, blockNum)
 
-        for i in range(columnNum):
+        for i in range(len(params)):
             logs[i][blockNum] = params[i]
 
         blockNum += 1
@@ -105,13 +111,18 @@ def parseTrieInspects(simulMode, startBlockNum, endBlockNum, deleteEpoch, inacti
     # logs[0~7][blockNum] = active trie NodeStat.ToString()
     # logs[8~15][blockNum] = inactive trie NodeStat.ToString()
 
-    columnNum = 16
+    # logs[16][blockNum] = min depth
+    # logs[17][blockNum] = max depth
+    # logs[18][blockNum] = avg depth
+
+    columnNum = 100 # big enough value
     logs = TwoD(endBlockNum-startBlockNum+1, columnNum, True)
 
     # parse trie inspects log file
     f = open(trieInspectsLogFilePath+trieInspectsLogFileName, 'r')
     rdr = csv.reader(f)
     blockNums = []
+    avgDepths = [] # float list
     cnt = 0
     for line in rdr:
         if len(line) == 0:
@@ -129,19 +140,23 @@ def parseTrieInspects(simulMode, startBlockNum, endBlockNum, deleteEpoch, inacti
         inactiveNodeStat = [0, 0, 0, 0, 0, 0, 0, 0]
         if simulMode == 1:
             inactiveNodeStat = [int(x) for x in params[12:20]] # covert string to int ()
+        depths = [int(x) for x in params[21:23]] # min depth & max depth
         # print("active node stat:", activeNodeStat)
         # print("inactive node stat:", inactiveNodeStat)
-        params = activeNodeStat + inactiveNodeStat
+        params = activeNodeStat + inactiveNodeStat + depths
         # print("params:", params)
-        for i in range(columnNum):
+        for i in range(len(params)):
             logs[i][cnt] = params[i]
+        
+        # get avg depth
+        avgDepths.append(float(params[23]))
 
         cnt += 1
         # if cnt > 100000:
         #     return
 
     f.close()
-    return blockNums, logs
+    return blockNums, logs, avgDepths
 
 # draw stack plot for NodeStat
 def drawNodeStatGraphs(xAxis, yAxis1, yAxis2, yAxis3, xLabelName, yLabelName, graphTitle):
@@ -246,15 +261,10 @@ def drawGraphsForBlockInfosCompare(startBlockNum, endBlockNum, deleteEpoch, inac
     for i in range(3):
         # set x axis
         blockNums = list(range(startBlockNum,endBlockNum+1))
-        # blockNums = blockNums[:len(logs[0])]
-        blockNums = blockNums[:len(blockInfosLogs[i][0])]
 
         # select graph type
         plt.plot(blockNums, blockInfosLogs[i][17], label=simulationModeNames[i]) # draw plot
         plt.legend(loc='best')
-
-
-
 
 
     # set num of ticks
@@ -266,7 +276,70 @@ def drawGraphsForBlockInfosCompare(startBlockNum, endBlockNum, deleteEpoch, inac
     graphName = "compare archive data (de:" + str(deleteEpoch) + ", ie:" + str(inactivateEpoch) + ", ic:" + str(inactivateCriterion) + ").png"
     plt.savefig(graphPath+graphName, format="png")
 
-    print("  -> success\n")
+    print("drawing", graphName, "  -> success\n")
+
+
+
+    #
+    # print Ethane's block process time stats (flush, delete, inactivate)
+    #
+
+    flushTimes = []
+    epochNum = 0
+
+    for bn in blockNums:
+        flushTime = blockInfosLogs[1][32][bn]
+        deleteTime = blockInfosLogs[1][33][bn]
+        inactivateTime = blockInfosLogs[1][34][bn]
+
+        if (bn+1) % deleteEpoch == 0:
+            print("at epoch", epochNum)
+            print("avg flush time:", sum(flushTimes)/(deleteEpoch-1)/1000000, "ms")
+            print(" max:", max(flushTimes)/1000000, "ms", " 90%:", np.percentile(flushTimes, 90)/1000000, " 75%:", np.percentile(flushTimes, 75)/1000000)
+            print("  flush time:", flushTime/1000000, "ms")
+            print("  delete time:", deleteTime/1000000, "ms")
+            print("  inactivate time:", inactivateTime/1000000, "ms")
+            print()
+
+            # go to next epoch
+            epochNum += 1
+            flushTimes = []
+        else:
+            flushTimes.append(flushTime)
+
+
+
+    #
+    # Ethane's address stats (active, restored, crumb, inactive addresses)
+    #
+
+    # set graph
+    plt.figure()
+    ax = plt.axes()
+
+    # set title, label names
+    plt.title("Ethane's address ratio", pad=10) # set graph title
+    plt.xlabel("block number", labelpad=10) # set x axis
+    plt.ylabel("# of addresses", labelpad=10) # set y axis
+
+    # set tick labels
+    plt.ticklabel_format(style='sci', axis='x', scilimits=(0,0))
+    plt.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
+
+    # select graph type
+    plt.stackplot(blockNums, blockInfosLogs[1][40], blockInfosLogs[1][41], blockInfosLogs[1][42], blockInfosLogs[1][43], labels = ['active', 'restored', 'crumb', 'inactive']) # draw stack graph
+    plt.legend(loc='upper left')
+
+    # set num of ticks
+    ax.xaxis.set_major_locator(MaxNLocator(maxTickNum)) # set # of ticks
+    ax.yaxis.set_major_locator(MaxNLocator(maxTickNum)) # set # of ticks
+
+    # save graph
+    makeDir(graphPath)
+    graphName = "ethane address ratio (de:" + str(deleteEpoch) + ", ie:" + str(inactivateEpoch) + ", ic:" + str(inactivateCriterion) + ")" + ".png"
+    plt.savefig(graphPath+graphName, format="png")
+
+    print("drawing", graphName, "  -> success\n")
 
 # draw graphs for block infos log file
 def drawGraphsForTrieInspects(simulMode, startBlockNum, endBlockNum, deleteEpoch=0, inactivateEpoch=0, inactivateCriterion=0):
@@ -396,7 +469,7 @@ def drawGraphsForTrieInspectsCompare(startBlockNum, endBlockNum, deleteEpoch, in
     blockNumsList = []
     trieInspectsLogs = []
     for simulMode in range(3):
-        blockNums, logs = parseTrieInspects(simulMode, startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
+        blockNums, logs, avgDepths = parseTrieInspects(simulMode, startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
         blockNumsList.append(blockNums)
         trieInspectsLogs.append(logs)
 
@@ -443,24 +516,30 @@ def drawGraphsForTrieInspectsCompare(startBlockNum, endBlockNum, deleteEpoch, in
 
 if __name__ == "__main__":
     print("start")
+    startTime = datetime.now()
 
     # set simulation mode (0: original Ethereum, 1: Ethane, 2: Ethanos)
     simulationMode = 0
     # set simulation params
     startBlockNum = 0
-    endBlockNum = 100000
-    deleteEpoch = 10000
-    inactivateEpoch = 10000
-    inactivateCriterion = 10000
+    endBlockNum = 1000000
+    deleteEpoch = 100
+    inactivateEpoch = 100
+    inactivateCriterion = 50000
+
+    # drawGraphsForBlockInfosCompare(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
+    # drawGraphsForTrieInspectsCompare(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
 
     # draw graphs
-    # drawGraphsForBlockInfos(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
-    # drawGraphsForTrieInspects(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
+    # drawGraphsForBlockInfos(simulationMode, startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
+    # drawGraphsForTrieInspects(simulationMode, startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
 
     # draw graphs for all modes
-    for i in range(3):
-        simulationMode = i
-        drawGraphsForBlockInfos(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
-        drawGraphsForTrieInspects(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
+    # for i in range(3):
+    #     simulationMode = i
+    #     drawGraphsForBlockInfos(simulationMode, startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
+    #     drawGraphsForTrieInspects(simulationMode, startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
 
     print("end")
+    endTime = datetime.now()
+    print("elapsed time:", endTime-startTime)
