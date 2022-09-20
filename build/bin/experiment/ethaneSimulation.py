@@ -1293,7 +1293,7 @@ def inspectTriesEthanos(startBlockNum, endBlockNum, inactivateCriterion):
 
 if __name__ == "__main__":
     print("start")
-    
+    startTime = datetime.now()
 
     #
     # call APIs to simulate MPT
@@ -1303,7 +1303,7 @@ if __name__ == "__main__":
     deleteDisk = True
     doStorageTrieUpdate = True
     stopWhenErrorOccurs = True
-    # set simulation mode
+    # set simulation mode (0: original Ethereum, 1: Ethane, 2: Ethanos)
     simulationMode = 0
     # set simulation params
     startBlockNum = 0
@@ -1329,3 +1329,5 @@ if __name__ == "__main__":
         print("wrong mode:", simulationMode)
 
     print("end")
+    endTime = datetime.now()
+    print("elapsed time:", endTime-startTime)
