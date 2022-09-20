@@ -501,7 +501,15 @@ func (tir *TrieInspectResult) ToNodeStat() common.NodeStat {
 	}
 	if stateNodeStat.LeafNodesNum != 0 {
 		avgDepth = float64(depthSum) / float64(stateNodeStat.LeafNodesNum)
+	} else {
+		// this trie has no leaf node (empty trie)
+		minDepth = 0
+		avgDepth = 0
+		maxDepth = 0
 	}
+	stateNodeStat.MinDepth = minDepth
+	stateNodeStat.AvgDepth = avgDepth
+	stateNodeStat.MaxDepth = maxDepth
 
 	// print state trie inspect result
 	fmt.Println("convert state trie inspect result to nodeStat")

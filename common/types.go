@@ -185,6 +185,11 @@ type NodeStat struct {
 	FullNodesSize  uint64
 	ShortNodesSize uint64 // short node which is not leaf node
 	LeafNodesSize  uint64 // short node which is leaf node
+
+	// trie depth stats (for including trie inspect results)
+	MinDepth int
+	MaxDepth int
+	AvgDepth float64
 }
 
 // BlockInfo stores block related information
@@ -278,6 +283,34 @@ func (ns NodeStat) ToString(delimiter string) string {
 		str += strconv.FormatUint(value, 10)
 		str += delimiter
 	}
+	return str
+}
+
+// ToString collects values and converts them to string
+func (ns NodeStat) ToStringWithDepths(delimiter string) string {
+
+	totalNum, totalSize := ns.GetSum()
+	values := make([]uint64, 10)
+	values[0] = totalNum
+	values[1] = totalSize
+	values[2] = ns.FullNodesNum
+	values[3] = ns.FullNodesSize
+	values[4] = ns.ShortNodesNum
+	values[5] = ns.ShortNodesSize
+	values[6] = ns.LeafNodesNum
+	values[7] = ns.LeafNodesSize
+	values[8] = uint64(ns.MinDepth)
+	values[9] = uint64(ns.MaxDepth)
+
+	str := ""
+	for _, value := range values {
+		str += strconv.FormatUint(value, 10)
+		str += delimiter
+	}
+
+	str += fmt.Sprintf("%f", ns.AvgDepth)
+	str += delimiter
+
 	return str
 }
 

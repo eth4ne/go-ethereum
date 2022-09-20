@@ -1528,7 +1528,7 @@ func connHandler(conn net.Conn) {
 					nodeStat = inspectTrieDisk(rootHash)
 				}
 
-				response = []byte(rootHash.Hex() + "," + nodeStat.ToString(","))
+				response = []byte(rootHash.Hex() + "," + nodeStat.ToStringWithDepths(","))
 
 			case "inspectTrieWithinRange":
 				fmt.Println("execute InspectTrieWithinRange()")
@@ -1567,7 +1567,7 @@ func connHandler(conn net.Conn) {
 				nodeStat.Print()
 
 				delimiter := " "
-				response = []byte(nodeStat.ToString(delimiter))
+				response = []byte(nodeStat.ToStringWithDepths(delimiter))
 
 			case "flush":
 				fmt.Println("execute flushTrieNodes()")
