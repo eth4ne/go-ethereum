@@ -294,8 +294,14 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	london := st.evm.ChainConfig().IsLondon(st.evm.Context.BlockNumber)
 	contractCreation := msg.To() == nil
 
-	// Check clauses 4-5, subtract intrinsic gas if everything is correct
-	gas, err := IntrinsicGas(st.data, st.msg.AccessList(), contractCreation, homestead, istanbul)
+	// if restore tx or reward tx, do not levy gas (joonha)
+	gas, err := uint64(0), error(nil)
+	if st.msg.To() != nil && *st.msg.To() == common.HexToAddress("0x0123456789012345678901234567890123456789") {
+	} else {
+		// Check clauses 4-5, subtract intrinsic gas if everything is correct
+		gas, err = IntrinsicGas(st.data, st.msg.AccessList(), contractCreation, homestead, istanbul)
+	}
+
 	if err != nil {
 		return nil, err
 	}

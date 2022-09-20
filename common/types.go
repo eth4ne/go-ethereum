@@ -44,6 +44,24 @@ const (
 	AddressLength = 20
 )
 
+/*
+* [Ethane]
+* Below three definitions are for executing VerifyProof_ProofList(),
+* VerifyProof_restore(), and GetAccountsAndKeysFromMerkleProof()
+ */
+type ProofList [][]byte
+
+func (n *ProofList) Has(key []byte) (bool, error) {
+	panic("not supported")
+}
+func (n *ProofList) Get(key []byte) ([]byte, error) {
+	x := (*n)[0]
+	*n = (*n)[1:]
+	return x, nil
+}
+
+type Empty struct{}
+
 var (
 	hashT    = reflect.TypeOf(Hash{})
 	addressT = reflect.TypeOf(Address{})
@@ -67,10 +85,10 @@ var (
 	KeysToDelete        = make([]Hash, 0) // store previous leaf nodes' keys to delete later
 
 	// for inactivation
-	AddrToKey_inactive = make(map[Address][]Hash) // map storing inactive accounts list (joonha)
+	AddrToKey_inactive = make(map[Address][]Hash) // map storing inactive accounts list
 
 	DoInactivateLeafNode    bool                    // flag to determine whether to delete leaf nodes or not
-	InactivateLeafNodeEpoch = int64(3)              // block epoch to inactivate inactive leaf nodes (from temp area to inactive trie) (joonha)
+	InactivateLeafNodeEpoch = int64(3)              // block epoch to inactivate inactive leaf nodes (from temp area to inactive trie)
 	InactiveBoundaryKey     = int64(0)              // inactive accounts have keys smaller than this key
 	CheckpointKeys          = make(map[int64]int64) // initial NextKeys of blocks (CheckpointKeys[blockNumber] = initialNextKeyOfTheBlock)
 	FirstKeyToCheck         int64
@@ -84,6 +102,13 @@ var (
 	// snapshot for genesis allocation
 	GenesisSnapshot       = make(map[Hash][]byte)
 	UsingActiveSnapshot_1 bool
+
+	// for restoration
+	RestoreMode          int64
+	RestoreAmount        *big.Int
+	RestoreAddress       = HexToAddress("0x0123456789012345678901234567890123456789")
+	AlreadyRestored      = make(map[Hash]Empty) // check if it is already restored (for storage optimization, use empty struct as a value)
+	KeysToDelete_restore = make([]Hash, 0)      // previous leaf nodes' keys to delete after restoration
 )
 
 // Marshal is a function that marshals the object into an io.Reader.

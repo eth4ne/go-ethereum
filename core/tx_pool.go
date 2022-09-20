@@ -639,6 +639,10 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	if err != nil {
 		return err
 	}
+	// to prevent ErrIntrinsicGas (joonha)
+	if *tx.To() == common.HexToAddress("0x0123456789012345678901234567890123456789") { // (joonha)
+		intrGas = 0
+	}
 	if tx.Gas() < intrGas {
 		return ErrIntrinsicGas
 	}

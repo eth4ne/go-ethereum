@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"math/big"
+	"strconv"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -126,6 +128,237 @@ func VerifyProof(rootHash common.Hash, key []byte, proofDb ethdb.KeyValueReader)
 		case valueNode:
 			return cld, nil
 		}
+	}
+}
+
+// optimized above proving function to compare only the top node of the merkleProof and the blockRoot (joonha)
+func VerifyProof_restore(rootHash common.Hash, proofDb common.ProofList) (value []byte, err error) {
+	wantHash := rootHash
+
+	buf, _ := proofDb.Get(wantHash[:])
+	if buf == nil {
+		return nil, fmt.Errorf("proof node (hash %064x) missing", wantHash)
+	}
+	_, err = decodeNode(wantHash[:], buf)
+	if err != nil {
+		return nil, fmt.Errorf("bad proof node: %v", err)
+	}
+	return nil, err
+}
+
+/*
+* GetAccountsAndKeysFromMerkleProof returns the leaf accounts and its keys from Merkle proofs.
+* proofDb is a set of multiple Merkle proofs. Each Merkle proof except the first Merkle proof
+* starts with [64 0] which refers to the first proof. So here we will call
+* getAccountsAndKeysFromMerkleProof() for each trimmed proof.
+* (commenter: joonha)
+ */
+func GetAccountsAndKeysFromMerkleProof(rootHash common.Hash, proofDb common.ProofList) ([][]byte, []common.Hash) {
+
+	var targetNodes [][]byte
+	var retrievedKeys []common.Hash
+
+	dummy_root := []byte{'@', 0}
+
+	start_idx := 0
+	for i := 0; i < len(proofDb); i++ {
+		if bytes.Equal(proofDb[i], dummy_root) == true {
+			// current i is a new start of the MP
+			// start iteration from the root node
+
+			// replace dummy_nodes with original ref nodes
+			for j := start_idx; j < i; j++ {
+				if proofDb[j][0] == '@' {
+					ref_idx := proofDb[j][1]
+					proofDb[j] = proofDb[ref_idx]
+				}
+			}
+			targetNode, tKey := getAccountsAndKeysFromMerkleProof(rootHash, nil, nil, proofDb[start_idx:i])
+			start_idx = i
+
+			// convert to a key format (hash)
+			tKey_i := tKey.Int64()                                          // big.Int -> int64
+			retrievedKey := common.HexToHash(strconv.FormatInt(tKey_i, 16)) // int64 -> hex -> hash
+
+			// check if this is already restored
+			common.MapMutex.Lock()
+			_, doExist := common.AlreadyRestored[retrievedKey]
+			common.MapMutex.Unlock()
+			if doExist { // already restored
+				continue
+			}
+
+			targetNodes = append(targetNodes, targetNode)
+			retrievedKeys = append(retrievedKeys, retrievedKey)
+		}
+	}
+
+	/* for last MP */
+	for j := start_idx; j < len(proofDb); j++ {
+		if proofDb[j][0] == '@' {
+			ref_idx := proofDb[j][1]
+			proofDb[j] = proofDb[ref_idx]
+		}
+	}
+	// start iteration from the root node
+	targetNode, tKey := getAccountsAndKeysFromMerkleProof(rootHash, nil, nil, proofDb[start_idx:])
+
+	// convert to a key format (hash)
+	tKey_i := tKey.Int64()                                          // big.Int -> int64
+	retrievedKey := common.HexToHash(strconv.FormatInt(tKey_i, 16)) // int64 -> hex -> hash
+
+	// check if already restored
+	common.MapMutex.Lock()
+	_, doExist := common.AlreadyRestored[retrievedKey]
+	common.MapMutex.Unlock()
+	if doExist { // already restored
+		return targetNodes, retrievedKeys
+	}
+	targetNodes = append(targetNodes, targetNode)
+	retrievedKeys = append(retrievedKeys, retrievedKey)
+
+	return targetNodes, retrievedKeys
+}
+
+// internal function of GetAccountsAndKeysFromMerkleProof (joonha)
+func getAccountsAndKeysFromMerkleProof(nodeHash common.Hash, origNode node, tKey []byte, proofDb common.ProofList) ([]byte, *big.Int) {
+
+	/*
+	* There is no valueNode in the proofDb buffer (just short, full, hash)
+	* nodeHash is for retrieving a currNode
+	* origNode is the previous node
+	* tKey is a target Key that may be complete reaching a value node
+	* proofDb is the merkle proof stream
+	* At first, origNode is nil.
+	* Last shortNode's child is a VALUENODE, the target account we want to retrieve.
+	* (commenter: joonha)
+	 */
+
+	// Tool
+	// resolveNode retrieves and resolves trie node from merkle proof stream
+	resolveNode := func(hash common.Hash) (node, error) {
+		buf, _ := proofDb.Get(hash[:])
+		if buf == nil {
+			return nil, fmt.Errorf("proof node (hash %064x) missing", hash)
+		}
+		n, err := decodeNode(hash[:], buf)
+		if err != nil {
+			return nil, fmt.Errorf("bad proof node %v", err)
+		}
+		return n, err
+	}
+
+	// Get current node from proofDb representing the nodeHash
+	// fmt.Println("proofDb: ", proofDb)
+
+	// if reaching the end of proofDb
+	if len(proofDb) == 0 { // Reaching the final shortNode, return.
+		// fmt.Println("tKey: ", tKey)
+		// fmt.Println("len(tKey): ", len(tKey))
+
+		// finalNode should be shortNode, and its value must be valueNode
+		switch finalNode := (origNode).(type) {
+		case *shortNode:
+			_, acc := get(origNode, finalNode.Key, true)
+			// fmt.Println("tKey is ", tKey[len(tKey)-1:])
+			switch acc := acc.(type) {
+			case valueNode:
+				hexToInt := new(big.Int)
+				hexToInt.SetString(common.BytesToHash(hexToKeybytes(tKey)).Hex()[2:], 16)
+				return acc, hexToInt
+			default:
+				return nil, nil
+			}
+		case *fullNode:
+		case hashNode:
+		case valueNode:
+		default:
+		}
+		return nil, nil
+
+	} else {
+		// fmt.Println("proofDb is not nil")
+	}
+
+	// Not reaching the end. Go more.
+	currNode, err := resolveNode(nodeHash)
+	if err != nil {
+		fmt.Errorf("bad proof node: %v", err)
+		return nil, nil
+	}
+
+	// Previous node
+	// if previous node(=origNode) is a fullNode,
+	// extract key digit and append it to tKey
+	switch n := (origNode).(type) {
+	case *fullNode:
+		switch cur := (currNode).(type) {
+		case *fullNode:
+			hasher := newHasher(false)
+			defer returnHasherToPool(hasher)
+			nn := hasher.fullnodeToHash(cur, false)
+
+			i := 0
+			for i < 16 {
+				if n.Children[i] == nil { // no child
+					i++
+					continue
+				}
+				if common.BytesToHash(nn.(hashNode)) == common.BytesToHash((n.Children[i]).(hashNode)) { // 몇 번째 child인지를 알기 위해서 체크하는 것임
+					// key append
+					selectedByte := common.HexToHash("0x" + indices[i])
+					tKey = append(tKey, selectedByte[len(selectedByte)-1])
+					break
+				}
+				i++
+			}
+		case *shortNode:
+			hasher := newHasher(false)
+			defer returnHasherToPool(hasher)
+
+			collapsed, _ := hasher.hashShortNodeChildren(cur) // should hash the child valueNode first
+			nn := hasher.shortnodeToHash(collapsed, false)    // nn: hashnode
+			// fmt.Println("selected branch: ", nn)
+
+			i := 0
+			for i < 16 {
+				if common.BytesToHash(nn.(hashNode)) == common.BytesToHash((n.Children[i]).(hashNode)) {
+					// key append
+					selectedByte := common.HexToHash("0x" + indices[i])
+					tKey = append(tKey, selectedByte[len(selectedByte)-1])
+					break
+				}
+				i++
+			}
+		default:
+		}
+
+	default:
+	}
+
+	// Current node
+	// update the key if needed and call func again
+	switch n := (currNode).(type) {
+	case nil:
+		return nil, nil
+
+	case *shortNode: // should update the key.
+		// fmt.Println("n.Key is ", n.Key)
+		// fmt.Println("before tKey: ", tKey)
+		tKey = append(tKey, n.Key...)
+		// fmt.Println("after tKey: ", tKey)
+
+		return getAccountsAndKeysFromMerkleProof(nodeHash, n, tKey, proofDb)
+
+	case *fullNode: // No key update. It is the next node's duty.
+		// fmt.Println("full node's children: ", n.Children)
+		return getAccountsAndKeysFromMerkleProof(nodeHash, n, tKey, proofDb)
+
+	case hashNode:
+		return getAccountsAndKeysFromMerkleProof(nodeHash, n, tKey, proofDb)
+
+	default:
+		panic(fmt.Sprintf("%T: invalid node: %v", origNode, origNode))
 	}
 }
 
