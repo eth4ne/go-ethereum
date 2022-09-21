@@ -518,7 +518,7 @@ def getTrieLastKey():
     return result
 
 # set Ethane's options
-def setEthaneOptions(deleteEpoch, inactivateEpoch, inactivateCriterion):
+def setEthaneOptions(deleteEpoch, inactivateEpoch, inactivateCriterion, fromLevel):
     cmd = str("setEthaneOptions")
     cmd += str(",")
     cmd += str(deleteEpoch)
@@ -526,6 +526,8 @@ def setEthaneOptions(deleteEpoch, inactivateEpoch, inactivateCriterion):
     cmd += str(inactivateEpoch)
     cmd += str(",")
     cmd += str(inactivateCriterion)
+    cmd += str(",")
+    cmd += str(fromLevel)
     client_socket.send(cmd.encode())
     data = client_socket.recv(1024)
     setOptionResult = data.decode()
@@ -818,10 +820,10 @@ def simulateEthereum(startBlockNum, endBlockNum):
     print("create log file:", logFileName)
 
 # replay txs in Ethereum with Ethane client
-def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion):
+def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion, fromLevel):
     # set Ethane's options
     switchSimulationMode(1) # 1: Ethane mode
-    setEthaneOptions(deleteEpoch, inactivateEpoch, inactivateCriterion)
+    setEthaneOptions(deleteEpoch, inactivateEpoch, inactivateCriterion, fromLevel)
 
     # set log file name
     logFileName = "ethane_simulate_" + str(startBlockNum) + "_" + str(endBlockNum) \
@@ -992,11 +994,11 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
     print("create log file:", logFileName)
 
 # replay txs in Ethereum with Ethanos client (in Ethanos, inactivateEpoch = inactivateCriterion)
-def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion):
+def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
     
     # set Ethanos's options
     switchSimulationMode(2) # 2: Ethanos mode
-    setEthaneOptions(inactivateCriterion, inactivateCriterion, inactivateCriterion)
+    setEthaneOptions(inactivateCriterion, inactivateCriterion, inactivateCriterion, fromLevel)
 
     # set log file name
     logFileName = "ethanos_simulate_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateCriterion) + ".txt"
@@ -1311,6 +1313,7 @@ if __name__ == "__main__":
     deleteEpoch = 10000
     inactivateEpoch = 10000
     inactivateCriterion = 10000
+    fromLevel = 0 # how many parent nodes to omit in Merkle proofs
 
     # run simulation
     if simulationMode == 0:
@@ -1319,11 +1322,11 @@ if __name__ == "__main__":
         inspectTriesEthereum(startBlockNum, endBlockNum, inactivateCriterion)
     elif simulationMode == 1:
          # replay txs in Ethereum for Ethane
-        simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
+        simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion, fromLevel)
         inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
     elif simulationMode == 2:
         # replay txs in Ethereum for Ethanos
-        simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion)
+        simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel)
         inspectTriesEthanos(startBlockNum, endBlockNum, inactivateCriterion)
     else:
         print("wrong mode:", simulationMode)

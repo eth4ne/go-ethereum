@@ -90,6 +90,18 @@ var (
 	flushStartTime time.Time
 )
 
+// for Merkle proof (from core/state/statedb.go)
+type proofList [][]byte
+
+func (n *proofList) Put(key []byte, value []byte) error {
+	*n = append(*n, value)
+	return nil
+}
+
+func (n *proofList) Delete(key []byte) error {
+	panic("not supported")
+}
+
 func reset(deleteDisk bool) {
 
 	// set maximum number of open files
@@ -179,8 +191,7 @@ func reset(deleteDisk bool) {
 	common.InactiveBoundaryKey = uint64(0)
 	common.CheckpointKeys = make(map[uint64]uint64)
 	common.RestoredKeys = make([]common.Hash, 0)
-	common.RestorationNum = uint64(0)
-	common.RestoredNodeNum = uint64(0)
+	common.BlockRestoreStat.Reset()
 	common.DeletedActiveNodeNum = uint64(0)
 	common.DeletedInactiveNodeNum = uint64(0)
 
@@ -456,8 +467,8 @@ func flushTrieNodes() {
 	blockInfo.NewStorageNodeStat = common.NewStorageNodeStat
 	blockInfo.TotalNodeStat = common.TotalNodeStat
 	blockInfo.TotalStorageNodeStat = common.TotalStorageNodeStat
-	blockInfo.RestorationNum = common.RestorationNum
-	blockInfo.RestoredNodeNum = common.RestoredNodeNum
+	blockInfo.BlockRestoreStat = common.BlockRestoreStat
+	common.BlockRestoreStat.Reset()
 	blockInfo.DeletedActiveNodeNum = common.DeletedActiveNodeNum
 	blockInfo.DeletedInactiveNodeNum = common.DeletedInactiveNodeNum
 	blockInfo.InactivatedNodeNum = common.InactiveBoundaryKey
@@ -910,19 +921,24 @@ func updateTrieForEthanos(addr common.Address, key, value []byte) error {
 func restoreAccountForEthanos(restoreAddr common.Address) {
 
 	blockNum := common.NextBlockNum
-	currentEpochNum := blockNum / common.InactivateCriterion
+	currentEpochNum := int(blockNum / common.InactivateCriterion)
 	if currentEpochNum < 2 {
-		fmt.Println("there is no inactive account at epoch 0~1")
+		fmt.Println("ERROR: restoration is not needed at epoch 0~1")
+		fmt.Println("restore address:", restoreAddr.Hex())
 		os.Exit(1)
 	}
 
-	restoreSuccess := false
-	addrHash := crypto.Keccak256Hash(restoreAddr[:])
-	checkpointBlockNum := currentEpochNum*common.InactivateCriterion - 1
+	// check whether this address exists at each checkpoint block (epoch: 0 ~ cached)
+	exists := make([]bool, currentEpochNum)
 
-	for ; int(checkpointBlockNum) >= 0; checkpointBlockNum -= common.InactivateCriterion {
+	// iterate checkpoint blocks (to know whether this address exists or not)
+	addrHash := crypto.Keccak256Hash(restoreAddr[:])
+	epochNum := currentEpochNum - 1 // we do not have to prove current state trie's account
+	// fmt.Println("current epoch:", currentEpochNum, "/ epochNum:", epochNum)
+	for ; epochNum >= 0; epochNum-- {
 
 		// open checkpoint block's state trie
+		checkpointBlockNum := uint64((epochNum+1))*common.InactivateCriterion - 1
 		checkpointRoot := common.Blocks[checkpointBlockNum].Root
 		checkpointTrie, err := trie.New(checkpointRoot, trie.NewDatabase(diskdb))
 		if err != nil {
@@ -933,7 +949,9 @@ func restoreAccountForEthanos(restoreAddr common.Address) {
 		// search checkpoint block's state trie
 		enc, _ := checkpointTrie.TryGet(addrHash[:])
 		if enc != nil {
-			// decode latest account
+			exists[epochNum] = true
+
+			// decode account
 			var acc types.EthanosStateAccount
 			if err := rlp.DecodeBytes(enc, &acc); err != nil {
 				fmt.Println("Failed to decode state object:", err)
@@ -942,29 +960,127 @@ func restoreAccountForEthanos(restoreAddr common.Address) {
 				os.Exit(1)
 			}
 
-			// set restored flag
-			acc.Restored = true
+			// we do not need states older than last restoration, stop searching
+			if acc.Restored {
+				break
+			}
+		}
+	}
+	if epochNum == -1 {
+		epochNum = 0
+	}
+	// fmt.Println("after iterate, epochNum:", epochNum)
 
-			// encode restored account
-			data, _ := rlp.EncodeToBytes(acc)
-
-			// insert to current state trie
-			updateTrieForEthanos(restoreAddr, addrHash[:], data)
-			restoreSuccess = true
+	//
+	// find first epoch to make proofs
+	//
+	// ignore sequential void proofs
+	for ; epochNum < len(exists); epochNum++ {
+		if exists[epochNum] {
 			break
+		}
+	}
+	// ignore sequential membership proofs without last one just before void proof appears
+	for ; epochNum < len(exists)-1; epochNum++ {
+		if !exists[epochNum+1] {
+			break
+		}
+	}
+	if epochNum == currentEpochNum-1 {
+		// if start epoch num is cached checkpoint, then this address do not need restoration
+		fmt.Println("ERROR: we only needs cached trie to restore, which means this address do not need restoration")
+		fmt.Println("restore address:", restoreAddr.Hex())
+
+		if common.StopWhenErrorOccurs {
+			os.Exit(1)
+		}
+		return
+	}
+
+	// collect proofs for restoration
+	trie.RestoreProofHashes = make(map[common.Hash]int) // reset multi proof
+	for ; epochNum < currentEpochNum-1; epochNum++ {
+		// check bloom filter first
+		exist, _ := pruner.BloomFilters[epochNum].Contain(restoreAddr.Bytes())
+		if !exist {
+			// bloom filter can be void proof
+			// fmt.Println("at epoch", epochNum, ": bloom")
+			common.BlockRestoreStat.BloomFilterNum++
+			continue
+		} else {
+			// need merkle proof
+			// fmt.Println("at epoch", epochNum, ": merkle")
+			common.BlockRestoreStat.MerkleProofNum++
+		}
+
+		// open checkpoint block's state trie
+		checkpointBlockNum := uint64((epochNum+1))*common.InactivateCriterion - 1
+		checkpointRoot := common.Blocks[checkpointBlockNum].Root
+		checkpointTrie, err := trie.New(checkpointRoot, trie.NewDatabase(diskdb))
+		if err != nil {
+			fmt.Println("restoreAccountForEthanos() error:", err)
+			os.Exit(1)
+		}
+
+		// get Merkle proof for this account
+		var proof proofList
+		checkpointTrie.Prove(addrHash[:], common.FromLevel, &proof)
+		if exists[epochNum] {
+			// this is membership proof
+			common.BlockRestoreStat.RestoredAccountNum++
+		} else {
+			// this is void proof
 		}
 
 	}
 
-	if !restoreSuccess {
-		fmt.Println("there is no account to restore for Ethanos -> addr:", restoreAddr.Hex())
+	// var for experiment: no need to merge accounts, actually
+	// because latest account is the latest state of this address in our simulation
+	var latestAcc types.EthanosStateAccount
+	var enc []byte
+	// search current state trie first
+	enc, _ = normTrie.TryGet(addrHash[:])
+	if enc == nil {
+		// search checkpoint tries
+		for i := len(exists) - 1; i >= 0; i-- {
+			if exists[i] {
+				checkpointBlockNum := uint64((i+1))*common.InactivateCriterion - 1
+				checkpointRoot := common.Blocks[checkpointBlockNum].Root
+				checkpointTrie, err := trie.New(checkpointRoot, trie.NewDatabase(diskdb))
+				if err != nil {
+					fmt.Println("restoreAccountForEthanos() error:", err)
+					os.Exit(1)
+				}
+
+				enc, _ = checkpointTrie.TryGet(addrHash[:])
+				break
+			}
+		}
+	}
+	// decode account
+	if err := rlp.DecodeBytes(enc, &latestAcc); err != nil {
+		fmt.Println("Failed to decode state object:", err)
+		fmt.Println("restoreAddr:", restoreAddr)
+		fmt.Println("enc:", enc)
 		os.Exit(1)
 	}
+	// set restored flag
+	latestAcc.Restored = true
+	// encode restored account
+	data, _ := rlp.EncodeToBytes(latestAcc)
+	// insert to current state trie
+	updateTrieForEthanos(restoreAddr, addrHash[:], data)
 
-	// logging # of restore
-	common.RestorationNum++
+	// logging restore stats
+	// RESTORE_ALL: restore all inactive leaf nodes of this address
+	nodeNum, proofSize := trie.GetMultiProofStats()
+	common.BlockRestoreStat.RestorationNum++
+	common.BlockRestoreStat.MerkleProofsSize += proofSize
+	common.BlockRestoreStat.MerkleProofsNodesNum += nodeNum
 
-	fmt.Println("restoreAccountForEthanos for", restoreAddr.Hex(), "finish")
+	// fmt.Println("restoreAccountForEthanos for", restoreAddr.Hex(), "finish")
+	// fmt.Println("exists:", exists)
+	// fmt.Println("multi proof stats -> nodeNum:", nodeNum, "/ proofSize:", proofSize, "(B)")
 }
 
 // TODO(jmlee): implement this
@@ -1153,18 +1269,29 @@ func restoreAccountForEthane(restoreAddr common.Address) {
 
 	if len(common.AddrToKeyInactive[restoreAddr]) == 0 {
 		fmt.Println("there is no account to restore")
-		os.Exit(1)
+		if common.StopWhenErrorOccurs {
+			os.Exit(1)
+		}
 		return
 	}
 
+	//
 	// collect & merge inactive accounts
+	//
+
 	var restoredAcc types.EthaneStateAccount
 	restoredAcc.Balance = big.NewInt(0)
 	restoredAcc.Root = emptyRoot
 	restoredAcc.CodeHash = emptyCodeHash
+
+	// reset multi proof
+	trie.RestoreProofHashes = make(map[common.Hash]int)
+	merkleProofNum := 0
+
 	// var for experiment: no need to merge accounts, actually
 	// because latest account is the latest state of this address in our simulation
 	var latestAcc types.EthaneStateAccount
+
 	for _, key := range common.AddrToKeyInactive[restoreAddr] {
 
 		// get inactive account
@@ -1181,6 +1308,11 @@ func restoreAccountForEthane(restoreAddr common.Address) {
 			os.Exit(1)
 		}
 		latestAcc = acc
+
+		// get Merkle proof for this account
+		var proof proofList
+		inactiveTrie.Prove(key[:], common.FromLevel, &proof)
+		merkleProofNum++
 
 		// merge account
 		restoredAcc.Balance.Add(restoredAcc.Balance, acc.Balance)
@@ -1231,10 +1363,16 @@ func restoreAccountForEthane(restoreAddr common.Address) {
 	data, _ := rlp.EncodeToBytes(latestAcc) // code for experiment
 	updateTrieForEthane(restoreAddr, data)
 
-	// record merkle proofs for restoration (to delete these later)
+	// logging restore stats
 	// RESTORE_ALL: restore all inactive leaf nodes of this address
-	common.RestorationNum++
-	common.RestoredNodeNum += uint64(len(common.AddrToKeyInactive[restoreAddr]))
+	nodeNum, proofSize := trie.GetMultiProofStats()
+	common.BlockRestoreStat.RestorationNum++
+	common.BlockRestoreStat.RestoredAccountNum += len(common.AddrToKeyInactive[restoreAddr])
+	common.BlockRestoreStat.MerkleProofNum += len(common.AddrToKeyInactive[restoreAddr])
+	common.BlockRestoreStat.MerkleProofsSize += proofSize
+	common.BlockRestoreStat.MerkleProofsNodesNum += nodeNum
+
+	// record merkle proofs for restoration (to delete these later)
 	common.RestoredKeys = append(common.RestoredKeys, common.AddrToKeyInactive[restoreAddr]...)
 	delete(common.AddrToKeyInactive, restoreAddr)
 
@@ -1244,6 +1382,9 @@ func restoreAccountForEthane(restoreAddr common.Address) {
 	delete(common.CrumbAddresses, restoreAddr)
 
 	// fmt.Println("success restore:", restoreAddr.Hex())
+
+	// fmt.Println("inactive root:", inactiveTrie.Hash().Hex())
+	// fmt.Println("multi proof stats -> merkleNum: ", merkleProofNum, "/ nodeNum:", nodeNum, "/ proofSize:", proofSize, "(B)")
 }
 
 // InspectTrieWithinRange prints trie stats (size, node num, node types, depths) within range
@@ -1396,10 +1537,16 @@ func printEthaneState() {
 	inspectEthaneTries(latestCheckpointBlockNum - 1) // relatively large state trie before delete/inactivate
 }
 
-func setEthaneOptions(deleteEpoch, inactivateEpoch, inactivateCriterion uint64) {
+func setEthaneOptions(deleteEpoch, inactivateEpoch, inactivateCriterion uint64, fromLevel uint) {
 	common.DeleteEpoch = deleteEpoch
 	common.InactivateEpoch = inactivateEpoch
 	common.InactivateCriterion = inactivateCriterion
+	common.FromLevel = fromLevel
+	fmt.Println("setEthaneOptions() finish -> mode:", common.SimulationMode)
+	fmt.Println("  DeleteEpoch:", common.DeleteEpoch)
+	fmt.Println("  InactivateEpoch:", common.InactivateEpoch)
+	fmt.Println("  InactivateCriterion:", common.InactivateCriterion)
+	fmt.Println("  FromLevel:", common.FromLevel)
 }
 
 // save block infos
@@ -1433,8 +1580,8 @@ func saveBlockInfos(fileName string, startBlockNum, endBlockNum uint64) {
 		log += strconv.FormatInt(blockInfo.TimeToDelete, 10) + delimiter
 		log += strconv.FormatInt(blockInfo.TimeToInactivate, 10) + delimiter
 
-		log += strconv.FormatUint(blockInfo.RestorationNum, 10) + delimiter
-		log += strconv.FormatUint(blockInfo.RestoredNodeNum, 10) + delimiter
+		log += blockInfo.BlockRestoreStat.ToString(delimiter)
+
 		log += strconv.FormatUint(blockInfo.DeletedActiveNodeNum, 10) + delimiter
 		log += strconv.FormatUint(blockInfo.DeletedInactiveNodeNum, 10) + delimiter
 		log += strconv.FormatUint(blockInfo.InactivatedNodeNum, 10) + delimiter
@@ -2157,7 +2304,8 @@ func connHandler(conn net.Conn) {
 				deleteEpoch, _ := strconv.ParseUint(params[1], 10, 64)
 				inactivateEpoch, _ := strconv.ParseUint(params[2], 10, 64)
 				inactivateCriterion, _ := strconv.ParseUint(params[3], 10, 64)
-				setEthaneOptions(deleteEpoch, inactivateEpoch, inactivateCriterion)
+				fromLevel, _ := strconv.ParseUint(params[4], 10, 64)
+				setEthaneOptions(deleteEpoch, inactivateEpoch, inactivateCriterion, uint(fromLevel))
 
 				response = []byte("success")
 

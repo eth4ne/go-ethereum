@@ -56,16 +56,17 @@ def parseBlockInfos(simulMode, startBlockNum, endBlockNum, deleteEpoch, inactiva
     # logs[33][blockNum] = TimeToDelete (ns)
     # logs[34][blockNum] = TimeToInactivate (ns)
 
-    # logs[35][blockNum] = RestorationNum
-    # logs[36][blockNum] = RestoredNodeNum
-    # logs[37][blockNum] = DeletedActiveNodeNum
-    # logs[38][blockNum] = DeletedInactiveNodeNum
-    # logs[39][blockNum] = InactivatedNodeNum
+    # RestoreStat.ToString() = RestorationNum, RestoredAccountNum, BloomFilterNum, MerkleProofNum, MerkleProofsSize, MerkleProofsNodesNum
+    # logs[35~40][blockNum] = BlockRestoreStat.ToString()
 
-    # logs[40][blockNum] = ActiveAddressNum
-    # logs[41][blockNum] = RestoredAddressNum
-    # logs[42][blockNum] = CrumbAddressNum
-    # logs[43][blockNum] = InactiveAddressNum
+    # logs[41][blockNum] = DeletedActiveNodeNum
+    # logs[42][blockNum] = DeletedInactiveNodeNum
+    # logs[43][blockNum] = InactivatedNodeNum
+
+    # logs[44][blockNum] = ActiveAddressNum
+    # logs[45][blockNum] = RestoredAddressNum
+    # logs[46][blockNum] = CrumbAddressNum
+    # logs[47][blockNum] = InactiveAddressNum
 
     columnNum = 100 # big enough value
     logs = TwoD(endBlockNum-startBlockNum+1, columnNum, True)
@@ -327,7 +328,7 @@ def drawGraphsForBlockInfosCompare(startBlockNum, endBlockNum, deleteEpoch, inac
     plt.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
 
     # select graph type
-    plt.stackplot(blockNums, blockInfosLogs[1][40], blockInfosLogs[1][41], blockInfosLogs[1][42], blockInfosLogs[1][43], labels = ['active', 'restored', 'crumb', 'inactive']) # draw stack graph
+    plt.stackplot(blockNums, blockInfosLogs[1][44], blockInfosLogs[1][45], blockInfosLogs[1][46], blockInfosLogs[1][47], labels = ['active', 'restored', 'crumb', 'inactive']) # draw stack graph
     plt.legend(loc='upper left')
 
     # set num of ticks
@@ -340,6 +341,50 @@ def drawGraphsForBlockInfosCompare(startBlockNum, endBlockNum, deleteEpoch, inac
     plt.savefig(graphPath+graphName, format="png")
 
     print("drawing", graphName, "  -> success\n")
+
+
+
+    #
+    # Restore stats (Ethane vs Ethanos)
+    #
+
+    # set graph
+    plt.figure()
+    ax = plt.axes()
+
+    # set title, label names
+    plt.title("compare avg restore proof size (de:" + str(deleteEpoch) + ", ie:" + str(inactivateEpoch) + ", ic:" + str(inactivateCriterion) + ")", pad=10) # set graph title
+    plt.xlabel("block number", labelpad=10) # set x axis
+    plt.ylabel("avg restore proof size (B)", labelpad=10) # set y axis
+
+    # set tick labels
+    plt.ticklabel_format(style='sci', axis='x', scilimits=(0,0))
+    plt.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
+
+    # set x axis
+    blockNums = list(range(startBlockNum,endBlockNum+1))
+
+    # draw lines
+    avgProofSize = [int(i/j) if j else 0 for i,j in zip(blockInfosLogs[1][39], blockInfosLogs[1][35])]
+    plt.scatter(blockNums, avgProofSize, label=simulationModeNames[1], s=1) # draw plot
+    avgProofSize = [int(i/j) if j else 0 for i,j in zip(blockInfosLogs[2][39], blockInfosLogs[2][35])]
+    plt.scatter(blockNums, avgProofSize, label=simulationModeNames[2], s=0.1) # draw plot
+    plt.legend(loc='best')
+    
+    # set num of ticks
+    ax.xaxis.set_major_locator(MaxNLocator(maxTickNum)) # set # of ticks
+    ax.yaxis.set_major_locator(MaxNLocator(maxTickNum)) # set # of ticks
+
+    # save graph
+    makeDir(graphPath)
+    graphName = "compare avg restore proof size (de:" + str(deleteEpoch) + ", ie:" + str(inactivateEpoch) + ", ic:" + str(inactivateCriterion) + ").png"
+    plt.savefig(graphPath+graphName, format="png")
+
+    print("drawing", graphName, "  -> success\n")
+
+
+
+
 
 # draw graphs for block infos log file
 def drawGraphsForTrieInspects(simulMode, startBlockNum, endBlockNum, deleteEpoch=0, inactivateEpoch=0, inactivateCriterion=0):

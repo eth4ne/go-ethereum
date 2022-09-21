@@ -28,6 +28,24 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
+var (
+	// store node hashes of Merkle proof and their sizes (jmlee)
+	// RestoreProofHashes[nodeHash] = node's size
+	RestoreProofHashes = make(map[common.Hash]int)
+)
+
+// GetMultiProofStats returns # of node num & multi-proof size
+func GetMultiProofStats() (int, int) {
+	nodeNum := 0
+	proofSize := 0
+	for nodeHash, nodeSize := range(RestoreProofHashes) {
+		fmt.Print(nodeHash.Hex(), " ")
+		nodeNum++
+		proofSize += nodeSize
+	}
+	return nodeNum, proofSize
+}
+
 // Prove constructs a merkle proof for key. The result contains all encoded nodes
 // on the path to the value at key. The value itself is also included in the last
 // node and can be retrieved by verifying the proof.
@@ -84,6 +102,9 @@ func (t *Trie) Prove(key []byte, fromLevel uint, proofDb ethdb.KeyValueWriter) e
 				hash = hasher.hashData(enc)
 			}
 			proofDb.Put(hash, enc)
+			
+			// for logging multi proof (jmlee)
+			RestoreProofHashes[common.BytesToHash(hash)] = len(enc)
 		}
 	}
 	return nil

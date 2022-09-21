@@ -118,6 +118,9 @@ var (
 	InactivateEpoch     = uint64(3) // option: block epoch to inactivate inactive leaf nodes (from temp area to inactive trie)
 	InactivateCriterion = uint64(3) // option (also for Ethanos): inactive accounts were touched more before than this block timestamp (min: 1) (const)
 
+	// option (also for Ethanos): omit some parent nodes in Merkle proofs (ex. 1: omit root node)
+	FromLevel = uint(0)
+
 	//
 	// vars for Ethane simulation (jmlee)
 	//
@@ -144,11 +147,12 @@ var (
 	InactiveBoundaryKey  = uint64(0)               // inactive accounts have keys smaller than InactiveBoundaryKey
 	InactiveBoundaryKeys = make(map[uint64]uint64) // InactiveBoundaryKeys[blockNum] = inactiveBoundaryKey at that block (TODO(jmlee): maybe merge into BlockInfo)
 	RestoredKeys         = make([]Hash, 0)         // merkle proof keys in restore txs, need to be deleted after inactivation
-	RestorationNum       = uint64(0)               // total restore request num
-	RestoredNodeNum      = uint64(0)               // total restored leaf nodes
 
 	DeletedActiveNodeNum   = uint64(0) // total deleted leaf nodes in active trie
 	DeletedInactiveNodeNum = uint64(0) // total deleted leaf nodes in inactive trie (# of used Merkle proofs for restoration)
+
+	// TODO(jmlee): logging restore related stats for current block
+	BlockRestoreStat RestoreStat
 
 	// very large key which will not be reached forever
 	NoExistKey     = HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
@@ -196,6 +200,16 @@ type NodeStat struct {
 	AvgDepth float64
 }
 
+// RestoreStat logs stats for all restorations in a single block
+type RestoreStat struct {
+	RestorationNum       int // restore request num
+	RestoredAccountNum   int // restored accounts num
+	BloomFilterNum       int // (for Ethanos only) # of bloom filters for void-proof
+	MerkleProofNum       int // # of merkle proofs for membership/void-proof
+	MerkleProofsSize     int // total size of merkle proofs
+	MerkleProofsNodesNum int // # of nodes in merkle proofs
+}
+
 // BlockInfo stores block related information
 type BlockInfo struct {
 	Root              Hash   // root hash of trie
@@ -212,8 +226,8 @@ type BlockInfo struct {
 	TimeToDelete     int64 // time to delete previous leaf nodes in Ethane
 	TimeToInactivate int64 // time to inactivate old leaf nodes in Ethane
 
-	RestorationNum         uint64 // total restore request num
-	RestoredNodeNum        uint64 // total restored leaf nodes
+	BlockRestoreStat RestoreStat // stats for all restoration in this block
+
 	DeletedActiveNodeNum   uint64 // total deleted leaf nodes in active trie
 	DeletedInactiveNodeNum uint64 // total deleted leaf nodes in inactive trie (# of used Merkle proofs for restoration)
 	InactivatedNodeNum     uint64 // total inactivated leaf nodes in active trie (= InactiveBoundaryKey)
@@ -321,6 +335,35 @@ func (ns NodeStat) ToStringWithDepths(delimiter string) string {
 	str += fmt.Sprintf("%f", ns.AvgDepth)
 	str += delimiter
 
+	return str
+}
+
+// Reset sets all RestoreStat fields to 0
+func (rs *RestoreStat) Reset() {
+	rs.RestorationNum = 0
+	rs.RestoredAccountNum = 0
+	rs.MerkleProofNum = 0
+	rs.BloomFilterNum = 0
+	rs.MerkleProofsSize = 0
+	rs.MerkleProofsNodesNum = 0
+}
+
+// ToString collects values and converts them to string
+func (rs *RestoreStat) ToString(delimiter string) string {
+
+	values := make([]int, 6)
+	values[0] = rs.RestorationNum
+	values[1] = rs.RestoredAccountNum
+	values[2] = rs.BloomFilterNum
+	values[3] = rs.MerkleProofNum
+	values[4] = rs.MerkleProofsSize
+	values[5] = rs.MerkleProofsNodesNum
+
+	str := ""
+	for _, value := range values {
+		str += strconv.Itoa(value)
+		str += delimiter
+	}
 	return str
 }
 
