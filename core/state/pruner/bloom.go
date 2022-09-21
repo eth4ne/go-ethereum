@@ -47,7 +47,6 @@ var (
 func InitBloomFilters() {
 	BloomFilters = make([]*stateBloom, 0)
 	LatestBloomFilter, _ = newStateBloomWithSize(BloomFilterSize)
-	BloomFilters = append(BloomFilters, LatestBloomFilter)
 }
 
 // save current bloom filter, and make new one for new Ethanos epoch (jmlee)
