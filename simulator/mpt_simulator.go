@@ -986,10 +986,11 @@ func restoreAccountForEthanos(restoreAddr common.Address) {
 			break
 		}
 	}
-	if epochNum == currentEpochNum-1 {
-		// if start epoch num is cached checkpoint, then this address do not need restoration
+	if epochNum >= currentEpochNum-1 {
+		// if start epoch num is newer than cached checkpoint, then this address do not need restoration
 		fmt.Println("ERROR: we only needs cached trie to restore, which means this address do not need restoration")
 		fmt.Println("restore address:", restoreAddr.Hex())
+		fmt.Println("currentEpochNum:", currentEpochNum, "/ epochNum:", epochNum)
 
 		if common.StopWhenErrorOccurs {
 			os.Exit(1)
@@ -1053,6 +1054,7 @@ func restoreAccountForEthanos(restoreAddr common.Address) {
 				}
 
 				enc, _ = checkpointTrie.TryGet(addrHash[:])
+				// fmt.Println("find latest account at epoch", i)
 				break
 			}
 		}
@@ -1061,6 +1063,7 @@ func restoreAccountForEthanos(restoreAddr common.Address) {
 	if err := rlp.DecodeBytes(enc, &latestAcc); err != nil {
 		fmt.Println("Failed to decode state object:", err)
 		fmt.Println("restoreAddr:", restoreAddr)
+		fmt.Println("exists:", exists)
 		fmt.Println("enc:", enc)
 		os.Exit(1)
 	}
