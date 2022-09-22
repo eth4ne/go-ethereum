@@ -39,7 +39,8 @@ func GetMultiProofStats() (int, int) {
 	nodeNum := 0
 	proofSize := 0
 	for nodeHash, nodeSize := range(RestoreProofHashes) {
-		fmt.Print(nodeHash.Hex(), " ")
+		_ = nodeHash
+		// fmt.Print(nodeHash.Hex(), " ")
 		nodeNum++
 		proofSize += nodeSize
 	}
