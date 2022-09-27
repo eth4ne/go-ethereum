@@ -8,6 +8,8 @@ from datetime import datetime
 from os.path import exists
 import pymysql.cursors
 import csv
+import multiprocessing
+from multiprocessing.pool import ThreadPool as Pool
 
 # ethereum tx data DB options
 db_host = 'localhost'
@@ -18,6 +20,8 @@ db_port = 3306 # 3306: mariadb default
 conn_mariadb = lambda host, port, user, password, database: pymysql.connect(host=host, port=port, user=user, password=password, database=database, cursorclass=pymysql.cursors.DictCursor)
 conn = conn_mariadb(db_host, db_port, db_user, db_pass, db_name)
 cursor = conn.cursor()
+conn_thread = conn_mariadb(db_host, db_port, db_user, db_pass, db_name)
+cursor_thread = conn_thread.cursor() # another cursor for async thread
 
 # simulator server IP address
 SERVER_IP = "localhost"
@@ -139,6 +143,23 @@ def select_slot_write_lists(cursor, startstateid, endstateid):
             slots[i['stateid']] = []
         slots[i['stateid']].append(i)
     return slots
+
+# read state & storage r/w list
+def select_state_and_storage_list(cursor, startblocknumber, endblocknumber):
+    # print("select_state_and_storage_list() start")
+    
+    # get state r/w list
+    rwList = select_account_read_write_lists(cursor, startblocknumber, endblocknumber)
+    
+    # get storage write list
+    if len(rwList) > 0 and doStorageTrieUpdate:
+        slotList = select_slot_write_lists(cursor, rwList[0]['id'], rwList[-1]['id']+1)
+    else:
+        slotList = []
+
+    # return all lists
+    # print("select_state_and_storage_list() end -> rwList len:", len(rwList), "/ slotList len:", len(slotList))
+    return rwList, slotList
 
 # get current block number (i.e., # of flushes)
 def getBlockNum():
@@ -660,11 +681,10 @@ def simulateEthereum(startBlockNum, endBlockNum):
     startTime = datetime.now()
 
     # block batch size for db query
-    batchsize = 1000
+    batchsize = 200
     # print log interval
     loginterval = 2000
 
-    headers = {}
     oldblocknumber = startBlockNum
     start = time.time()
     blockcount = 0
@@ -673,16 +693,17 @@ def simulateEthereum(startBlockNum, endBlockNum):
     logFileName = "ethereum_simulate_" + str(startBlockNum) + "_" + str(endBlockNum) + ".txt"
     blockInfosLogFileName = "ethereum_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + ".txt"
 
+    rwList = []
+    slotList = []
+    headers = {}
     currentStorageRoot = ""
     # insert random accounts
-    for blockNum in range(startBlockNum, endBlockNum+2, batchsize):
+    for blockNum in range(startBlockNum, endBlockNum+batchsize*2, batchsize):
         #print("do block", blockNum ,"\n")
+        
         # get read/write list from DB
-        rwList = select_account_read_write_lists(cursor, blockNum, blockNum+batchsize)
-        if len(rwList) > 0:
-            slotList = select_slot_write_lists(cursor, rwList[0]['id'], rwList[-1]['id']+1)
-        else:
-            slotlist = []
+        queryResult = pool.apply_async(select_state_and_storage_list, (cursor_thread, blockNum, blockNum+batchsize,))
+        # print("\nquery blocks ->", blockNum, "~", blockNum+batchsize)
         
         # replay writes
         for item in rwList:
@@ -696,22 +717,22 @@ def simulateEthereum(startBlockNum, endBlockNum):
                 
                 # check current trie is made correctly
                 if oldblocknumber not in headers:
-                    headers = dict(zip(range(blockNum, blockNum+batchsize), select_blocks_header(cursor, blockNum, blockNum+batchsize)))
+                    headers = dict(zip(range(blockNum-batchsize, blockNum), select_blocks_header(cursor, blockNum-batchsize, blockNum)))
                 stateRootInBlockHeader = headers[oldblocknumber]['stateroot'].hex()
                 currentStateRoot = getTrieRootHash()[2:]
                 if currentStateRoot != stateRootInBlockHeader:
-                    print("@@fail: state trie is wrong")
-                    print(currentStateRoot, "vs", stateRootInBlockHeader)
-                    print('block #{}'.format(oldblocknumber))
                     if initialInvalidBlockNum > oldblocknumber:
-                        initialInvalidBlockNum = oldblocknumber
-                    print("initial invalid block num:", initialInvalidBlockNum)
+                            initialInvalidBlockNum = oldblocknumber
+                    # print("@@fail: state trie is wrong")
+                    # print(currentStateRoot, "vs", stateRootInBlockHeader)
+                    # print('block #{}'.format(oldblocknumber))
+                    # print("initial invalid block num:", initialInvalidBlockNum)
                     if stopWhenErrorOccurs:
                         sys.exit()
                 else:
                     pass
-                    #print("@@success")
-                    #print(currentStateRoot, "vs", stateRootInBlockHeader)
+                    # print("@@success")
+                    # print(currentStateRoot, "vs", stateRootInBlockHeader)
                 if oldblocknumber % loginterval == 0:
                     seconds = time.time() - start
                     print('#{}, Blkn: {}({:.2f}/s), Writen: {}({:.2f}/s), Readn: {}({:.2f}/s), Time: {}ms'.format(oldblocknumber, blockcount, blockcount/seconds, stateWriteCount+storageWriteCount, (stateWriteCount+storageWriteCount)/seconds, stateReadCount, stateReadCount/seconds, int(seconds*1000)))
@@ -803,12 +824,17 @@ def simulateEthereum(startBlockNum, endBlockNum):
                 stateWriteCount += 1
             else:
                 stateReadCount += 1
+        
+        # fill queried data which is gained asynchronously
+        rwList, slotList = queryResult.get()
+        print("get queried blocks ->", blockNum, "~", blockNum+batchsize)
 
     # show final result
     print("simulateEthereum() finished -> from block", startBlockNum, "to", endBlockNum)
     print("total elapsed time:", datetime.now()-startTime)
     print("state reads:", stateReadCount,"/ state writes:", stateWriteCount, "/ storage writes:", storageWriteCount)
     print(stateReadCount, stateWriteCount, storageWriteCount)
+    print("initial invalid block num:", initialInvalidBlockNum)
 
     # inspectTrie()
     # printCurrentTrie()
@@ -851,7 +877,7 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
     startTime = datetime.now()
 
     # block batch size for db query
-    batchsize = 1000
+    batchsize = 200
     # print log interval
     loginterval = 2000
 
@@ -859,16 +885,16 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
     start = time.time()
     blockcount = 0
 
+    rwList = []
+    slotList = []
     currentStorageRoot = ""
     # insert random accounts
-    for blockNum in range(startBlockNum, endBlockNum+2, batchsize):
+    for blockNum in range(startBlockNum, endBlockNum+batchsize*2, batchsize):
         #print("do block", blockNum ,"\n")
+        
         # get read/write list from DB
-        rwList = select_account_read_write_lists(cursor, blockNum, blockNum+batchsize)
-        if len(rwList) > 0:
-            slotList = select_slot_write_lists(cursor, rwList[0]['id'], rwList[-1]['id']+1)
-        else:
-            slotlist = []
+        queryResult = pool.apply_async(select_state_and_storage_list, (cursor_thread, blockNum, blockNum+batchsize,))
+        print("\nquery blocks ->", blockNum, "~", blockNum+batchsize)
         
         # replay writes
         for item in rwList:
@@ -976,6 +1002,10 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
                 stateWriteCount += 1
             else:
                 stateReadCount += 1
+        
+        # fill queried data which is gained asynchronously
+        rwList, slotList = queryResult.get()
+        print("get queried blocks ->", blockNum, "~", blockNum+batchsize)
 
     # show final result
     print("simulateEthane() finished -> from block", startBlockNum, "to", endBlockNum)
@@ -1024,7 +1054,7 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
     startTime = datetime.now()
 
     # block batch size for db query
-    batchsize = 1000
+    batchsize = 200
     # print log interval
     loginterval = 2000
 
@@ -1032,16 +1062,16 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
     start = time.time()
     blockcount = 0
 
+    rwList = []
+    slotList = []
     currentStorageRoot = ""
     # insert random accounts
-    for blockNum in range(startBlockNum, endBlockNum+2, batchsize):
+    for blockNum in range(startBlockNum, endBlockNum+batchsize*2, batchsize):
         #print("do block", blockNum ,"\n")
+        
         # get read/write list from DB
-        rwList = select_account_read_write_lists(cursor, blockNum, blockNum+batchsize)
-        if len(rwList) > 0:
-            slotList = select_slot_write_lists(cursor, rwList[0]['id'], rwList[-1]['id']+1)
-        else:
-            slotlist = []
+        queryResult = pool.apply_async(select_state_and_storage_list, (cursor_thread, blockNum, blockNum+batchsize,))
+        print("\nquery blocks ->", blockNum, "~", blockNum+batchsize)
         
         # replay writes
         for item in rwList:
@@ -1149,6 +1179,10 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
                 stateWriteCount += 1
             else:
                 stateReadCount += 1
+        
+        # fill queried data which is gained asynchronously
+        rwList, slotList = queryResult.get()
+        print("get queried blocks ->", blockNum, "~", blockNum+batchsize)
 
     # show final result
     print("simulateEthanos() finished -> from block", startBlockNum, "to", endBlockNum)
@@ -1302,6 +1336,9 @@ def inspectTriesEthanos(startBlockNum, endBlockNum, inactivateCriterion):
 if __name__ == "__main__":
     print("start")
     startTime = datetime.now()
+
+    # set threadpool for db querying
+    pool = Pool(1)
 
     #
     # call APIs to simulate MPT
