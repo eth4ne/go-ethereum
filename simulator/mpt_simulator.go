@@ -1757,7 +1757,7 @@ func connHandler(conn net.Conn) {
 				response = []byte(nodeStat.ToStringWithDepths(delimiter))
 
 			case "flush":
-				fmt.Println("execute flushTrieNodes()")
+				fmt.Println("\nexecute flushTrieNodes()")
 				flushTrieNodes()
 				newNodesNum, newNodesSize := common.NewNodeStat.GetSum()
 				newStorageNodesNum, newStorageNodesSize := common.NewStorageNodeStat.GetSum()

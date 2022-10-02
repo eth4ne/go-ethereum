@@ -827,7 +827,7 @@ def simulateEthereum(startBlockNum, endBlockNum):
         
         # fill queried data which is gained asynchronously
         rwList, slotList = queryResult.get()
-        print("get queried blocks ->", blockNum, "~", blockNum+batchsize)
+        # print("get queried blocks ->", blockNum, "~", blockNum+batchsize)
 
     # show final result
     print("simulateEthereum() finished -> from block", startBlockNum, "to", endBlockNum)
@@ -1005,7 +1005,7 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
         
         # fill queried data which is gained asynchronously
         rwList, slotList = queryResult.get()
-        print("get queried blocks ->", blockNum, "~", blockNum+batchsize)
+        # print("get queried blocks ->", blockNum, "~", blockNum+batchsize)
 
     # show final result
     print("simulateEthane() finished -> from block", startBlockNum, "to", endBlockNum)
@@ -1182,7 +1182,7 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
         
         # fill queried data which is gained asynchronously
         rwList, slotList = queryResult.get()
-        print("get queried blocks ->", blockNum, "~", blockNum+batchsize)
+        # print("get queried blocks ->", blockNum, "~", blockNum+batchsize)
 
     # show final result
     print("simulateEthanos() finished -> from block", startBlockNum, "to", endBlockNum)

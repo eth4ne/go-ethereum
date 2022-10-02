@@ -457,17 +457,21 @@ func (tir *TrieInspectResult) PrintTrieInspectResult(blockNumber uint64, elapsed
 	// 	output += fmt.Sprintf("  %s,%v\n", key, value.Uint64())
 	// }
 	// fmt.Fprintln(f1, output) // write text file
-	fmt.Println(output) // console print
+	// fmt.Println(output) // console print
 
 	// list all StorageTrie's codehash, leafnode depth, each node size
-	output = fmt.Sprintf("\n\nNonZero StorageTrie Leaf Node Depth: addressHash, codeHash, leaf node depth, [SN #, size, FN #, size, LN #, size]\n")
-	for key, value := range tir.StorageTrieLeafNodeDepth {
-		output += fmt.Sprintf("\n  %s,%v,%v,%v\n", key, tir.AddressHashTocodeHash[key], value, tir.StorageTrieNodeMap[key])
-		output += fmt.Sprintf("    StorageTrieRoot: %v\n", tir.StorageTrieRoot[key])
-		output += fmt.Sprintf("    SlotHash: %v\n", tir.StorageTrieSlotHash[key])
-		// for _, v := range tir.StorageTrieSlotHash[key] {
-		// 	output += fmt.Sprintf("      %v\n", v)
-		// }
+	// output = fmt.Sprintf("\n\nNonZero StorageTrie Leaf Node Depth: addressHash, codeHash, leaf node depth, [SN #, size, FN #, size, LN #, size]\n")
+	// for key, value := range tir.StorageTrieLeafNodeDepth {
+	// 	output += fmt.Sprintf("\n  %s,%v,%v,%v\n", key, tir.AddressHashTocodeHash[key], value, tir.StorageTrieNodeMap[key])
+	// 	output += fmt.Sprintf("    StorageTrieRoot: %v\n", tir.StorageTrieRoot[key])
+	// 	output += fmt.Sprintf("    SlotHash: %v\n", tir.StorageTrieSlotHash[key])
+	// 	// for _, v := range tir.StorageTrieSlotHash[key] {
+	// 	// 	output += fmt.Sprintf("      %v\n", v)
+	// 	// }
+	// }
+	// fmt.Fprintln(f1, output) // write text file
+	// fmt.Println(output)      // console print
+
 }
 
 // convert trie.TrieInspectResult to common.NodeStat (jmlee)
@@ -800,7 +804,7 @@ func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGro
 				if acc.Root.Hex() != "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421" { // empty root hash
 					storageTrie, err := NewSecure(acc.Root, t.db) // storage trie is secure trie
 					if err != nil {
-						fmt.Println("ERROR: cannot find the storage trie")
+						// fmt.Println("ERROR: cannot find the storage trie")
 						rwMutex.Lock()
 						tir.ErrorNum += 1
 						rwMutex.Unlock()

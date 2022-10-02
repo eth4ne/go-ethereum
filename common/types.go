@@ -60,7 +60,7 @@ var (
 	// option: collect flushed node hashes or not
 	// (if CollectNodeInfos is true, then TrieNodeHashes is empty, since TrieNodeInfos will collect hashes)
 	// (if CollectNodeHahes, CollectNodeInfos are both false, then TotalNodeStat, TotalStorageNodeStat might be wrong)
-	CollectNodeHashes = true
+	CollectNodeHashes = false
 
 	// option: max number of blocks to store in "Blocks" (i.e., rollback limit)
 	MaxBlocksToStore = uint64(100000000)
