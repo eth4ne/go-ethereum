@@ -894,7 +894,7 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
         
         # get read/write list from DB
         queryResult = pool.apply_async(select_state_and_storage_list, (cursor_thread, blockNum, blockNum+batchsize,))
-        print("\nquery blocks ->", blockNum, "~", blockNum+batchsize)
+        # print("\nquery blocks ->", blockNum, "~", blockNum+batchsize)
         
         # replay writes
         for item in rwList:
@@ -1071,7 +1071,7 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
         
         # get read/write list from DB
         queryResult = pool.apply_async(select_state_and_storage_list, (cursor_thread, blockNum, blockNum+batchsize,))
-        print("\nquery blocks ->", blockNum, "~", blockNum+batchsize)
+        # print("\nquery blocks ->", blockNum, "~", blockNum+batchsize)
         
         # replay writes
         for item in rwList:
@@ -1346,8 +1346,8 @@ if __name__ == "__main__":
 
     # set simulation options
     deleteDisk = True
-    doStorageTrieUpdate = True
-    stopWhenErrorOccurs = True
+    doStorageTrieUpdate = False
+    stopWhenErrorOccurs = False
     # set simulation mode (0: original Ethereum, 1: Ethane, 2: Ethanos)
     simulationMode = 0
     # set simulation params
