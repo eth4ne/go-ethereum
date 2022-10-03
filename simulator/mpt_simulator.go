@@ -48,10 +48,10 @@ const (
 
 	// choose leveldb vs memorydb
 	useLeveldb = true
-	// leveldb path
-	leveldbPath = "/home/jmlee/ssd/mptSimulator/trieNodes"
+	// leveldb path ($ sudo chmod -R 777 /ethereum)
+	leveldbPath = "/ethereum/mptSimulator_jmlee/trieNodes"
 	// leveldb cache size (MB) (Geth default: 512) (memory leak might occur when calling reset() frequently with too big cache size)
-	leveldbCache = 1024
+	leveldbCache = 20000
 	// leveldb options
 	leveldbNamespace = "eth/db/chaindata/"
 	leveldbReadonly  = false

@@ -33,7 +33,9 @@ var (
 	// bloom filters for Ethanos (jmlee)
 	//
 
-	BloomFilterSize = uint64(512) // KB
+	// size of bloom filter
+	// (ex. https://hur.st/bloomfilter/?n=10000000&p=&m=16MB&k=4)
+	BloomFilterSize = uint64(16000) // KB
 
 	// latest epoch's bloom filter
 	LatestBloomFilter *stateBloom
