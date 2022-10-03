@@ -25,6 +25,7 @@ cursor_thread = conn_thread.cursor() # another cursor for async thread
 
 # simulator server IP address
 SERVER_IP = "localhost"
+SERVER_PORT = 8999
 
 # simulator options
 deleteDisk = True # delete disk when reset simulator or not
