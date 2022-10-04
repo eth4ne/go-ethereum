@@ -53,6 +53,9 @@ var (
 	// option: simulation mode (0: original ethereum, 1: Ethane, 2: Ethanos)
 	SimulationMode = 0
 
+	// option: don't stop Ethereum simulation when storage trie is different from Geth's
+	AcceptWrongStorageTrie = false
+
 	// option: collect flushed node infos or not
 	// (if CollectNodeInfos is false, then several functionalities will be deprecated, ex. inspectTrieMem())
 	CollectNodeInfos = false

@@ -418,6 +418,17 @@ def switchSimulationMode(mode):
     print("switchSimulationModeResult result:", switchSimulationModeResult)
     return switchSimulationModeResult
 
+# don't stop Ethereum simulation when storage trie is different from Geth's
+def acceptWrongStorageTrie(option):
+    cmd = str("acceptWrongStorageTrie")
+    cmd += str(",")
+    cmd += str(option)
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    settingResult = data.decode()
+    print("settingResult result:", settingResult)
+    return settingResult
+
 # generate random address
 def makeRandAddr():
     randHex = binascii.b2a_hex(os.urandom(20))
@@ -672,12 +683,18 @@ def simulateEthereum(startBlockNum, endBlockNum):
     # set Ethereum's options
     switchSimulationMode(0) # 0: original geth mode
 
+    if doStorageTrieUpdate and not stopWhenErrorOccurs:
+        acceptWrongStorageTrie(1) # 1: accept
+    else:
+        acceptWrongStorageTrie(0) # 0: do not accept
+
     # initialize
     reset()
     stateReadCount = 0
     stateWriteCount = 0
     storageWriteCount = 0
-    initialInvalidBlockNum = 999999999
+    initialInvalidStateBlockNum = 999999999
+    initialInvalidStorageBlockNum = 999999999
     startTime = datetime.now()
 
     # block batch size for db query
@@ -721,12 +738,12 @@ def simulateEthereum(startBlockNum, endBlockNum):
                 stateRootInBlockHeader = headers[oldblocknumber]['stateroot'].hex()
                 currentStateRoot = getTrieRootHash()[2:]
                 if currentStateRoot != stateRootInBlockHeader:
-                    if initialInvalidBlockNum > oldblocknumber:
-                            initialInvalidBlockNum = oldblocknumber
+                    if initialInvalidStateBlockNum > oldblocknumber:
+                            initialInvalidStateBlockNum = oldblocknumber
                     # print("@@fail: state trie is wrong")
                     # print(currentStateRoot, "vs", stateRootInBlockHeader)
                     # print('block #{}'.format(oldblocknumber))
-                    # print("initial invalid block num:", initialInvalidBlockNum)
+                    # print("initial invalid state block num:", initialInvalidStateBlockNum)
                     if stopWhenErrorOccurs:
                         sys.exit()
                 else:
@@ -796,11 +813,11 @@ def simulateEthereum(startBlockNum, endBlockNum):
                             # print("slot:", slot)
                             # print("slotValue:", slotValue)
                             # print("\n")
-                            currentStorageRoot = updateStorageTrie(contractAddress, slot, slotValue)
+                            currentStorageRoot = updateStorageTrie(contractAddress, slot, slotValue)[2:]
                             storageWriteCount += 1
 
                         # check current storage trie is made correctly
-                        if currentStorageRoot[2:] != storageRoot:
+                        if currentStorageRoot != storageRoot:
                             print("@@fail: storage trie is wrong")
                             print("blocknum:", oldblocknumber)
                             # print("txindex:", item['txindex'])
@@ -811,11 +828,12 @@ def simulateEthereum(startBlockNum, endBlockNum):
                             print("  balance:", balance)
                             print("  codeHash:", codeHash)
                             print("  storageRoot:", storageRoot)
-                            print(currentStorageRoot[2:], "vs", storageRoot)
+                            print(currentStorageRoot, "vs", storageRoot)
 
-                            if initialInvalidBlockNum > oldblocknumber:
-                                initialInvalidBlockNum = oldblocknumber
-                            print("initial invalid block num:", initialInvalidBlockNum)
+                            if initialInvalidStorageBlockNum > oldblocknumber:
+                                initialInvalidStorageBlockNum = oldblocknumber
+                            # print("initial invalid storage block num:", initialInvalidStorageBlockNum)
+                            
                             if stopWhenErrorOccurs:
                                 sys.exit()
                 
@@ -834,7 +852,8 @@ def simulateEthereum(startBlockNum, endBlockNum):
     print("total elapsed time:", datetime.now()-startTime)
     print("state reads:", stateReadCount,"/ state writes:", stateWriteCount, "/ storage writes:", storageWriteCount)
     print(stateReadCount, stateWriteCount, storageWriteCount)
-    print("initial invalid block num:", initialInvalidBlockNum)
+    print("initial invalid state block num:", initialInvalidStateBlockNum)
+    print("initial invalid storage block num:", initialInvalidStorageBlockNum)
 
     # inspectTrie()
     # printCurrentTrie()

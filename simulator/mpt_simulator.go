@@ -1807,6 +1807,51 @@ func connHandler(conn net.Conn) {
 				// fmt.Println("addr:", addr.Hex())
 				// fmt.Println("addrHash:", addrHash.Hex())
 
+				// fix storageRoot when our simulation data is wrong (for unstoppable experiment)
+				if common.AcceptWrongStorageTrie && root != emptyRoot {
+
+					// check if there is dirty storage trie
+					storageTrie, doExist := dirtyStorageTries[addr]
+					if doExist {
+						if root != storageTrie.Hash() {
+							// fmt.Println("simulation made wrong storage trie, fix this 1")
+							// fmt.Println("  at block:", common.NextBlockNum)
+							// fmt.Println("  addr:", addr)
+							// fmt.Println("  correct root:", root)
+							// fmt.Println("  actual but wrong root:", storageTrie.Hash())
+
+							root = storageTrie.Hash()
+						}
+					} else {
+						// check if this account has wrong storage trie root
+						// if it has, then just maintain that root
+						// if tx data is correct, we don't need to fix storage roots like this
+						enc, err := normTrie.TryGet(addrHash[:])
+						if err != nil {
+							fmt.Println("TryGet() error:", err)
+							os.Exit(1)
+						}
+						if enc != nil {
+							var acc types.StateAccount
+							if err := rlp.DecodeBytes(enc, &acc); err != nil {
+								fmt.Println("Failed to decode state object in updateTrie():", err)
+								fmt.Println("addr:", addr)
+								fmt.Println("enc:", enc)
+								os.Exit(1)
+							}
+							if root != acc.Root {
+								// fmt.Println("simulation made wrong storage trie, fix this 2")
+								// fmt.Println("  at block:", common.NextBlockNum)
+								// fmt.Println("  addr:", addr)
+								// fmt.Println("  correct root:", root)
+								// fmt.Println("  actual but wrong root:", acc.Root)
+
+								root = acc.Root
+							}
+						}
+					}
+				}
+
 				// encoding account
 				var account types.StateAccount
 				account.Nonce = nonce
@@ -1820,8 +1865,9 @@ func connHandler(conn net.Conn) {
 					fmt.Println("updateTrie() failed:", err)
 					os.Exit(1)
 				}
-				normTrie.Hash()
+
 				// fmt.Println("print state trie\n")
+				// normTrie.Hash()
 				// normTrie.Print()
 
 				response = []byte("success")
@@ -2228,6 +2274,21 @@ func connHandler(conn net.Conn) {
 					common.SimulationMode = int(mode)
 				} else {
 					fmt.Println("Error switchSimulationMode: invalid mode ->", mode)
+					os.Exit(1)
+				}
+
+				response = []byte("success")
+
+			case "acceptWrongStorageTrie":
+				fmt.Println("execute acceptWrongStorageTrie()")
+				option, _ := strconv.ParseUint(params[1], 10, 64)
+
+				if option == 0 {
+					common.AcceptWrongStorageTrie = false
+				} else if option == 1{
+					common.AcceptWrongStorageTrie = true
+				} else {
+					fmt.Println("Error acceptWrongStorageTrie: invalid option ->", option)
 					os.Exit(1)
 				}
 
