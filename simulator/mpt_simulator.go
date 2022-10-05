@@ -1535,9 +1535,9 @@ func printEthaneState() {
 
 	// print total/active/inactive trie stats (size, node num, node types, depths)
 	// inspectEthaneTries(latestBlockNum)
-	latestCheckpointBlockNum := latestBlockNum - (latestBlockNum % common.InactivateEpoch) - 1
-	inspectEthaneTries(latestCheckpointBlockNum)     // relatively small state trie after delete/inactivate
-	inspectEthaneTries(latestCheckpointBlockNum - 1) // relatively large state trie before delete/inactivate
+	// latestCheckpointBlockNum := latestBlockNum - (latestBlockNum % common.InactivateEpoch) - 1
+	// inspectEthaneTries(latestCheckpointBlockNum)     // relatively small state trie after delete/inactivate
+	// inspectEthaneTries(latestCheckpointBlockNum - 1) // relatively large state trie before delete/inactivate
 }
 
 func setEthaneOptions(deleteEpoch, inactivateEpoch, inactivateCriterion uint64, fromLevel uint) {
