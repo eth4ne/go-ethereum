@@ -1223,7 +1223,7 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
 def inspectTriesEthereum(startBlockNum, endBlockNum, inactivateCriterion):
 
     print("inspectTriesEthereum() start")
-    startTime = datetime.now()
+    totalStartTime = datetime.now()
 
     delimiter = " "
 
@@ -1258,13 +1258,13 @@ def inspectTriesEthereum(startBlockNum, endBlockNum, inactivateCriterion):
             trieInspectFile.write(log)
     
     trieInspectFile.close()
-    print("total elapsed time:", datetime.now()-startTime)
+    print("total trie inspect time:", datetime.now()-totalStartTime)
 
 # inspect tries after simulation for ethane
 def inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion):
 
     print("inspectTriesEthane() start")
-    startTime = datetime.now()
+    totalStartTime = datetime.now()
 
     delimiter = " "
 
@@ -1308,13 +1308,13 @@ def inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch,
             trieInspectFile.write(log)
 
     trieInspectFile.close()
-    print("total elapsed time:", datetime.now()-startTime)
+    print("total trie inspect time:", datetime.now()-totalStartTime)
 
 # inspect tries after simulation for Ethanos (same as inspectTriesEthereum())
 def inspectTriesEthanos(startBlockNum, endBlockNum, inactivateCriterion):
 
     print("inspectTriesEthanos() start")
-    startTime = datetime.now()
+    totalStartTime = datetime.now()
 
     delimiter = " "
 
@@ -1349,7 +1349,7 @@ def inspectTriesEthanos(startBlockNum, endBlockNum, inactivateCriterion):
             trieInspectFile.write(log)
     
     trieInspectFile.close()
-    print("total elapsed time:", datetime.now()-startTime)
+    print("total trie inspect time:", datetime.now()-totalStartTime)
 
 
 
