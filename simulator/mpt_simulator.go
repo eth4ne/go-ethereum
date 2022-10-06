@@ -2258,6 +2258,7 @@ func connHandler(conn net.Conn) {
 
 				response = []byte("success")
 
+			// TODO(jmlee): call this periodically for safe experiment
 			case "saveBlockInfos":
 				fmt.Println("execute saveBlockInfos()")
 				logFileName := params[1]

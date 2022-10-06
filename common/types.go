@@ -167,7 +167,7 @@ var (
 type NodeInfo struct {
 	Size uint // size of node (i.e., len of rlp-encoded node)
 
-	ChildHashes []Hash // hashes of child nodes --> TODO(jmlee): child can be short/full node (not hashNode) whose size is smaller than 32 bytes
+	ChildHashes []Hash // hashes of child nodes
 	IsShortNode bool   // type of node (short node vs full node)
 	IsLeafNode  bool
 	Indices     []string // full node's indices for child nodes

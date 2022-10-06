@@ -1258,6 +1258,7 @@ def inspectTriesEthereum(startBlockNum, endBlockNum, inactivateCriterion):
             trieInspectFile.write(log)
     
     trieInspectFile.close()
+    print("create log file:", trieInspectLogFileName)
     print("total trie inspect time:", datetime.now()-totalStartTime)
 
 # inspect tries after simulation for ethane
@@ -1304,10 +1305,11 @@ def inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch,
             print("at block", blockNum, ", inactive node stat:", inactiveNodeStat, "elapsed time:", endTime-startTime)
 
             # save result
-            log = str(blockNum) + delimiter + activeTrieRoot + delimiter + activeNodeStat + delimiter + inactiveTrieRoot + delimiter + inactiveNodeStat + "\n"
+            log = str(blockNum) + delimiter + activeTrieRoot + delimiter + activeNodeStat + inactiveTrieRoot + delimiter + inactiveNodeStat + "\n"
             trieInspectFile.write(log)
 
     trieInspectFile.close()
+    print("create log file:", trieInspectLogFileName)
     print("total trie inspect time:", datetime.now()-totalStartTime)
 
 # inspect tries after simulation for Ethanos (same as inspectTriesEthereum())
@@ -1349,6 +1351,7 @@ def inspectTriesEthanos(startBlockNum, endBlockNum, inactivateCriterion):
             trieInspectFile.write(log)
     
     trieInspectFile.close()
+    print("create log file:", trieInspectLogFileName)
     print("total trie inspect time:", datetime.now()-totalStartTime)
 
 
