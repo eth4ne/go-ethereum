@@ -784,6 +784,7 @@ def simulateEthereum(startBlockNum, endBlockNum):
 
     oldblocknumber = startBlockNum
     start = time.time()
+    tempStart = start
     blockcount = 0
 
     # set log file name
@@ -831,8 +832,13 @@ def simulateEthereum(startBlockNum, endBlockNum):
                     # print("@@success")
                     # print(currentStateRoot, "vs", stateRootInBlockHeader)
                 if oldblocknumber % loginterval == 0:
-                    seconds = time.time() - start
-                    print('#{}, Blkn: {}({:.2f}/s), Writen: {}({:.2f}/s), Readn: {}({:.2f}/s), Time: {}ms'.format(oldblocknumber, blockcount, blockcount/seconds, stateWriteCount+storageWriteCount, (stateWriteCount+storageWriteCount)/seconds, stateReadCount, stateReadCount/seconds, int(seconds*1000)))
+                    currentTime = time.time()
+                    seconds = currentTime - start
+                    tempSeconds = currentTime - tempStart
+                    tempStart = currentTime
+                    print('#{}, Blkn: {}(avg: {:.2f}/s)(cur: {:.2f}/s), Writen: {}({:.2f}/s), Readn: {}({:.2f}/s), Time: {}ms'.format( \
+                        oldblocknumber, blockcount, blockcount/seconds, loginterval/tempSeconds, stateWriteCount+storageWriteCount, \
+                        (stateWriteCount+storageWriteCount)/seconds, stateReadCount, stateReadCount/seconds, int(seconds*1000)))
                 oldblocknumber += 1
                 #print("do block", oldblocknumber ,"\n")
 
@@ -898,17 +904,17 @@ def simulateEthereum(startBlockNum, endBlockNum):
 
                         # check current storage trie is made correctly
                         if currentStorageRoot != storageRoot:
-                            print("@@fail: storage trie is wrong")
-                            print("blocknum:", oldblocknumber)
+                            # print("@@fail: storage trie is wrong")
+                            # print("blocknum:", oldblocknumber)
                             # print("txindex:", item['txindex'])
                             # print("tx hash:", select_tx_hash(cursor, blockNum, item['txindex']))
-                            print("item:", item)
-                            print("  addr:", addr)
-                            print("  nonce:", nonce)
-                            print("  balance:", balance)
-                            print("  codeHash:", codeHash)
-                            print("  storageRoot:", storageRoot)
-                            print(currentStorageRoot, "vs", storageRoot)
+                            # print("item:", item)
+                            # print("  addr:", addr)
+                            # print("  nonce:", nonce)
+                            # print("  balance:", balance)
+                            # print("  codeHash:", codeHash)
+                            # print("  storageRoot:", storageRoot)
+                            # print(currentStorageRoot, "vs", storageRoot)
 
                             if initialInvalidStorageBlockNum > oldblocknumber:
                                 initialInvalidStorageBlockNum = oldblocknumber
@@ -982,6 +988,7 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
 
     oldblocknumber = startBlockNum
     start = time.time()
+    tempStart = start
     blockcount = 0
 
     rwList = []
@@ -1006,8 +1013,13 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
                 # print("flush finished -> generated block", oldblocknumber, "\n\n\n")
 
                 if oldblocknumber % loginterval == 0:
-                    seconds = time.time() - start
-                    print('#{}, Blkn: {}({:.2f}/s), Writen: {}({:.2f}/s), Readn: {}({:.2f}/s), Time: {}ms'.format(oldblocknumber, blockcount, blockcount/seconds, stateWriteCount+storageWriteCount, (stateWriteCount+storageWriteCount)/seconds, stateReadCount, stateReadCount/seconds, int(seconds*1000)))
+                    currentTime = time.time()
+                    seconds = currentTime - start
+                    tempSeconds = currentTime - tempStart
+                    tempStart = currentTime
+                    print('#{}, Blkn: {}(avg: {:.2f}/s)(cur: {:.2f}/s), Writen: {}({:.2f}/s), Readn: {}({:.2f}/s), Time: {}ms'.format( \
+                        oldblocknumber, blockcount, blockcount/seconds, loginterval/tempSeconds, stateWriteCount+storageWriteCount, \
+                        (stateWriteCount+storageWriteCount)/seconds, stateReadCount, stateReadCount/seconds, int(seconds*1000)))
                 oldblocknumber += 1
                 #print("do block", oldblocknumber ,"\n")
 
@@ -1161,6 +1173,7 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
 
     oldblocknumber = startBlockNum
     start = time.time()
+    tempStart = start
     blockcount = 0
 
     rwList = []
@@ -1185,8 +1198,13 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
                 # print("flush finished -> generated block", oldblocknumber, "\n\n\n")
 
                 if oldblocknumber % loginterval == 0:
-                    seconds = time.time() - start
-                    print('#{}, Blkn: {}({:.2f}/s), Writen: {}({:.2f}/s), Readn: {}({:.2f}/s), Time: {}ms'.format(oldblocknumber, blockcount, blockcount/seconds, stateWriteCount+storageWriteCount, (stateWriteCount+storageWriteCount)/seconds, stateReadCount, stateReadCount/seconds, int(seconds*1000)))
+                    currentTime = time.time()
+                    seconds = currentTime - start
+                    tempSeconds = currentTime - tempStart
+                    tempStart = currentTime
+                    print('#{}, Blkn: {}(avg: {:.2f}/s)(cur: {:.2f}/s), Writen: {}({:.2f}/s), Readn: {}({:.2f}/s), Time: {}ms'.format( \
+                        oldblocknumber, blockcount, blockcount/seconds, loginterval/tempSeconds, stateWriteCount+storageWriteCount, \
+                        (stateWriteCount+storageWriteCount)/seconds, stateReadCount, stateReadCount/seconds, int(seconds*1000)))
                 oldblocknumber += 1
                 #print("do block", oldblocknumber ,"\n")
 
