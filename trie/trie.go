@@ -669,6 +669,9 @@ func (t *Trie) FindLeafNodes(startKey, endKey []byte) ([][]byte, []common.Hash, 
 func (t *Trie) findLeafNodes(n node, prefix, startKey, endKey []byte) {
 
 	switch n := n.(type) {
+	case nil:
+		return
+
 	case *shortNode:
 		// update prefix & range
 		prefix = append(prefix, n.Key...)

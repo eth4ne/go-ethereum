@@ -925,7 +925,8 @@ func restoreAccountForEthanos(restoreAddr common.Address) {
 	if currentEpochNum < 2 {
 		fmt.Println("ERROR: restoration is not needed at epoch 0~1")
 		fmt.Println("restore address:", restoreAddr.Hex())
-		os.Exit(1)
+		// os.Exit(1) // exit to check restore list's correctness
+		return
 	}
 
 	// check whether this address exists at each checkpoint block (epoch: 0 ~ cached)
@@ -1878,6 +1879,7 @@ func connHandler(conn net.Conn) {
 				addr := common.HexToAddress(params[1])
 				addrHash := crypto.Keccak256Hash(addr[:])
 				normTrie.TryDelete(addrHash[:])
+				// fmt.Println("root after delete:", normTrie.Hash().Hex())
 
 				response = []byte("success")
 
@@ -2431,7 +2433,7 @@ func connHandler(conn net.Conn) {
 				// get params
 				// fmt.Println("execute restoreAccountForEthanos()")
 				addr := common.HexToAddress(params[1])
-				fmt.Println("addr to restore:", addr.Hex())
+				// fmt.Println("addr to restore:", addr.Hex())
 
 				restoreAccountForEthanos(addr)
 
@@ -2459,6 +2461,132 @@ func connHandler(conn net.Conn) {
 				common.NextBlockNum = blockNum+1
 
 				response = []byte("success")
+
+			case "convertEthaneToEthereum":
+				// convert Ethane's state as Ethereum's (to check simulation correctness)
+
+				// get params
+				fmt.Println("execute convertEthaneToEthereum()")
+
+				// 1. restore all inactive accounts
+				for inactiveAddr, _ := range common.AddrToKeyInactive {
+					restoreAccountForEthane(inactiveAddr)
+				}
+
+				// 2. delete prev leaf nodes
+				deletePrevLeafNodes()
+
+				// 3. find all accounts in active trie
+				startKey := common.HexToHash("0x0").Bytes()
+				endKey := common.HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff").Bytes()
+				allAccounts, _, _ := normTrie.FindLeafNodes(startKey[:], endKey[:])
+				newEthereumTrie, _ := trie.New(common.Hash{}, trie.NewDatabase(diskdb))
+
+				// 4. insert all accounts to secure trie like Ethereum
+				for _, EthaneAccountBytes := range allAccounts {
+					// get Ethane account
+					var ethaneAcc types.EthaneStateAccount
+					if err := rlp.DecodeBytes(EthaneAccountBytes, &ethaneAcc); err != nil {
+						fmt.Println("Failed to decode state object:", err)
+						fmt.Println("enc:", EthaneAccountBytes)
+						os.Exit(1)
+					}
+
+					// convert to Ethereum account
+					var ethereumAcc types.StateAccount
+					ethereumAcc.Balance = ethaneAcc.Balance
+					ethereumAcc.Nonce = ethaneAcc.Nonce
+					ethereumAcc.CodeHash = ethaneAcc.CodeHash
+					ethereumAcc.Root = ethaneAcc.Root
+					addrHash := crypto.Keccak256Hash(ethaneAcc.Addr[:])
+					data, _ := rlp.EncodeToBytes(ethereumAcc)
+
+					// update state trie
+					err := newEthereumTrie.TryUpdate(addrHash[:], data)
+					if err != nil {
+						fmt.Println("updateTrie fail:", err)
+						os.Exit(1)
+					}
+				}
+
+				fmt.Println("convert success, ethereum trie root:", newEthereumTrie.Hash().Hex())
+				response = []byte(newEthereumTrie.Hash().Hex())
+
+			case "convertEthanosToEthereum":
+				// convert Ethanos's state as Ethereum's (to check simulation correctness)
+
+				// get params
+				fmt.Println("execute convertEthanosToEthereum()")
+				// fmt.Println("normTrieRoot:", normTrie.Hash())
+				// fmt.Println("subNormTrieRoot:", subNormTrie.Hash())
+
+				// 1. restore all addresses (at python script)
+
+				// 2. insert all cached accounts to secure trie
+				startKey := common.HexToHash("0x0").Bytes()
+				endKey := common.HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff").Bytes()
+				normTrie.Hash()
+				allAccounts, allAddrHashes, _ := subNormTrie.FindLeafNodes(startKey[:], endKey[:])
+				newEthereumTrie, _ := trie.New(common.Hash{}, trie.NewDatabase(diskdb))
+				for i := 0; i <len(allAccounts);i++{
+					// get Ethanos account
+					var ethanosAcc types.EthanosStateAccount
+					if err := rlp.DecodeBytes(allAccounts[i], &ethanosAcc); err != nil {
+						fmt.Println("Failed to decode state object:", err)
+						fmt.Println("enc:", allAccounts[i])
+						os.Exit(1)
+					}
+
+					// convert to Ethereum account
+					var ethereumAcc types.StateAccount
+					ethereumAcc.Balance = ethanosAcc.Balance
+					ethereumAcc.Nonce = ethanosAcc.Nonce
+					ethereumAcc.CodeHash = ethanosAcc.CodeHash
+					ethereumAcc.Root = ethanosAcc.Root
+					addrHash := allAddrHashes[i]
+					data, _ := rlp.EncodeToBytes(ethereumAcc)
+
+					// update state trie
+					err := newEthereumTrie.TryUpdate(addrHash[:], data)
+					if err != nil {
+						fmt.Println("updateTrie fail:", err)
+						os.Exit(1)
+					}
+				}
+
+				// 3. insert all current accounts to secure trie
+				allAccounts, allAddrHashes, _ = normTrie.FindLeafNodes(startKey[:], endKey[:])
+				for i := 0; i <len(allAccounts);i++{
+					// get Ethanos account
+					var ethanosAcc types.EthanosStateAccount
+					if err := rlp.DecodeBytes(allAccounts[i], &ethanosAcc); err != nil {
+						fmt.Println("Failed to decode state object:", err)
+						fmt.Println("enc:", allAccounts[i])
+						os.Exit(1)
+					}
+
+					// convert to Ethereum account
+					var ethereumAcc types.StateAccount
+					ethereumAcc.Balance = ethanosAcc.Balance
+					ethereumAcc.Nonce = ethanosAcc.Nonce
+					ethereumAcc.CodeHash = ethanosAcc.CodeHash
+					ethereumAcc.Root = ethanosAcc.Root
+					addrHash := allAddrHashes[i]
+					data, _ := rlp.EncodeToBytes(ethereumAcc)
+
+					// update state trie
+					err := newEthereumTrie.TryUpdate(addrHash[:], data)
+					if err != nil {
+						fmt.Println("updateTrie fail:", err)
+						os.Exit(1)
+					}
+				}
+
+				// change normTrie (to delete destructed accounts from trie later, at python script)
+				normTrie = newEthereumTrie
+
+				fmt.Println("convert success, ethereum trie root:", newEthereumTrie.Hash().Hex())
+				response = []byte(newEthereumTrie.Hash().Hex())
 
 			default:
 				fmt.Println("ERROR: there is no matching request")

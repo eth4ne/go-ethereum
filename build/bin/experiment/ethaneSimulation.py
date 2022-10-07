@@ -32,6 +32,7 @@ deleteDisk = True # delete disk when reset simulator or not
 doStorageTrieUpdate = True # update storage tries or state trie only
 stopWhenErrorOccurs = True # stop simulation when state/storage trie root is generated incorrectly
 doReset = True # in Ethereum mode, do reset or not at the beginning of simulation
+collectDeletedAddresses = True # in Ethanos mode, this should be true to check state correctness
 
 # file paths
 blockInfosLogFilePath = "/home/jmlee/go-ethereum/simulator/blockInfos/"
@@ -53,6 +54,9 @@ client_socket.connect((SERVER_IP, SERVER_PORT))
 # caching data from db
 cache_address = {}
 cache_slot = {}
+
+# destructed addresses (needed to check Ethanos's state correctness)
+deletedAddrs = {}
 
 # read block header
 def select_block_header(cursor, blocknumber):
@@ -317,6 +321,8 @@ def updateTrieDelete(addr):
     data = client_socket.recv(1024)
     deleteResult = data.decode()
     # print("updateTrieDelete result:", deleteResult)
+    if collectDeletedAddresses:
+        deletedAddrs[addr] = " "
     return deleteResult
 
 # set old block as current block (for debugging)
@@ -585,6 +591,26 @@ def setEthaneOptions(deleteEpoch, inactivateEpoch, inactivateCriterion, fromLeve
     # print("setOptionResult result:", setOptionResult)
     return setOptionResult
 
+# convert Ethane's state as Ethereum's
+def convertEthaneToEthereum():
+    cmd = str("convertEthaneToEthereum")
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    result = data.decode()
+    # print("result:", result)
+    return result
+
+# check converted Ethane's state's correctness
+def checkEthaneStateCorrectness(endBlockNum):
+    convertedRoot = convertEthaneToEthereum()[2:]
+    header = select_blocks_header(cursor, endBlockNum, endBlockNum+1)[0]
+    correctRoot = header['stateroot'].hex()
+    print("convertedRoot:", convertedRoot, "/ correctRoot:", correctRoot)
+    if convertedRoot == correctRoot:
+        print("correct Ethane simulation!")
+    else:
+        print("something wrong with Ethane")
+
 # -----------------------------------------------------
 
 # update account with detailed values
@@ -631,6 +657,40 @@ def updateStorageTrieEthanos(contractAddr, slot, value):
     currentStorageRoot = data.decode()
     # print("updateStorageTrieEthanos result:", currentStorageRoot)
     return currentStorageRoot
+
+# convert Ethanos's state as Ethereum's
+def convertEthanosToEthereum():
+    cmd = str("convertEthanosToEthereum")
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    result = data.decode()
+    # print("result:", result)
+    return result
+
+# check converted Ethanos's state's correctness
+def checkEthanosStateCorrectness(endBlockNum):
+
+    # restore all addresses
+    for key in cache_address:
+        restoreAccountForEthanos(cache_address[key])
+
+    # convert state
+    convertedRoot = convertEthanosToEthereum()[2:]
+
+    # remove deleted addresses from state trie
+    print("to delete addr num:", len(deletedAddrs))
+    for addr in deletedAddrs:
+        updateTrieDelete(addr)
+    convertedRoot = getTrieRootHash()[2:]
+
+    # compare state root
+    header = select_blocks_header(cursor, endBlockNum, endBlockNum+1)[0]
+    correctRoot = header['stateroot'].hex()
+    print("convertedRoot:", convertedRoot, "/ correctRoot:", correctRoot)
+    if convertedRoot == correctRoot:
+        print("correct Ethanos simulation!")
+    else:
+        print("something wrong with Ethanos")
 
 # -----------------------------------------------------
 
@@ -972,7 +1032,9 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
                 addr = select_address(cursor, addrId)
 
                 if item['type'] == 63:
-                    # delete this address
+                    # delete this address after restoration
+                    restoreAccountForEthane(addr)
+                    restoreCount += 1
                     updateTrieDeleteForEthane(addr)
                     continue
 
@@ -1149,7 +1211,9 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
                 addr = select_address(cursor, addrId)
 
                 if item['type'] == 63:
-                    # delete this address
+                    # delete this address after restoration
+                    restoreAccountForEthanos(addr)
+                    restoreCount += 1
                     updateTrieDelete(addr)
                     continue
 
@@ -1212,6 +1276,10 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
                             print(currentStorageRoot[2:], "vs", storageRoot)
                             if stopWhenErrorOccurs:
                                 sys.exit()
+
+                # collect destructed addresses (to check state correctness later)
+                if collectDeletedAddresses and addr in deletedAddrs:
+                    deletedAddrs.pop(addr, None)
                 
                 # update state trie
                 updateTrieForEthanos(nonce, balance, storageRoot, codeHash, addr)
@@ -1391,6 +1459,7 @@ if __name__ == "__main__":
     doStorageTrieUpdate = True
     stopWhenErrorOccurs = True
     doReset = True
+    collectDeletedAddresses = True
     # set simulation mode (0: original Ethereum, 1: Ethane, 2: Ethanos)
     simulationMode = 0
     # set simulation params
@@ -1410,10 +1479,12 @@ if __name__ == "__main__":
          # replay txs in Ethereum for Ethane
         simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion, fromLevel)
         inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
+        # checkEthaneStateCorrectness(endBlockNum)
     elif simulationMode == 2:
         # replay txs in Ethereum for Ethanos
         simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel)
         inspectTriesEthanos(startBlockNum, endBlockNum, inactivateCriterion)
+        # checkEthanosStateCorrectness(endBlockNum)
     else:
         print("wrong mode:", simulationMode)
 
