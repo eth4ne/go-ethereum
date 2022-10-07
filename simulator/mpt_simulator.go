@@ -2268,7 +2268,7 @@ func connHandler(conn net.Conn) {
 				response = []byte("success")
 
 			case "switchSimulationMode":
-				fmt.Println("execute updateTrieForEthane()")
+				fmt.Println("execute switchSimulationMode()")
 				mode, _ := strconv.ParseUint(params[1], 10, 64)
 
 				if mode == 0 || mode == 1 || mode == 2 {
@@ -2434,6 +2434,29 @@ func connHandler(conn net.Conn) {
 				fmt.Println("addr to restore:", addr.Hex())
 
 				restoreAccountForEthanos(addr)
+
+				response = []byte("success")
+			
+			case "setHead":
+				// get params
+				// fmt.Println("execute setHead()")
+				blockNum, _ := strconv.ParseUint(params[1], 10, 64)
+				if blockNum >= common.NextBlockNum {
+					fmt.Println("cannot setHead with future block")
+					response = []byte("fail")
+					break
+				}
+
+				oldTrieRoot := common.Blocks[blockNum].Root
+				normTrie, err = trie.New(oldTrieRoot, trie.NewDatabase(diskdb))
+				if err != nil {
+					fmt.Println("setHead() request err:", err)
+					fmt.Println("requested blockNum:", blockNum)
+					fmt.Println("requested rootHash:", oldTrieRoot.Hex())
+					os.Exit(1)
+				}
+				fmt.Println("open new norm trie:", normTrie.Hash().Hex())
+				common.NextBlockNum = blockNum+1
 
 				response = []byte("success")
 

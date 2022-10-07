@@ -31,6 +31,7 @@ SERVER_PORT = 8999
 deleteDisk = True # delete disk when reset simulator or not
 doStorageTrieUpdate = True # update storage tries or state trie only
 stopWhenErrorOccurs = True # stop simulation when state/storage trie root is generated incorrectly
+doReset = True # in Ethereum mode, do reset or not at the beginning of simulation
 
 # file paths
 blockInfosLogFilePath = "/home/jmlee/go-ethereum/simulator/blockInfos/"
@@ -317,6 +318,23 @@ def updateTrieDelete(addr):
     deleteResult = data.decode()
     # print("updateTrieDelete result:", deleteResult)
     return deleteResult
+
+# set old block as current block (for debugging)
+# ex. restart simulation from safe block
+# setHead(safeBlockNum)
+# simulateEthereum(safeBlockNum+1, endBlockNum)
+def setHead(blockNum):
+    cmd = str("setHead")
+    cmd += str(",")
+    cmd += str(blockNum)
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    setHeadResult = data.decode()
+    print("setHeadResult result:", setHeadResult)
+    if setHeadResult == "fail":
+        print("setHead ERROR: cannot setHead with future block")
+        sys.exit()
+    return setHeadResult
 
 # delete account of this address for Ethane
 def updateTrieDeleteForEthane(addr):
@@ -690,7 +708,8 @@ def simulateEthereum(startBlockNum, endBlockNum):
         acceptWrongStorageTrie(0) # 0: do not accept
 
     # initialize
-    reset()
+    if doReset:
+        reset()
     stateReadCount = 0
     stateWriteCount = 0
     storageWriteCount = 0
@@ -1369,8 +1388,9 @@ if __name__ == "__main__":
 
     # set simulation options
     deleteDisk = True
-    doStorageTrieUpdate = False
-    stopWhenErrorOccurs = False
+    doStorageTrieUpdate = True
+    stopWhenErrorOccurs = True
+    doReset = True
     # set simulation mode (0: original Ethereum, 1: Ethane, 2: Ethanos)
     simulationMode = 0
     # set simulation params
