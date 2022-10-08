@@ -985,6 +985,7 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
     batchsize = 200
     # print log interval
     loginterval = 2000
+    restorereloadinterval = 1000000
 
     oldblocknumber = startBlockNum
     start = time.time()
@@ -997,6 +998,15 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
     # insert random accounts
     for blockNum in range(startBlockNum, endBlockNum+batchsize*2, batchsize):
         #print("do block", blockNum ,"\n")
+
+        if blockNum % restorereloadinterval == 0 and blockNum != startBlockNum:
+            restoreFileName = "restore_list_" + str(startBlockNum) + "_" + str(endBlockNum) \
+                + "_"  + str(inactivateEpoch) + "_" + str(inactivateCriterion) + ".json"
+            if not os.path.exists(restoreListFilePath + restoreFileName):
+                print("there is no restore list in:", restoreListFilePath + restoreFileName)
+                sys.exit()
+            with open(restoreListFilePath + restoreFileName, "r") as rl_json:
+                restoreList = json.load(rl_json)
         
         # get read/write list from DB
         queryResult = pool.apply_async(select_state_and_storage_list, (cursor_thread, blockNum, blockNum+batchsize,))
@@ -1170,6 +1180,7 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
     batchsize = 200
     # print log interval
     loginterval = 2000
+    restorereloadinterval = 1000000
 
     oldblocknumber = startBlockNum
     start = time.time()
@@ -1182,6 +1193,15 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
     # insert random accounts
     for blockNum in range(startBlockNum, endBlockNum+batchsize*2, batchsize):
         #print("do block", blockNum ,"\n")
+        if blockNum % restorereloadinterval == 0 and blockNum != startBlockNum:
+            # check restore list exist
+            restoreFileName = "restore_list_" + str(startBlockNum) + "_" + str(endBlockNum) \
+                + "_"  + str(inactivateCriterion) + "_" + str(inactivateCriterion) + ".json"
+            if not os.path.exists(restoreListFilePath + restoreFileName):
+                print("there is no restore list in:", restoreListFilePath + restoreFileName)
+                sys.exit()
+            with open(restoreListFilePath + restoreFileName, "r") as rl_json:
+                restoreList = json.load(rl_json)
         
         # get read/write list from DB
         queryResult = pool.apply_async(select_state_and_storage_list, (cursor_thread, blockNum, blockNum+batchsize,))
