@@ -360,7 +360,7 @@ func estimateIncrement(hash common.Hash) (uint64, uint64) {
 func flushTrieNodes() {
 
 	bn := common.NextBlockNum
-	fmt.Println("flush start: generate block number", bn)
+	fmt.Println("\nflush start: generate block number", bn, "( port:", serverPort, ")")
 	blockInfo, _ := common.Blocks[bn] // for logging block info
 
 	// if Ethane simulation, do inactivate or delete previous leaf nodes
@@ -1758,7 +1758,7 @@ func connHandler(conn net.Conn) {
 				response = []byte(nodeStat.ToStringWithDepths(delimiter))
 
 			case "flush":
-				fmt.Println("\nexecute flushTrieNodes()")
+				// fmt.Println("\nexecute flushTrieNodes()")
 				flushTrieNodes()
 				newNodesNum, newNodesSize := common.NewNodeStat.GetSum()
 				newStorageNodesNum, newStorageNodesSize := common.NewStorageNodeStat.GetSum()
