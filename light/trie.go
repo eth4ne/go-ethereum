@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -258,4 +259,32 @@ func nibblesToKey(nib []byte) []byte {
 		key[bi] = nib[ni]<<4 | nib[ni+1]
 	}
 	return key
+}
+
+// temp function for correct build, this will not be called in Ethane (joonha)
+func (t *odrTrie) Print() {}
+
+// temp function for correct build, this will not be called in Ethane (jmlee)
+func (t *odrTrie) TryUpdate_SetKey(key, value []byte) error {
+	return nil
+}
+
+// temp function for correct build, this will not be called in Ethane (jmlee)
+func (t *odrTrie) GetLastKey() *big.Int {
+	return big.NewInt(0)
+}
+
+// temp function for correct build, this will not be called in Ethane (jmlee)
+func (t *odrTrie) TryGet_SetKey(key []byte) ([]byte, error) {
+	return nil, nil
+}
+
+// temp function for correct build, this will not be called in Ethane (joonha)
+func (t *odrTrie) FindLeafNodes(firstKey, lastKey []byte) ([][]byte, []common.Hash, error) {
+	return nil, nil, nil
+}
+
+// temp function for correct build, this will not be called in Ethane (joonha)
+func (t *odrTrie) TryGetAllSlots() (map[common.Hash][]byte, error) {
+	return nil, nil
 }

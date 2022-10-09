@@ -162,7 +162,8 @@ func HandleMessage(backend Backend, peer *Peer) error {
 			return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 		}
 		// Service the request, potentially returning nothing in case of errors
-		accounts, proofs := ServiceGetAccountRangeQuery(backend.Chain(), &req)
+		accounts, proofs := ServiceGetAccountRangeQuery(backend.Chain(), &req) // flag (joonha) get data from the snapshot and pack
+		// fmt.Println("[ServiceGetAccountRangeQuery] len(accounts): ", len(accounts))
 
 		// Send back anything accumulated (or empty in case of errors)
 		return p2p.Send(peer.rw, AccountRangeMsg, &AccountRangePacket{

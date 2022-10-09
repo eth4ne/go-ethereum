@@ -23,9 +23,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"math/rand"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -43,7 +45,38 @@ const (
 var (
 	hashT    = reflect.TypeOf(Hash{})
 	addressT = reflect.TypeOf(Address{})
+
+	DoMakeSnapshot    bool
+	IsSender          = true
+	SpecificStateRoot = HexToHash("0x73e1188b303b417de1f05f224a11dcb59ed30e7c24dffbd537eab2ecd5eba8a6") // block no.50
 )
+
+// Marshal is a function that marshals the object into an io.Reader.
+// By default, it uses the JSON marshaller.
+var Marshal = func(v interface{}) (io.Reader, error) {
+	b, err := json.MarshalIndent(v, "", "\t")
+	if err != nil {
+		return nil, err
+	}
+	return bytes.NewReader(b), nil
+}
+
+// Unmarshal is a function that unmarshals the data from the reader into the specified value.
+// By default, it uses the JSON unmarshaller.
+var Unmarshal = func(r io.Reader, v interface{}) error {
+	return json.NewDecoder(r).Decode(v)
+}
+
+// Int64ToHash converts int64 to hex key (ex. 10 -> 0x0...0a) (jmlee)
+func Int64ToHash(i int64) Hash {
+	return HexToHash(strconv.FormatInt(i, 16))
+}
+
+// HashToInt64 converts hash to int64 (ex. 0x0...0a -> 10) (jmlee)
+func HashToInt64(h Hash) int64 {
+	i, _ := strconv.ParseInt(h.Hex()[2:], 16, 64)
+	return i
+}
 
 // Hash represents the 32 byte Keccak256 hash of arbitrary data.
 type Hash [HashLength]byte

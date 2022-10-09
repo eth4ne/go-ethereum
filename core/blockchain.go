@@ -1181,6 +1181,37 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	// Make sure no inconsistent state is leaked during insertion
 	externTd := new(big.Int).Add(block.Difficulty(), ptd)
 
+	// // Irrelevant of the canonical status, write the block itself to the database.
+	// //
+	// // Note all the components of block(td, hash->number map, header, body, receipts)
+	// // should be written atomically. BlockBatch is used for containing all components.
+	// blockBatch := bc.db.NewBatch()
+	// rawdb.WriteTd(blockBatch, block.Hash(), block.NumberU64(), externTd)
+	// rawdb.WriteBlock(blockBatch, block)
+	// rawdb.WriteReceipts(blockBatch, block.Hash(), block.NumberU64(), receipts)
+	// rawdb.WritePreimages(blockBatch, state.Preimages())
+	// if err := blockBatch.Write(); err != nil {
+	// 	log.Crit("Failed to write block into disk", "err", err)
+	// }
+	bn := block.Header().Number.Int64() + 1
+	if bn == 2 {
+		common.DoMakeSnapshot = true
+	} else {
+		common.DoMakeSnapshot = false
+	}
+
+	// Commit all cached state changes into underlying memory database.
+	root := state.Root()
+	if common.IsSender {
+		root, _ = state.Commit(bc.chainConfig.IsEIP158(block.Number()))
+		// fmt.Println("(before) block.Hash(): ", block.Hash())
+		block.SetRoot(root) // set block root to trie root (joonha)
+	}
+
+	// fmt.Println("(after) block.Hash(): ", block.Hash())
+
+	triedb := bc.stateCache.TrieDB()
+
 	// Irrelevant of the canonical status, write the block itself to the database.
 	//
 	// Note all the components of block(td, hash->number map, header, body, receipts)
@@ -1189,16 +1220,10 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	rawdb.WriteTd(blockBatch, block.Hash(), block.NumberU64(), externTd)
 	rawdb.WriteBlock(blockBatch, block)
 	rawdb.WriteReceipts(blockBatch, block.Hash(), block.NumberU64(), receipts)
-	rawdb.WritePreimages(blockBatch, state.Preimages())
+	// rawdb.WritePreimages(blockBatch, state.Preimages())
 	if err := blockBatch.Write(); err != nil {
 		log.Crit("Failed to write block into disk", "err", err)
 	}
-	// Commit all cached state changes into underlying memory database.
-	root, err := state.Commit(bc.chainConfig.IsEIP158(block.Number()))
-	if err != nil {
-		return err
-	}
-	triedb := bc.stateCache.TrieDB()
 
 	// If we're running an archive node, always flush
 	if bc.cacheConfig.TrieDirtyDisabled {
@@ -1308,6 +1333,22 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	} else {
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
 	}
+
+	// // print database inspect result (jmlee)
+	// // fmt.Println("\nblock inserted -> blocknumber:", block.Header().Number.Int64())
+	// if block.Header().Number.Int64()%1 == 0 {
+	// 	// print state trie (jmlee)
+	// 	fmt.Println("$$$ print state trie at block", bc.CurrentBlock().Header().Number)
+	// 	ldb := trie.NewDatabase(bc.db)
+	// 	fmt.Println("(bc.CurrentBlock().Root(): ", (bc.CurrentBlock().Root()))
+	// 	stateTrie, _ := trie.NewSecure(bc.CurrentBlock().Root(), ldb)
+	// 	if stateTrie == nil {
+	// 		fmt.Println("stateTrie is nil")
+	// 	} else {
+	// 		stateTrie.Print()
+	// 	}
+	// }
+
 	return status, nil
 }
 
@@ -1611,13 +1652,13 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 
 		blockExecutionTimer.Update(time.Since(substart) - trieproc - triehash)
 
-		// Validate the state using the default validator
-		substart = time.Now()
-		if err := bc.validator.ValidateState(block, statedb, receipts, usedGas); err != nil {
-			bc.reportBlock(block, receipts, err)
-			atomic.StoreUint32(&followupInterrupt, 1)
-			return it.index, err
-		}
+		// // Validate the state using the default validator
+		// substart = time.Now()
+		// if err := bc.validator.ValidateState(block, statedb, receipts, usedGas); err != nil {
+		// 	bc.reportBlock(block, receipts, err)
+		// 	atomic.StoreUint32(&followupInterrupt, 1)
+		// 	return it.index, err
+		// }
 		proctime := time.Since(start)
 
 		// Update the metrics touched during block validation

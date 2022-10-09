@@ -44,6 +44,27 @@ import (
 	"golang.org/x/crypto/sha3"
 )
 
+// ethane sync simulation
+const (
+	// leveldb path ($ sudo chmod -R 777 /ethereum)
+	leveldbPath = "/home/joonha/mptSimulator_ethereum_200000/trieNodes"
+	// leveldb cache size (MB) (Geth default: 512) (memory leak might occur when calling reset() frequently with too big cache size)
+	leveldbCache = 20000
+	// leveldb options
+	leveldbNamespace = "eth/db/chaindata-sync/"
+	leveldbReadonly  = false
+)
+
+// ethane sync simulation
+var (
+	// disk to store trie nodes (either leveldb or memorydb)
+	diskdb ethdb.KeyValueStore
+	// # of max open files for leveldb (Geth default: 524288)
+	leveldbHandles = 524288
+	// received state trie
+	receivedTrie *trie.Trie
+)
+
 var (
 	// emptyRoot is the known root hash of an empty trie.
 	emptyRoot = common.HexToHash("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
@@ -557,7 +578,7 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 		s.startTime = time.Now()
 	}
 	// Retrieve the previous sync status from LevelDB and abort if already synced
-	s.loadSyncStatus()
+	s.loadSyncStatus() // flag (joonha) load sync data
 	if len(s.tasks) == 0 && s.healer.scheduler.Pending() == 0 {
 		log.Debug("Snapshot sync already completed")
 		return nil
@@ -683,7 +704,7 @@ func (s *Syncer) loadSyncStatus() {
 			for _, task := range progress.Tasks {
 				log.Debug("Scheduled account sync task", "from", task.Next, "last", task.Last)
 			}
-			s.tasks = progress.Tasks
+			s.tasks = progress.Tasks // flag (joonha) set sync.task
 			for _, task := range s.tasks {
 				task.genBatch = ethdb.HookedBatch{
 					Batch: s.db.NewBatch(),

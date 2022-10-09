@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"os"
 	"sort"
 	"time"
 
@@ -29,10 +30,33 @@ import (
 	"github.com/ethereum/go-ethereum/core/state/snapshot"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/ethdb/leveldb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
+)
+
+// ethane sync simulation
+const (
+	// leveldb path ($ sudo chmod -R 777 /ethereum)
+	leveldbPath = "/home/joonha/mptSimulator_ethereum_200000/trieNodes"
+	// leveldb cache size (MB) (Geth default: 512) (memory leak might occur when calling reset() frequently with too big cache size)
+	leveldbCache = 20000
+	// leveldb options
+	leveldbNamespace = "eth/db/chaindata-sync/"
+	leveldbReadonly  = false
+)
+
+// ethane sync simulation
+var (
+	// disk to store trie nodes (either leveldb or memorydb)
+	diskdb ethdb.KeyValueStore
+	// # of max open files for leveldb (Geth default: 524288)
+	leveldbHandles = 524288
+	// received state trie
+	receivedTrie *trie.Trie
 )
 
 type revision struct {
@@ -903,6 +927,71 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 	// Finalize any pending changes and merge everything into the tries
 	s.IntermediateRoot(deleteEmptyObjects)
 
+	/*
+		hijact the snap sync!
+
+		Replace state trie with the injected complete trie data.
+		Also build the snapshot for snap sync.
+		(commenter: joonha)
+	*/
+	fmt.Println("DoMakeSnapshot: ", common.DoMakeSnapshot)
+	fmt.Println("IsSender: ", common.IsSender)
+	if common.DoMakeSnapshot && common.IsSender {
+
+		// remove original
+		for k, _ := range s.snapAccounts {
+			s.snapDestructs[k] = struct{}{}
+		}
+		s.snapAccounts = make(map[common.Hash][]byte)
+		// s.snapDestructs[/*local coinbase?*/] = struct{}{}
+
+		// open trie
+		diskdb, err := leveldb.New(leveldbPath, leveldbCache, leveldbHandles, leveldbNamespace, leveldbReadonly)
+		if err != nil {
+			fmt.Println("leveldb.New error!! ->", err)
+			os.Exit(1)
+		}
+		specificRoot := common.SpecificStateRoot
+		receivedTrie, _ = trie.New(specificRoot, trie.NewDatabase(diskdb))
+		// receivedTrie.Print()
+
+		// data to be injected
+		firstKey := common.Int64ToHash(int64(0))
+		lastKey := common.HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+		// fmt.Println("firstKey: ", firstKey)
+		// fmt.Println("lastKey: ", lastKey)
+		accounts, keys, _ := receivedTrie.FindLeafNodes(firstKey[:], lastKey[:])
+
+		// delete all orig nodes
+		fmt.Println("(before deleting all orig nodes) s.trie.Root(): ", s.trie.Hash())
+		// s.trie.Print()
+		_, origKeys, _ := s.trie.FindLeafNodes(firstKey[:], lastKey[:])
+		for _, k := range origKeys {
+			s.trie.TryUpdate_SetKey(k[:], nil)
+		}
+		fmt.Println("(after deleting all orig nodes) s.trie.Root(): ", s.trie.Hash())
+
+		// inject the data to the state trie and the snapshot
+		for i, enc := range accounts {
+			data := new(types.StateAccount)
+			addr := common.BytesToAddress(enc) // BytesToAddress() turns last 20 bytes into addr
+
+			if err := rlp.DecodeBytes(enc, data); err != nil {
+				log.Error("Failed to decode state object", "addr", addr, "err", err)
+			}
+			snapshotKey := keys[i] // in Ethereum, snapshotKey is same as the trie key
+			if s.snap != nil {
+				s.snapAccounts[snapshotKey] = snapshot.SlimAccountRLP(data.Nonce, data.Balance, data.Root, data.CodeHash)
+			}
+
+			acc, _ := rlp.EncodeToBytes(data)
+			if err := s.trie.TryUpdate_SetKey(keys[i][:], acc); err != nil {
+				s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
+			}
+		}
+		// fmt.Println("(after injecting all new nodes) s.trie.Root(): ", s.trie.Hash())
+	}
+
 	// Commit objects to the trie, measuring the elapsed time
 	var storageCommitted int
 	codeWriter := s.db.TrieDB().DiskDB().NewBatch()
@@ -1043,4 +1132,8 @@ func (s *StateDB) AddressInAccessList(addr common.Address) bool {
 // SlotInAccessList returns true if the given (address, slot)-tuple is in the access list.
 func (s *StateDB) SlotInAccessList(addr common.Address, slot common.Hash) (addressPresent bool, slotPresent bool) {
 	return s.accessList.Contains(addr, slot)
+}
+
+func (s *StateDB) Root() common.Hash {
+	return s.trie.Hash()
 }

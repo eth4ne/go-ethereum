@@ -307,6 +307,11 @@ func (b *Block) ReceiptHash() common.Hash { return b.header.ReceiptHash }
 func (b *Block) UncleHash() common.Hash   { return b.header.UncleHash }
 func (b *Block) Extra() []byte            { return common.CopyBytes(b.header.Extra) }
 
+// SetRoot sets block root to parameter root (joonha)
+func (b *Block) SetRoot(root common.Hash) {
+	b.header.Root = root
+}
+
 func (b *Block) BaseFee() *big.Int {
 	if b.header.BaseFee == nil {
 		return nil
@@ -380,9 +385,9 @@ func (b *Block) WithBody(transactions []*Transaction, uncles []*Header) *Block {
 // Hash returns the keccak256 hash of b's header.
 // The hash is computed on the first call and cached thereafter.
 func (b *Block) Hash() common.Hash {
-	if hash := b.hash.Load(); hash != nil {
-		return hash.(common.Hash)
-	}
+	// if hash := b.hash.Load(); hash != nil { // ---> commented-out to re-calculate the hash value when the trie root is updated once again in state.Commit() (joonha)
+	// 	return hash.(common.Hash)
+	// }
 	v := b.header.Hash()
 	b.hash.Store(v)
 	return v

@@ -73,7 +73,7 @@ var Defaults = Config{
 		DatasetsLockMmap: false,
 	},
 	NetworkId:               1,
-	TxLookupLimit:           2350000,
+	TxLookupLimit:           1, //2350000, // flag (joonha) default = about a year
 	LightPeers:              100,
 	UltraLightFraction:      75,
 	DatabaseCache:           512,
