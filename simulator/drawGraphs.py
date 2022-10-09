@@ -530,11 +530,10 @@ def drawGraphsForTrieInspectsCompare(startBlockNum, endBlockNum, deleteEpoch, in
 
     blockNums = blockNumsList[1]
     plt.plot(blockNums[0::2], trieInspectsLogs[1][1][:len(blockNums)][0::2], label='ethane active max') # draw plot
-    plt.plot(blockNums[1::2], trieInspectsLogs[1][1][:len(blockNums)][1::2], label='ethane active min') # draw plot
-    plt.plot(blockNums, trieInspectsLogs[1][12][:len(blockNums)], label='ethane inactive') # draw plot
+    plt.plot(blockNums[1::2], trieInspectsLogs[1][12][:len(blockNums)][1::2], label='ethane inactive max') # draw plot
 
     blockNums = blockNumsList[2]
-    plt.plot(blockNums, trieInspectsLogs[2][1][:len(blockNums)], label='ethanos') # draw plot
+    plt.plot(blockNums, trieInspectsLogs[2][1][:len(blockNums)], label='ethanos max') # draw plot
 
     # set legend
     plt.legend(loc='best')

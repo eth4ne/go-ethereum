@@ -1421,6 +1421,7 @@ def inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch,
     trieInspectFile = open(trieInspectsLogFilePath+trieInspectLogFileName, 'a')
     rdr = csv.reader(blockInfosFile)
     blockNum = 0
+    zeroNodeStat = "0 0 0 0 0 0 0 0 0 0 0 "
     for line in rdr:
         if len(line) == 0:
             continue
@@ -1430,8 +1431,8 @@ def inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch,
         blockNum = int(params[2])
         # print("blockNum:", blockNum)
 
-        # inspect trie
-        if (blockNum+1) % inactivateCriterion == 0 or (blockNum+2) % inactivateCriterion == 0:
+        # inspect max active trie (before delete/inactivate)
+        if (blockNum+2) % inactivateCriterion == 0:
             activeTrieRoot = params[0]
             inactiveTrieRoot = params[1]
 
@@ -1439,6 +1440,19 @@ def inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch,
             activeNodeStat = inspectSubTrie(activeTrieRoot)[0]
             endTime = datetime.now()
             print("at block", blockNum, ", active node stat:", activeNodeStat, "elapsed time:", endTime-startTime)
+
+            inactiveNodeStat = zeroNodeStat
+
+            # save result
+            log = str(blockNum) + delimiter + activeTrieRoot + delimiter + activeNodeStat + inactiveTrieRoot + delimiter + inactiveNodeStat + "\n"
+            trieInspectFile.write(log)
+
+        # inspect max inactive trie (after inactivate)
+        if (blockNum+1) % inactivateCriterion == 0:
+            activeTrieRoot = params[0]
+            inactiveTrieRoot = params[1]
+
+            activeNodeStat = zeroNodeStat
 
             startTime = datetime.now()
             inactiveNodeStat = inspectSubTrie(inactiveTrieRoot)[0]
