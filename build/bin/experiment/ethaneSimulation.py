@@ -611,6 +611,48 @@ def checkEthaneStateCorrectness(endBlockNum):
     else:
         print("something wrong with Ethane")
 
+def getRestoreList(startBlockNum, endBlockNum, inactivateEpoch, inactivateCriterion, restoreListVersion):
+
+    # set restore list file names
+    completeRestoreFileName = "restore_list_" + str(startBlockNum) + "_" + str(endBlockNum) \
+        + "_"  + str(inactivateEpoch) + "_" + str(inactivateCriterion) + "_complete.json"
+    incompleteRestoreFileName = "restore_list_" + str(startBlockNum) + "_" + str(endBlockNum) \
+        + "_"  + str(inactivateEpoch) + "_" + str(inactivateCriterion) + "_v" + str(restoreListVersion) + ".json"
+    print("we need one of these restore list:")
+    print("  ->", completeRestoreFileName)
+    print("  ->", incompleteRestoreFileName)
+
+    # wait for restore list
+    cnt = 0
+    checkInterval = 10
+    print("start waiting new restore list at", datetime.now().strftime("%m-%d %H:%M:%S"))
+    while True:
+        if os.path.exists(restoreListFilePath + completeRestoreFileName):
+            print("find complete restore list:", completeRestoreFileName)
+            restoreFileName = completeRestoreFileName
+            incompleteRestoreList = False
+            break
+
+        if os.path.exists(restoreListFilePath + incompleteRestoreFileName):
+            print("find incomplete restore list:", incompleteRestoreFileName)
+            restoreFileName = incompleteRestoreFileName
+            incompleteRestoreList = True
+            restoreListVersion += 1
+            break
+
+        time.sleep(checkInterval)
+        cnt += checkInterval
+        print("  -> cnt:", cnt, "->", datetime.now().strftime("%m-%d %H:%M:%S"), end="\r")
+
+    # return restore list
+    with open(restoreListFilePath + restoreFileName, "r") as rl_json:
+        restoreList = json.load(rl_json)
+        lastBlockInRestoreList = int(list(restoreList.keys())[-1])
+        print("return restore list:", restoreFileName)
+        print("lastBlockInRestoreList:", lastBlockInRestoreList, "/ incompleteRestoreList:", incompleteRestoreList, "/ restoreListVersion:", restoreListVersion)
+        time.sleep(5) # to check replace info in console
+        return restoreList, lastBlockInRestoreList, incompleteRestoreList, restoreListVersion
+
 # -----------------------------------------------------
 
 # update account with detailed values
@@ -780,7 +822,7 @@ def simulateEthereum(startBlockNum, endBlockNum):
     # block batch size for db query
     batchsize = 200
     # print log interval
-    loginterval = 2000
+    loginterval = 10000
 
     oldblocknumber = startBlockNum
     start = time.time()
@@ -836,9 +878,9 @@ def simulateEthereum(startBlockNum, endBlockNum):
                     seconds = currentTime - start
                     tempSeconds = currentTime - tempStart
                     tempStart = currentTime
-                    print('#{}, Blkn: {}(avg: {:.2f}/s)(cur: {:.2f}/s), Writen: {}({:.2f}/s), Readn: {}({:.2f}/s), Time: {}ms'.format( \
+                    print('#{}, Blkn: {}(avg: {:.2f}/s)(cur: {:.2f}/s), Writen: {}({:.2f}/s), Readn: {}({:.2f}/s), Time: {}'.format( \
                         oldblocknumber, blockcount, blockcount/seconds, loginterval/tempSeconds, stateWriteCount+storageWriteCount, \
-                        (stateWriteCount+storageWriteCount)/seconds, stateReadCount, stateReadCount/seconds, int(seconds*1000)))
+                        (stateWriteCount+storageWriteCount)/seconds, stateReadCount, stateReadCount/seconds, datetime.now().strftime("%m-%d %H:%M:%S")))
                 oldblocknumber += 1
                 #print("do block", oldblocknumber ,"\n")
 
@@ -962,15 +1004,9 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
     blockInfosLogFileName = "ethane_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) \
         + "_" + str(deleteEpoch) + "_" + str(inactivateEpoch) + "_" + str(inactivateCriterion) + ".txt"
     
-    # check restore list exist
-    restoreFileName = "restore_list_" + str(startBlockNum) + "_" + str(endBlockNum) \
-        + "_"  + str(inactivateEpoch) + "_" + str(inactivateCriterion) + ".json"
-    # restoreFileName = "restore_list_0_1000000_315_315.json" # temp code: do not hardcoding later
-    if not os.path.exists(restoreListFilePath + restoreFileName):
-        print("there is no restore list in:", restoreListFilePath + restoreFileName)
-        sys.exit()
-    with open(restoreListFilePath + restoreFileName, "r") as rl_json:
-        restoreList = json.load(rl_json)
+    # get restore list
+    restoreListVersion = 0
+    restoreList, lastBlockInRestoreList, incompleteRestoreList, restoreListVersion = getRestoreList(startBlockNum, endBlockNum, inactivateEpoch, inactivateCriterion, restoreListVersion)
 
     # initialize
     reset()
@@ -984,8 +1020,7 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
     # block batch size for db query
     batchsize = 200
     # print log interval
-    loginterval = 2000
-    restorereloadinterval = 1000000
+    loginterval = 10000
 
     oldblocknumber = startBlockNum
     start = time.time()
@@ -999,15 +1034,6 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
     for blockNum in range(startBlockNum, endBlockNum+batchsize*2, batchsize):
         #print("do block", blockNum ,"\n")
 
-        if blockNum % restorereloadinterval == 0 and blockNum != startBlockNum:
-            restoreFileName = "restore_list_" + str(startBlockNum) + "_" + str(endBlockNum) \
-                + "_"  + str(inactivateEpoch) + "_" + str(inactivateCriterion) + ".json"
-            if not os.path.exists(restoreListFilePath + restoreFileName):
-                print("there is no restore list in:", restoreListFilePath + restoreFileName)
-                sys.exit()
-            with open(restoreListFilePath + restoreFileName, "r") as rl_json:
-                restoreList = json.load(rl_json)
-        
         # get read/write list from DB
         queryResult = pool.apply_async(select_state_and_storage_list, (cursor_thread, blockNum, blockNum+batchsize,))
         # print("\nquery blocks ->", blockNum, "~", blockNum+batchsize)
@@ -1027,9 +1053,9 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
                     seconds = currentTime - start
                     tempSeconds = currentTime - tempStart
                     tempStart = currentTime
-                    print('#{}, Blkn: {}(avg: {:.2f}/s)(cur: {:.2f}/s), Writen: {}({:.2f}/s), Readn: {}({:.2f}/s), Time: {}ms'.format( \
+                    print('#{}, Blkn: {}(avg: {:.2f}/s)(cur: {:.2f}/s), Writen: {}({:.2f}/s), Readn: {}({:.2f}/s), Time: {}'.format( \
                         oldblocknumber, blockcount, blockcount/seconds, loginterval/tempSeconds, stateWriteCount+storageWriteCount, \
-                        (stateWriteCount+storageWriteCount)/seconds, stateReadCount, stateReadCount/seconds, int(seconds*1000)))
+                        (stateWriteCount+storageWriteCount)/seconds, stateReadCount, stateReadCount/seconds, datetime.now().strftime("%m-%d %H:%M:%S")))
                 oldblocknumber += 1
                 #print("do block", oldblocknumber ,"\n")
 
@@ -1041,6 +1067,11 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
                         # print("restore addr:", addr)
                         restoreAccountForEthane(addr)
                         restoreCount += 1
+
+                # replace incomplete restore list
+                if int(blockNumKey) == lastBlockInRestoreList and incompleteRestoreList:
+                    print("replace incomplete restore list")
+                    restoreList, lastBlockInRestoreList, incompleteRestoreList, restoreListVersion = getRestoreList(startBlockNum, endBlockNum, inactivateEpoch, inactivateCriterion, restoreListVersion)
 
             if item['blocknumber'] > endBlockNum:
                 print("reaching end block num, stop writing")
@@ -1054,9 +1085,7 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
                 addr = select_address(cursor, addrId)
 
                 if item['type'] == 63:
-                    # delete this address after restoration
-                    restoreAccountForEthane(addr)
-                    restoreCount += 1
+                    # delete this address
                     updateTrieDeleteForEthane(addr)
                     continue
 
@@ -1157,15 +1186,9 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
     logFileName = "ethanos_simulate_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateCriterion) + ".txt"
     blockInfosLogFileName = "ethanos_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateCriterion) + ".txt"
 
-    # check restore list exist
-    restoreFileName = "restore_list_" + str(startBlockNum) + "_" + str(endBlockNum) \
-        + "_"  + str(inactivateCriterion) + "_" + str(inactivateCriterion) + ".json"
-    # restoreFileName = "restore_list_0_1000000_315_315.json" # temp code: do not hardcoding later
-    if not os.path.exists(restoreListFilePath + restoreFileName):
-        print("there is no restore list in:", restoreListFilePath + restoreFileName)
-        sys.exit()
-    with open(restoreListFilePath + restoreFileName, "r") as rl_json:
-        restoreList = json.load(rl_json)
+    # get restore list exist
+    restoreListVersion = 0
+    restoreList, lastBlockInRestoreList, incompleteRestoreList, restoreListVersion = getRestoreList(startBlockNum, endBlockNum, inactivateCriterion, inactivateCriterion, restoreListVersion)
 
     # initialize
     reset()
@@ -1179,8 +1202,7 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
     # block batch size for db query
     batchsize = 200
     # print log interval
-    loginterval = 2000
-    restorereloadinterval = 1000000
+    loginterval = 10000
 
     oldblocknumber = startBlockNum
     start = time.time()
@@ -1193,15 +1215,6 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
     # insert random accounts
     for blockNum in range(startBlockNum, endBlockNum+batchsize*2, batchsize):
         #print("do block", blockNum ,"\n")
-        if blockNum % restorereloadinterval == 0 and blockNum != startBlockNum:
-            # check restore list exist
-            restoreFileName = "restore_list_" + str(startBlockNum) + "_" + str(endBlockNum) \
-                + "_"  + str(inactivateCriterion) + "_" + str(inactivateCriterion) + ".json"
-            if not os.path.exists(restoreListFilePath + restoreFileName):
-                print("there is no restore list in:", restoreListFilePath + restoreFileName)
-                sys.exit()
-            with open(restoreListFilePath + restoreFileName, "r") as rl_json:
-                restoreList = json.load(rl_json)
         
         # get read/write list from DB
         queryResult = pool.apply_async(select_state_and_storage_list, (cursor_thread, blockNum, blockNum+batchsize,))
@@ -1222,9 +1235,9 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
                     seconds = currentTime - start
                     tempSeconds = currentTime - tempStart
                     tempStart = currentTime
-                    print('#{}, Blkn: {}(avg: {:.2f}/s)(cur: {:.2f}/s), Writen: {}({:.2f}/s), Readn: {}({:.2f}/s), Time: {}ms'.format( \
+                    print('#{}, Blkn: {}(avg: {:.2f}/s)(cur: {:.2f}/s), Writen: {}({:.2f}/s), Readn: {}({:.2f}/s), Time: {}'.format( \
                         oldblocknumber, blockcount, blockcount/seconds, loginterval/tempSeconds, stateWriteCount+storageWriteCount, \
-                        (stateWriteCount+storageWriteCount)/seconds, stateReadCount, stateReadCount/seconds, int(seconds*1000)))
+                        (stateWriteCount+storageWriteCount)/seconds, stateReadCount, stateReadCount/seconds, datetime.now().strftime("%m-%d %H:%M:%S")))
                 oldblocknumber += 1
                 #print("do block", oldblocknumber ,"\n")
 
@@ -1236,6 +1249,11 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
                         # print("restore addr:", addr)
                         restoreAccountForEthanos(addr)
                         restoreCount += 1
+
+                # replace incomplete restore list
+                if int(blockNumKey) == lastBlockInRestoreList and incompleteRestoreList:
+                    print("replace incomplete restore list")
+                    restoreList, lastBlockInRestoreList, incompleteRestoreList, restoreListVersion = getRestoreList(startBlockNum, endBlockNum, inactivateCriterion, inactivateCriterion, restoreListVersion)
 
             if item['blocknumber'] > endBlockNum:
                 print("reaching end block num, stop writing")
@@ -1249,9 +1267,7 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
                 addr = select_address(cursor, addrId)
 
                 if item['type'] == 63:
-                    # delete this address after restoration
-                    restoreAccountForEthanos(addr)
-                    restoreCount += 1
+                    # delete this address
                     updateTrieDelete(addr)
                     continue
 
