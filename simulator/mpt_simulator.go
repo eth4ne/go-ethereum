@@ -1081,6 +1081,12 @@ func restoreAccountForEthanos(restoreAddr common.Address) {
 	common.BlockRestoreStat.RestorationNum++
 	common.BlockRestoreStat.MerkleProofsSize += proofSize
 	common.BlockRestoreStat.MerkleProofsNodesNum += nodeNum
+	if common.BlockRestoreStat.MaxProofSize < proofSize {
+		common.BlockRestoreStat.MaxProofSize = proofSize
+	}
+	if common.BlockRestoreStat.MinProofSize > proofSize || common.BlockRestoreStat.MinProofSize == 0 {
+		common.BlockRestoreStat.MinProofSize = proofSize
+	}
 
 	// fmt.Println("restoreAccountForEthanos for", restoreAddr.Hex(), "finish")
 	// fmt.Println("exists:", exists)
@@ -1375,6 +1381,12 @@ func restoreAccountForEthane(restoreAddr common.Address) {
 	common.BlockRestoreStat.MerkleProofNum += len(common.AddrToKeyInactive[restoreAddr])
 	common.BlockRestoreStat.MerkleProofsSize += proofSize
 	common.BlockRestoreStat.MerkleProofsNodesNum += nodeNum
+	if common.BlockRestoreStat.MaxProofSize < proofSize {
+		common.BlockRestoreStat.MaxProofSize = proofSize
+	}
+	if common.BlockRestoreStat.MinProofSize > proofSize || common.BlockRestoreStat.MinProofSize == 0 {
+		common.BlockRestoreStat.MinProofSize = proofSize
+	}
 
 	// record merkle proofs for restoration (to delete these later)
 	common.RestoredKeys = append(common.RestoredKeys, common.AddrToKeyInactive[restoreAddr]...)
@@ -1594,6 +1606,10 @@ func saveBlockInfos(fileName string, startBlockNum, endBlockNum uint64) {
 		log += strconv.Itoa(blockInfo.RestoredAddressNum) + delimiter
 		log += strconv.Itoa(blockInfo.CrumbAddressNum) + delimiter
 		log += strconv.Itoa(blockInfo.InactiveAddressNum) + delimiter
+
+		// TODO(jmlee): merge these to BlockRestoreStat.ToString() later
+		log += strconv.Itoa(blockInfo.BlockRestoreStat.MinProofSize) + delimiter
+		log += strconv.Itoa(blockInfo.BlockRestoreStat.MaxProofSize) + delimiter
 
 		// fmt.Println("log at block", blockNum, ":", log)
 
@@ -2288,7 +2304,7 @@ func connHandler(conn net.Conn) {
 
 				if option == 0 {
 					common.AcceptWrongStorageTrie = false
-				} else if option == 1{
+				} else if option == 1 {
 					common.AcceptWrongStorageTrie = true
 				} else {
 					fmt.Println("Error acceptWrongStorageTrie: invalid option ->", option)
@@ -2458,7 +2474,7 @@ func connHandler(conn net.Conn) {
 					os.Exit(1)
 				}
 				fmt.Println("open new norm trie:", normTrie.Hash().Hex())
-				common.NextBlockNum = blockNum+1
+				common.NextBlockNum = blockNum + 1
 
 				response = []byte("success")
 
@@ -2528,7 +2544,7 @@ func connHandler(conn net.Conn) {
 				normTrie.Hash()
 				allAccounts, allAddrHashes, _ := subNormTrie.FindLeafNodes(startKey[:], endKey[:])
 				newEthereumTrie, _ := trie.New(common.Hash{}, trie.NewDatabase(diskdb))
-				for i := 0; i <len(allAccounts);i++{
+				for i := 0; i < len(allAccounts); i++ {
 					// get Ethanos account
 					var ethanosAcc types.EthanosStateAccount
 					if err := rlp.DecodeBytes(allAccounts[i], &ethanosAcc); err != nil {
@@ -2556,7 +2572,7 @@ func connHandler(conn net.Conn) {
 
 				// 3. insert all current accounts to secure trie
 				allAccounts, allAddrHashes, _ = normTrie.FindLeafNodes(startKey[:], endKey[:])
-				for i := 0; i <len(allAccounts);i++{
+				for i := 0; i < len(allAccounts); i++ {
 					// get Ethanos account
 					var ethanosAcc types.EthanosStateAccount
 					if err := rlp.DecodeBytes(allAccounts[i], &ethanosAcc); err != nil {

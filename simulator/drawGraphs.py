@@ -68,6 +68,9 @@ def parseBlockInfos(simulMode, startBlockNum, endBlockNum, deleteEpoch, inactiva
     # logs[46][blockNum] = CrumbAddressNum
     # logs[47][blockNum] = InactiveAddressNum
 
+    # logs[48][blockNum] = MinProofSize
+    # logs[49][blockNum] = MaxProofSize
+
     columnNum = 100 # big enough value
     logs = TwoD(endBlockNum-startBlockNum+1, columnNum, True)
 

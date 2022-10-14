@@ -211,6 +211,8 @@ type RestoreStat struct {
 	MerkleProofNum       int // # of merkle proofs for membership/void-proof
 	MerkleProofsSize     int // total size of merkle proofs
 	MerkleProofsNodesNum int // # of nodes in merkle proofs
+	MinProofSize         int // min restore proof size in this block
+	MaxProofSize         int // max restore proof size in this block
 }
 
 // BlockInfo stores block related information
@@ -349,6 +351,8 @@ func (rs *RestoreStat) Reset() {
 	rs.BloomFilterNum = 0
 	rs.MerkleProofsSize = 0
 	rs.MerkleProofsNodesNum = 0
+	rs.MinProofSize = 0
+	rs.MaxProofSize = 0
 }
 
 // ToString collects values and converts them to string
@@ -361,6 +365,7 @@ func (rs *RestoreStat) ToString(delimiter string) string {
 	values[3] = rs.MerkleProofNum
 	values[4] = rs.MerkleProofsSize
 	values[5] = rs.MerkleProofsNodesNum
+	// TODO(jmlee): add min/max proof size
 
 	str := ""
 	for _, value := range values {
