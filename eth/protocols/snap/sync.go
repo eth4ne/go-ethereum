@@ -647,7 +647,7 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 		// Assign all the data retrieval tasks to any free peers
 		s.assignAccountTasks(accountResps, accountReqFails, cancel)
 		s.assignBytecodeTasks(bytecodeResps, bytecodeReqFails, cancel)
-		s.assignStorageTasks(storageResps, storageReqFails, cancel)
+		// s.assignStorageTasks(storageResps, storageReqFails, cancel)
 
 		if len(s.tasks) == 0 {
 			// Sync phase done, run heal phase
@@ -1799,37 +1799,37 @@ func (s *Syncer) processAccountResponse(res *accountResponse) {
 	resumed := make(map[common.Hash]struct{})
 
 	res.task.pend = 0
-	for i, account := range res.accounts {
-		// Check if the account is a contract with an unknown code
-		if !bytes.Equal(account.CodeHash, emptyCode[:]) {
-			if !rawdb.HasCodeWithPrefix(s.db, common.BytesToHash(account.CodeHash)) {
-				res.task.codeTasks[common.BytesToHash(account.CodeHash)] = struct{}{}
-				res.task.needCode[i] = true
-				res.task.pend++
-			}
-		}
-		// Check if the account is a contract with an unknown storage trie
-		if account.Root != emptyRoot {
-			if ok, err := s.db.Has(account.Root[:]); err != nil || !ok {
-				// If there was a previous large state retrieval in progress,
-				// don't restart it from scratch. This happens if a sync cycle
-				// is interrupted and resumed later. However, *do* update the
-				// previous root hash.
-				if subtasks, ok := res.task.SubTasks[res.hashes[i]]; ok {
-					log.Debug("Resuming large storage retrieval", "account", res.hashes[i], "root", account.Root)
-					for _, subtask := range subtasks {
-						subtask.root = account.Root
-					}
-					res.task.needHeal[i] = true
-					resumed[res.hashes[i]] = struct{}{}
-				} else {
-					res.task.stateTasks[res.hashes[i]] = account.Root
-				}
-				res.task.needState[i] = true
-				res.task.pend++
-			}
-		}
-	}
+	// for i, account := range res.accounts {
+	// 	// Check if the account is a contract with an unknown code
+	// 	if !bytes.Equal(account.CodeHash, emptyCode[:]) {
+	// 		if !rawdb.HasCodeWithPrefix(s.db, common.BytesToHash(account.CodeHash)) {
+	// 			res.task.codeTasks[common.BytesToHash(account.CodeHash)] = struct{}{}
+	// 			res.task.needCode[i] = true
+	// 			res.task.pend++
+	// 		}
+	// 	}
+	// 	// Check if the account is a contract with an unknown storage trie
+	// 	if account.Root != emptyRoot {
+	// 		if ok, err := s.db.Has(account.Root[:]); err != nil || !ok {
+	// 			// If there was a previous large state retrieval in progress,
+	// 			// don't restart it from scratch. This happens if a sync cycle
+	// 			// is interrupted and resumed later. However, *do* update the
+	// 			// previous root hash.
+	// 			if subtasks, ok := res.task.SubTasks[res.hashes[i]]; ok {
+	// 				log.Debug("Resuming large storage retrieval", "account", res.hashes[i], "root", account.Root)
+	// 				for _, subtask := range subtasks {
+	// 					subtask.root = account.Root
+	// 				}
+	// 				res.task.needHeal[i] = true
+	// 				resumed[res.hashes[i]] = struct{}{}
+	// 			} else {
+	// 				res.task.stateTasks[res.hashes[i]] = account.Root
+	// 			}
+	// 			res.task.needState[i] = true
+	// 			res.task.pend++
+	// 		}
+	// 	}
+	// }
 	// Delete any subtasks that have been aborted but not resumed. This may undo
 	// some progress if a new peer gives us less accounts than an old one, but for
 	// now we have to live with that.
@@ -2194,9 +2194,10 @@ func (s *Syncer) forwardAccountTask(task *accountTask) {
 		},
 	}
 	for i, hash := range res.hashes {
-		if task.needCode[i] || task.needState[i] {
-			break
-		}
+		// fmt.Println("res.hash[:]: ", hash)
+		// if task.needCode[i] || task.needState[i] {
+		// 	break
+		// }
 		slim := snapshot.SlimAccountRLP(res.accounts[i].Nonce, res.accounts[i].Balance, res.accounts[i].Root, res.accounts[i].CodeHash)
 		rawdb.WriteAccountSnapshot(batch, hash, slim)
 

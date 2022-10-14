@@ -1349,6 +1349,8 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	// 	}
 	// }
 
+	// state.SnapshotAccountList() // code for debugging (joonha)
+
 	return status, nil
 }
 

@@ -488,13 +488,13 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 		s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
 	}
 
-	// If state snapshotting is active, cache the data til commit. Note, this
-	// update mechanism is not symmetric to the deletion, because whereas it is
-	// enough to track account updates at commit time, deletions need tracking
-	// at transaction boundary level to ensure we capture state clearing.
-	if s.snap != nil {
-		s.snapAccounts[obj.addrHash] = snapshot.SlimAccountRLP(obj.data.Nonce, obj.data.Balance, obj.data.Root, obj.data.CodeHash)
-	}
+	// // If state snapshotting is active, cache the data til commit. Note, this
+	// // update mechanism is not symmetric to the deletion, because whereas it is
+	// // enough to track account updates at commit time, deletions need tracking
+	// // at transaction boundary level to ensure we capture state clearing.
+	// if s.snap != nil {
+	// 	s.snapAccounts[obj.addrHash] = snapshot.SlimAccountRLP(obj.data.Nonce, obj.data.Balance, obj.data.Root, obj.data.CodeHash)
+	// } // ---> comment out not to include dummy tx's updates (joonha)
 }
 
 // deleteStateObject removes the given object from the state trie.
@@ -934,8 +934,8 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 		Also build the snapshot for snap sync.
 		(commenter: joonha)
 	*/
-	fmt.Println("DoMakeSnapshot: ", common.DoMakeSnapshot)
-	fmt.Println("IsSender: ", common.IsSender)
+	// fmt.Println("DoMakeSnapshot: ", common.DoMakeSnapshot)
+	// fmt.Println("IsSender: ", common.IsSender)
 	if common.DoMakeSnapshot && common.IsSender {
 
 		// remove original
@@ -963,13 +963,15 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 		accounts, keys, _ := receivedTrie.FindLeafNodes(firstKey[:], lastKey[:])
 
 		// delete all orig nodes
-		fmt.Println("(before deleting all orig nodes) s.trie.Root(): ", s.trie.Hash())
+		// fmt.Println("(before deleting all orig nodes) s.trie.Root(): ", s.trie.Hash())
 		// s.trie.Print()
 		_, origKeys, _ := s.trie.FindLeafNodes(firstKey[:], lastKey[:])
 		for _, k := range origKeys {
 			s.trie.TryUpdate_SetKey(k[:], nil)
 		}
-		fmt.Println("(after deleting all orig nodes) s.trie.Root(): ", s.trie.Hash())
+		// fmt.Println("(after deleting all orig nodes) s.trie.Root(): ", s.trie.Hash())
+
+		// var indexCount = make([]int64, 17) // debugging (joonha) indexCount counts the number of keys within the range
 
 		// inject the data to the state trie and the snapshot
 		for i, enc := range accounts {
@@ -984,12 +986,17 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 				s.snapAccounts[snapshotKey] = snapshot.SlimAccountRLP(data.Nonce, data.Balance, data.Root, data.CodeHash)
 			}
 
+			// indexCount[snapshotKey[0]/16]++
+
 			acc, _ := rlp.EncodeToBytes(data)
 			if err := s.trie.TryUpdate_SetKey(keys[i][:], acc); err != nil {
 				s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
 			}
 		}
 		// fmt.Println("(after injecting all new nodes) s.trie.Root(): ", s.trie.Hash())
+		// for i := 0; i < 16; i++ {
+		// 	fmt.Println(i, ": ", indexCount[i])
+		// }
 	}
 
 	// Commit objects to the trie, measuring the elapsed time
@@ -1136,4 +1143,14 @@ func (s *StateDB) SlotInAccessList(addr common.Address, slot common.Hash) (addre
 
 func (s *StateDB) Root() common.Hash {
 	return s.trie.Hash()
+}
+
+// code for debugging (joonha) SnapshotAccountList prints account list of the snapshot
+func (s *StateDB) SnapshotAccountList() {
+	fmt.Println("SnapshotAccountList")
+	if common.DoMakeSnapshot && common.IsSender {
+		snapRoot := s.trie.Hash()
+		accountList := s.snaps.AccountList_ethane(snapRoot)
+		fmt.Println("len(accountList): ", len(accountList)) // key
+	}
 }

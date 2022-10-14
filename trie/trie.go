@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"math/big"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -36,6 +37,15 @@ var (
 
 	// emptyState is the known hash of an empty state trie entry.
 	emptyState = crypto.Keccak256Hash(nil)
+
+	// to save the leaf info while traversing the trie (joonha)
+	Accounts = make([][]byte, 0)
+	Keys     = make([]common.Hash, 0)
+
+	accountsInTrie = make([][]byte, 0)
+	keysToLeafNode = make([]common.Hash, 0)
+
+	Slots = make(map[common.Hash][]byte)
 )
 
 // LeafCallback is a callback type invoked when a trie operation reaches a leaf
@@ -586,4 +596,186 @@ func (t *Trie) hashRoot() (node, node, error) {
 func (t *Trie) Reset() {
 	t.root = nil
 	t.unhashed = 0
+}
+
+// print trie nodes details in human readable form (jmlee)
+func (t *Trie) Print() {
+	fmt.Println(t.root.toString("", t.db, 0))
+}
+
+// get last key among leaf nodes (i.e., right-most key value) (jmlee)
+func (t *Trie) GetLastKey() *big.Int {
+	lastKey := t.getLastKey(t.root, nil)
+	// fmt.Println("lastKey:", lastKey)
+	return lastKey
+}
+
+// get last key among leaf nodes (i.e., right-most key value) (jmlee)
+func (t *Trie) getLastKey(origNode node, lastKey []byte) *big.Int {
+	switch n := (origNode).(type) {
+	case nil:
+		// return big.NewInt(0)
+		return big.NewInt(-1) // active account's key starts with -1(initial last key) + 1 (joonha)
+	case valueNode:
+		hexToInt := new(big.Int)
+		hexToInt.SetString(common.BytesToHash(hexToKeybytes(lastKey)).Hex()[2:], 16)
+		return hexToInt
+	case *shortNode:
+		lastKey = append(lastKey, n.Key...)
+		// fmt.Println("at getLastKey -> lastKey: ", lastKey, "/ appended key:", n.Key, " (short node)")
+		return t.getLastKey(n.Val, lastKey)
+	case *fullNode:
+		last := 0
+		for i, node := range &n.Children {
+			if node != nil {
+				last = i
+			}
+		}
+		lastByte := common.HexToHash("0x" + indices[last])
+		lastKey = append(lastKey, lastByte[len(lastByte)-1])
+		// fmt.Println("at getLastKey -> lastKey: ", indices[last], "/ appended key:", indices[last], " (full node)")
+		return t.getLastKey(n.Children[last], lastKey)
+	case hashNode:
+		child, err := t.resolveHash(n, nil)
+		if err != nil {
+			lastKey = nil
+			return big.NewInt(0)
+		}
+		return t.getLastKey(child, lastKey)
+	default:
+		panic(fmt.Sprintf("%T: invalid node: %v", origNode, origNode))
+	}
+}
+
+// FindLeafNodes returns all leaf nodes within range (jmlee)
+// ex. leafNodes, keys, err := normTrie.FindLeafNodes(common.HexToHash("0x0").Bytes(),
+// 					common.HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff").Bytes())
+func (t *Trie) FindLeafNodes(startKey, endKey []byte) ([][]byte, []common.Hash, error) {
+	// reset buffers
+	accountsInTrie = make([][]byte, 0)
+	keysToLeafNode = make([]common.Hash, 0)
+	prefix := []byte{}
+
+	// start iterating
+	t.findLeafNodes(t.root, prefix, keybytesToHex(startKey), keybytesToHex(endKey))
+	return accountsInTrie, keysToLeafNode, nil
+}
+
+func (t *Trie) findLeafNodes(n node, prefix, startKey, endKey []byte) {
+
+	switch n := n.(type) {
+	case *shortNode:
+		// update prefix & range
+		prefix = append(prefix, n.Key...)
+		prefixLen := len(prefix)
+		subStartKey := startKey[:prefixLen]
+		subEndKey := endKey[:prefixLen]
+
+		// keep traversing if we are still in range (subStartKey <= prefix <= subEndKey)
+		if bytes.Compare(subStartKey, prefix) <= 0 && bytes.Compare(subEndKey, prefix) >= 0 {
+			t.findLeafNodes(n.Val, prefix, startKey, endKey)
+		}
+
+	case *fullNode:
+		// update range
+		prefixLen := len(prefix) + 1 // add 1 for fullNode's index
+		subStartKey := startKey[:prefixLen]
+		subEndKey := endKey[:prefixLen]
+
+		for i, childNode := range &n.Children {
+			if childNode != nil {
+				// update prefix
+				indexToByte := common.HexToHash("0x" + indices[i])
+				extendedPrefix := append(prefix, indexToByte[len(indexToByte)-1])
+
+				// keep traversing if we are still in range (subStartKey <= prefix <= subEndKey)
+				if bytes.Compare(subStartKey, extendedPrefix) <= 0 && bytes.Compare(subEndKey, extendedPrefix) >= 0 {
+					t.findLeafNodes(childNode, extendedPrefix, startKey, endKey)
+				}
+			}
+		}
+
+	case hashNode:
+		rn, err := t.resolveHash(n, nil)
+		if err != nil {
+			panic("trie.findLeafNodes(): this node do not exist")
+		}
+		t.findLeafNodes(rn, prefix, startKey, endKey)
+
+	case valueNode:
+		// find leaf node within range
+		accountsInTrie = append(accountsInTrie, n)
+		keysToLeafNode = append(keysToLeafNode, common.BytesToHash(hexToKeybytes(prefix)))
+
+	default:
+		panic(fmt.Sprintf("%T: invalid node: %v", n, n))
+	}
+}
+
+// TryGetAllSlots return all the found slots while traversing storage trie (joonha)
+func (t *Trie) TryGetAllSlots() (map[common.Hash][]byte, error) {
+	// init
+	Slots = make(map[common.Hash][]byte)
+	firstKey := common.Int64ToHash(0)
+
+	t.tryGetAllSlots(t.root, keybytesToHex(firstKey[:]), 0)
+	return Slots, nil
+}
+
+// (joonha)
+func (t *Trie) tryGetAllSlots(currNode node, parentKey []byte, pos int) {
+	switch n := (currNode).(type) {
+	case nil:
+		// fmt.Println("NODE IS NIL")
+		return
+
+	case valueNode: // in this case, should archive the slot into the result array
+		// fmt.Println("VALUENODE")
+		if n != nil {
+			slotKey := common.BytesToHash(hexToKeybytes(parentKey))
+			Slots[slotKey] = n
+		}
+		return
+
+	case *shortNode:
+		// fmt.Println("SHORTNODE")
+
+		// apply shortNode.key(=n.Key) to tempKey
+		// direct key edit affects other nodes, so use tempKey
+		tempKey := make([]byte, len(parentKey)) // parent key is already in hash format
+		copy(tempKey, parentKey)
+		for i := 0; i < len(n.Key); i++ {
+			tempKey[pos+i] = n.Key[i]
+		}
+
+		t.tryGetAllSlots(n.Val, tempKey, pos+len(n.Key))
+		return
+
+	case *fullNode:
+		// fmt.Println("FULLNODE")
+		for i := 0; i < 16; i++ {
+			tempKey := make([]byte, len(parentKey))
+			copy(tempKey, parentKey)
+			tempKey[pos] = byte(i)
+			// fmt.Println("tempKey: ", tempKey)
+			t.tryGetAllSlots(n.Children[i], tempKey, pos+1)
+		}
+		return
+
+	case hashNode:
+		// fmt.Println("HASHNODE")
+		child, err := t.resolveHash(n, parentKey[:pos])
+		if err != nil {
+			return
+		}
+		t.tryGetAllSlots(child, parentKey, pos)
+		return
+
+	default:
+		panic(fmt.Sprintf("%T: invalid node: %v", currNode, currNode))
+	}
+}
+
+func (t *Trie) Root() node {
+	return t.root
 }
