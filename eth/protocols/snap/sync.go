@@ -104,7 +104,7 @@ const (
 var (
 	// accountConcurrency is the number of chunks to split the account trie into
 	// to allow concurrent retrievals.
-	accountConcurrency = 16
+	accountConcurrency = 64
 
 	// storageConcurrency is the number of chunks to split the a large contract
 	// storage trie into to allow concurrent retrievals.
@@ -578,7 +578,15 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 		s.startTime = time.Now()
 	}
 	// Retrieve the previous sync status from LevelDB and abort if already synced
+	common.ReceiverIndex_load++
+	if common.ReceiverIndex_load < common.ChunkNum {
+		fmt.Println("common.ReceiverIndex_load: ", common.ReceiverIndex_load)
+		common.ReceiverLoadSyncStatusStart[common.ReceiverIndex_load] = time.Now().UnixNano() / int64(time.Millisecond)
+	}
 	s.loadSyncStatus() // flag (joonha) load sync data
+	if common.ReceiverIndex_load < common.ChunkNum {
+		common.ReceiverLoadSyncStatusEnd[common.ReceiverIndex_load] = time.Now().UnixNano() / int64(time.Millisecond)
+	}
 	if len(s.tasks) == 0 && s.healer.scheduler.Pending() == 0 {
 		log.Debug("Snapshot sync already completed")
 		return nil
@@ -650,9 +658,12 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 		// s.assignStorageTasks(storageResps, storageReqFails, cancel)
 
 		if len(s.tasks) == 0 {
+			common.ReceiverHealPhaseStart = time.Now().UnixNano() / int64(time.Millisecond)
 			// Sync phase done, run heal phase
 			s.assignTrienodeHealTasks(trienodeHealResps, trienodeHealReqFails, cancel)
 			s.assignBytecodeHealTasks(bytecodeHealResps, bytecodeHealReqFails, cancel)
+			common.ReceiverHealPhaseEnd = time.Now().UnixNano() / int64(time.Millisecond)
+			// fmt.Println("ReceiverHealPhaseDurtaion\t", common.ReceiverHealPhaseEnd-common.ReceiverHealPhaseStart)
 		}
 		// Wait for something to happen
 		select {
@@ -2193,6 +2204,11 @@ func (s *Syncer) forwardAccountTask(task *accountTask) {
 			s.accountBytes += common.StorageSize(len(key) + len(value))
 		},
 	}
+	common.ReceiverIndex_trieUpdate++
+	if common.ReceiverIndex_trieUpdate < common.ChunkNum {
+		common.ReceiverStackTrieUpdateStart[common.ReceiverIndex_trieUpdate] = time.Now().UnixNano() / int64(time.Millisecond)
+	}
+
 	for i, hash := range res.hashes {
 		// fmt.Println("res.hash[:]: ", hash)
 		// if task.needCode[i] || task.needState[i] {
@@ -2210,6 +2226,9 @@ func (s *Syncer) forwardAccountTask(task *accountTask) {
 			}
 			task.genTrie.Update(hash[:], full)
 		}
+	}
+	if common.ReceiverIndex_trieUpdate < common.ChunkNum {
+		common.ReceiverStackTrieUpdateEnd[common.ReceiverIndex_trieUpdate] = time.Now().UnixNano() / int64(time.Millisecond)
 	}
 	// Flush anything written just now and update the stats
 	if err := batch.Write(); err != nil {
@@ -2232,8 +2251,15 @@ func (s *Syncer) forwardAccountTask(task *accountTask) {
 	// flush after finalizing task.done. It's fine even if we crash and lose this
 	// write as it will only cause more data to be downloaded during heal.
 	if task.done {
+		common.ReceiverIndex_flush++
+		if common.ReceiverIndex_flush < common.ChunkNum {
+			common.ReceiverFlushStart[common.ReceiverIndex_flush] = time.Now().UnixNano() / int64(time.Millisecond)
+		}
 		if _, err := task.genTrie.Commit(); err != nil {
 			log.Error("Failed to commit stack account", "err", err)
+		}
+		if common.ReceiverIndex_flush < common.ChunkNum {
+			common.ReceiverFlushEnd[common.ReceiverIndex_flush] = time.Now().UnixNano() / int64(time.Millisecond)
 		}
 	}
 	if task.genBatch.ValueSize() > ethdb.IdealBatchSize || task.done {

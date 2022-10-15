@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -711,6 +712,7 @@ func (t *Tree) Journal(root common.Hash) (common.Hash, error) {
 // discard all caches and diff layers. Afterwards, it starts a new snapshot
 // generator with the given root hash.
 func (t *Tree) Rebuild(root common.Hash) {
+	common.ReceiverRebuildSnapshotStart = time.Now().UnixNano() / int64(time.Millisecond)
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -750,6 +752,8 @@ func (t *Tree) Rebuild(root common.Hash) {
 	t.layers = map[common.Hash]snapshot{
 		root: generateSnapshot(t.diskdb, t.triedb, t.cache, root),
 	}
+	common.ReceiverRebuildSnapshotEnd = time.Now().UnixNano() / int64(time.Millisecond)
+	// fmt.Println("ReceiverRebuildSnapshotDuration\t", common.ReceiverRebuildSnapshotEnd-common.ReceiverRebuildSnapshotStart)
 }
 
 // AccountIterator creates a new account iterator for the specified root hash and

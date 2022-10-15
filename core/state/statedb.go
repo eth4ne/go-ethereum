@@ -41,7 +41,7 @@ import (
 // ethane sync simulation
 const (
 	// leveldb path ($ sudo chmod -R 777 /ethereum)
-	leveldbPath = "/home/joonha/mptSimulator_ethereum_200000/trieNodes"
+	leveldbPath = "/home/joonha/ethereum_1M"
 	// leveldb cache size (MB) (Geth default: 512) (memory leak might occur when calling reset() frequently with too big cache size)
 	leveldbCache = 20000
 	// leveldb options
@@ -531,30 +531,30 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 	}
 	// If no live objects are available, attempt to use snapshots
 	var data *types.StateAccount
-	if s.snap != nil {
-		start := time.Now()
-		acc, err := s.snap.Account(crypto.HashData(s.hasher, addr.Bytes()))
-		if metrics.EnabledExpensive {
-			s.SnapshotAccountReads += time.Since(start)
-		}
-		if err == nil {
-			if acc == nil {
-				return nil
-			}
-			data = &types.StateAccount{
-				Nonce:    acc.Nonce,
-				Balance:  acc.Balance,
-				CodeHash: acc.CodeHash,
-				Root:     common.BytesToHash(acc.Root),
-			}
-			if len(data.CodeHash) == 0 {
-				data.CodeHash = emptyCodeHash
-			}
-			if data.Root == (common.Hash{}) {
-				data.Root = emptyRoot
-			}
-		}
-	}
+	// if s.snap != nil {
+	// 	start := time.Now()
+	// 	acc, err := s.snap.Account(crypto.HashData(s.hasher, addr.Bytes()))
+	// 	if metrics.EnabledExpensive {
+	// 		s.SnapshotAccountReads += time.Since(start)
+	// 	}
+	// 	if err == nil {
+	// 		if acc == nil {
+	// 			return nil
+	// 		}
+	// 		data = &types.StateAccount{
+	// 			Nonce:    acc.Nonce,
+	// 			Balance:  acc.Balance,
+	// 			CodeHash: acc.CodeHash,
+	// 			Root:     common.BytesToHash(acc.Root),
+	// 		}
+	// 		if len(data.CodeHash) == 0 {
+	// 			data.CodeHash = emptyCodeHash
+	// 		}
+	// 		if data.Root == (common.Hash{}) {
+	// 			data.Root = emptyRoot
+	// 		}
+	// 	}
+	// }
 	// If snapshot unavailable or reading from it failed, load from the database
 	if data == nil {
 		start := time.Now()

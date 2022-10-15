@@ -29,6 +29,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"golang.org/x/crypto/sha3"
@@ -46,9 +47,63 @@ var (
 	hashT    = reflect.TypeOf(Hash{})
 	addressT = reflect.TypeOf(Address{})
 
-	DoMakeSnapshot    bool
-	IsSender          = true
-	SpecificStateRoot = HexToHash("0x73e1188b303b417de1f05f224a11dcb59ed30e7c24dffbd537eab2ecd5eba8a6") // block no.50
+	DoMakeSnapshot bool
+	IsSender       = false
+
+	// specify trie to sync
+	// SpecificStateRoot = HexToHash("0x73e1188b303b417de1f05f224a11dcb59ed30e7c24dffbd537eab2ecd5eba8a6") // block no.50
+	// SpecificStateRoot = HexToHash("0x7b3d03961500a8abd404a3ee578905177b074272b267763530090a58adf18738") // block no.500
+	// SpecificStateRoot = HexToHash("0x6d9631ccd8ed5f982377f89d3bd11449c1dc2d12299a6c3e4b31d5d8e7d004f3") // block no.5000
+	// SpecificStateRoot = HexToHash("0x415128d6764ab766dbbf5413010a6423b2a34e3238f1423c9534e2532e5dee32") // block no.8000
+	// SpecificStateRoot = HexToHash("0x4de830f589266773eae1a1caa88d75def3f3a321fbd9aeb89570a57c6e7f3dbb") // block no.10000
+	// SpecificStateRoot = HexToHash("0x2dafcb133d1fb1b907fdbbb3d303145765b2cf7773611e35997764079e4297ec") // block no.50000
+	// SpecificStateRoot = HexToHash("0x209230089ff328b2d87b721c48dbede5fd163c3fae29920188a7118275ab2013") // block no.100000
+	// SpecificStateRoot = HexToHash("0x632964149a2056cb246ccee21838d139516578712f13b2a7cbf0086969d0f4ab") // block no.200000
+	SpecificStateRoot = HexToHash("0x0e066f3c2297a5cb300593052617d1bca5946f0caa0635fdb1b85ac7e5236f34") // block no.1M
+
+	ChunkNum = int64(64) // number of sync chunk (set same as accountConcurrency)
+
+	SenderInvoked            time.Time
+	SenderIndex              = int64(-1)
+	SenderGetAccountStart    = make([]int64, 3000)
+	SenderGetAccountEnd      = make([]int64, 3000)
+	SenderGetAccountDuration = make([]int64, 3000)
+	SenderSendStart          = make([]int64, 3000)
+	SenderSendEnd            = make([]int64, 3000)
+	SenderSendDuration       = make([]int64, 3000)
+
+	ReceiverStart int64
+	ReceiverEnd   int64
+
+	ReceiverIndex_load             = int64(-1)
+	ReceiverLoadSyncStatusStart    = make([]int64, 3000)
+	ReceiverLoadSyncStatusEnd      = make([]int64, 3000)
+	ReceiverLoadSyncStatusDuration = make([]int64, 3000)
+
+	ReceiverIndex_trieUpdate        = int64(-1)
+	ReceiverStackTrieUpdateStart    = make([]int64, 3000)
+	ReceiverStackTrieUpdateEnd      = make([]int64, 3000)
+	ReceiverStackTrieUpdateDuration = make([]int64, 3000)
+
+	ReceiverIndex_flush   = int64(-1)
+	ReceiverFlushStart    = make([]int64, 3000)
+	ReceiverFlushEnd      = make([]int64, 3000)
+	ReceiverFlushDuration = make([]int64, 3000)
+
+	ReceiverRebuildSnapshotStart int64
+	ReceiverRebuildSnapshotEnd   int64
+
+	ReceiverImportBlockResultsStart int64
+	ReceiverImportBlockResultsEnd   int64
+
+	ReceiverSpawnSyncStart int64
+	ReceiverSpawnSyncEnd   int64
+
+	ReceiverHealPhaseStart int64
+	ReceiverHealPhaseEnd   int64
+
+	ReceiverProcessSnapSyncContentStart int64
+	ReceiverProcessSnapSyncContentEnd   int64
 )
 
 // Marshal is a function that marshals the object into an io.Reader.

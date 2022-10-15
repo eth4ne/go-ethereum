@@ -121,6 +121,19 @@ func MakeProtocols(backend Backend, dnsdisc enode.Iterator) []p2p.Protocol {
 func Handle(backend Backend, peer *Peer) error {
 	for {
 		if err := HandleMessage(backend, peer); err != nil {
+			// fmt.Println("SenderInvoked\t", common.SenderInvoked)
+			idx := 0
+			for idx < int(common.ChunkNum) {
+				// fmt.Println("SenderGetAccountStart[", idx, "]\t", common.SenderGetAccountStart[idx])
+				// fmt.Println("SenderGetAccountEnd[", idx, "]\t", common.SenderGetAccountEnd[idx])
+				fmt.Println("SenderGetAccountDuration[", idx, "]\t", common.SenderGetAccountEnd[idx]-common.SenderGetAccountStart[idx])
+
+				// fmt.Println("SenderSendStart[", idx, "]\t", common.SenderSendStart[idx])
+				// fmt.Println("SenderSendEnd[", idx, "]\t", common.SenderSendEnd[idx])
+				fmt.Println("SenderSendDuration[", idx, "]\t", common.SenderSendEnd[idx]-common.SenderSendStart[idx])
+
+				idx++
+			}
 			peer.Log().Debug("Message handling failed in `snap`", "err", err)
 			return err
 		}
@@ -131,6 +144,7 @@ func Handle(backend Backend, peer *Peer) error {
 // remote peer on the `snap` protocol. The remote connection is torn down upon
 // returning any error.
 func HandleMessage(backend Backend, peer *Peer) error {
+	common.SenderInvoked = time.Now()
 	// Read the next message from the remote peer, and ensure it's fully consumed
 	msg, err := peer.rw.ReadMsg()
 	if err != nil {
@@ -162,15 +176,29 @@ func HandleMessage(backend Backend, peer *Peer) error {
 			return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 		}
 		// Service the request, potentially returning nothing in case of errors
+		common.SenderIndex++
+		if common.SenderIndex < common.ChunkNum {
+			common.SenderGetAccountStart[common.SenderIndex] = time.Now().UnixNano() / int64(time.Millisecond)
+
+		}
 		accounts, proofs := ServiceGetAccountRangeQuery(backend.Chain(), &req) // flag (joonha) get data from the snapshot and pack
 		// fmt.Println("[ServiceGetAccountRangeQuery] len(accounts): ", len(accounts))
-
+		if common.SenderIndex < common.ChunkNum {
+			common.SenderGetAccountEnd[common.SenderIndex] = time.Now().UnixNano() / int64(time.Millisecond)
+		}
 		// Send back anything accumulated (or empty in case of errors)
-		return p2p.Send(peer.rw, AccountRangeMsg, &AccountRangePacket{
+		if common.SenderIndex < common.ChunkNum {
+			common.SenderSendStart[common.SenderIndex] = time.Now().UnixNano() / int64(time.Millisecond)
+		}
+		result := p2p.Send(peer.rw, AccountRangeMsg, &AccountRangePacket{
 			ID:       req.ID,
 			Accounts: accounts,
 			Proof:    proofs,
 		})
+		if common.SenderIndex < common.ChunkNum {
+			common.SenderSendEnd[common.SenderIndex] = time.Now().UnixNano() / int64(time.Millisecond)
+		}
+		return result
 
 	case msg.Code == AccountRangeMsg:
 		// A range of accounts arrived to one of our previous requests

@@ -17,6 +17,7 @@
 package eth
 
 import (
+	"fmt"
 	"math/big"
 	"sync/atomic"
 	"time"
@@ -227,17 +228,41 @@ func (h *handler) doSync(op *chainSyncOp) error {
 		}
 	}
 
-	h.chain.PrintTrie(h.chain.CurrentBlock()) // code for debugging (joonha) before syncing
+	// h.chain.PrintTrie(h.chain.CurrentBlock()) // code for debugging (joonha) before syncing
 
 	// Run the sync cycle, and disable snap sync if we're past the pivot block
+	common.ReceiverStart = time.Now().UnixNano() / int64(time.Millisecond)
 	err := h.downloader.Synchronise(op.peer.ID(), op.head, op.td, op.mode)
 	if err != nil {
 		return err
 	}
+	common.ReceiverEnd = time.Now().UnixNano() / int64(time.Millisecond)
 	if atomic.LoadUint32(&h.snapSync) == 1 {
 		log.Info("Snap sync complete, auto disabling")
 		atomic.StoreUint32(&h.snapSync, 0)
 	}
+	fmt.Println("ReceiverStart\t", common.ReceiverStart)
+	idx := int64(0)
+	for idx < common.ChunkNum {
+		// fmt.Println("ReceiverLoadSyncStatusStart[", idx, "]\t", common.ReceiverLoadSyncStatusStart[idx])
+		// fmt.Println("ReceiverLoadSyncStatusEnd[", idx, "]\t", common.ReceiverLoadSyncStatusEnd[idx])
+		fmt.Println("ReceiverLoadSyncStatusDuration[", idx, "]\t", common.ReceiverLoadSyncStatusEnd[idx]-common.ReceiverLoadSyncStatusStart[idx])
+		// fmt.Println("ReceiverStackTrieUpdateStart[", idx, "]\t", common.ReceiverStackTrieUpdateStart[idx])
+		// fmt.Println("ReceiverStackTrieUpdateEnd[", idx, "]\t", common.ReceiverStackTrieUpdateEnd[idx])
+		fmt.Println("ReceiverStackTrieUpdateDuration[", idx, "]\t", common.ReceiverStackTrieUpdateEnd[idx]-common.ReceiverStackTrieUpdateStart[idx])
+		// fmt.Println("ReceiverFlushStart[", idx, "]\t", common.ReceiverFlushStart[idx])
+		// fmt.Println("ReceiverFlushEnd[", idx, "]\t", common.ReceiverFlushEnd[idx])
+		fmt.Println("ReceiverFlushDuration[", idx, "]\t", common.ReceiverFlushEnd[idx]-common.ReceiverFlushStart[idx])
+		idx++
+
+	}
+	fmt.Println("ReceiverProcessSnapSyncContentDuration\t", common.ReceiverProcessSnapSyncContentEnd-common.ReceiverProcessSnapSyncContentStart)
+	fmt.Println("ReceiverRebuildSnapshotDuration\t", common.ReceiverRebuildSnapshotEnd-common.ReceiverRebuildSnapshotStart)
+	fmt.Println("ReceiverHealPhaseDurtaion\t", common.ReceiverHealPhaseEnd-common.ReceiverHealPhaseStart)
+	fmt.Println("ReceiverSpawnSyncDuration\t", common.ReceiverSpawnSyncEnd-common.ReceiverSpawnSyncStart)
+	fmt.Println("ReceiverDuration\t", common.ReceiverEnd-common.ReceiverStart)
+	fmt.Println("common.ReceiverIndex_trieUpdate: ", common.ReceiverIndex_trieUpdate)
+
 	// If we've successfully finished a sync cycle and passed any required checkpoint,
 	// enable accepting transactions from the network.
 	head := h.chain.CurrentBlock()

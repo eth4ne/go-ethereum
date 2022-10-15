@@ -536,7 +536,11 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 		d.pivotHeader = pivot
 		d.pivotLock.Unlock()
 
-		fetchers = append(fetchers, func() error { return d.processSnapSyncContent() })
+		fetchers = append(fetchers, func() error {
+			result := d.processSnapSyncContent()
+			common.ReceiverProcessSnapSyncContentEnd = time.Now().UnixNano() / int64(time.Millisecond)
+			return result
+		})
 	} else if mode == FullSync {
 		fetchers = append(fetchers, d.processFullSyncContent)
 	}
@@ -546,6 +550,7 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 // spawnSync runs d.process and all given fetcher functions to completion in
 // separate goroutines, returning the first error that appears.
 func (d *Downloader) spawnSync(fetchers []func() error) error {
+	common.ReceiverSpawnSyncStart = time.Now().UnixNano() / int64(time.Millisecond)
 	errc := make(chan error, len(fetchers))
 	d.cancelWg.Add(len(fetchers))
 	for _, fn := range fetchers {
@@ -567,6 +572,7 @@ func (d *Downloader) spawnSync(fetchers []func() error) error {
 	}
 	d.queue.Close()
 	d.Cancel()
+	common.ReceiverSpawnSyncEnd = time.Now().UnixNano() / int64(time.Millisecond)
 	return err
 }
 
@@ -1405,6 +1411,7 @@ func (d *Downloader) importBlockResults(results []*fetchResult) error {
 // processSnapSyncContent takes fetch results from the queue and writes them to the
 // database. It also controls the synchronisation of state nodes of the pivot block.
 func (d *Downloader) processSnapSyncContent() error {
+	common.ReceiverProcessSnapSyncContentStart = time.Now().UnixNano() / int64(time.Millisecond)
 	// Start syncing state of the reported head block. This should get us most of
 	// the state of the pivot block.
 	d.pivotLock.RLock()
@@ -1520,9 +1527,11 @@ func (d *Downloader) processSnapSyncContent() error {
 			}
 		}
 		// Fast sync done, pivot commit done, full import
+		common.ReceiverImportBlockResultsStart = time.Now().UnixNano() / int64(time.Millisecond)
 		if err := d.importBlockResults(afterP); err != nil {
 			return err
 		}
+		common.ReceiverImportBlockResultsEnd = time.Now().UnixNano() / int64(time.Millisecond)
 	}
 }
 
