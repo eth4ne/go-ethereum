@@ -226,6 +226,9 @@ func (h *handler) doSync(op *chainSyncOp) error {
 			log.Warn("Update txLookup limit", "provided", limit, "updated", *stored)
 		}
 	}
+
+	h.chain.PrintTrie(h.chain.CurrentBlock()) // code for debugging (joonha) before syncing
+
 	// Run the sync cycle, and disable snap sync if we're past the pivot block
 	err := h.downloader.Synchronise(op.peer.ID(), op.head, op.td, op.mode)
 	if err != nil {
@@ -254,5 +257,7 @@ func (h *handler) doSync(op *chainSyncOp) error {
 		// more reliably update peers or the local TD state.
 		h.BroadcastBlock(head, false)
 	}
+
+	// h.chain.PrintTrie(head) // code for debugging (joonha) after syncing
 	return nil
 }

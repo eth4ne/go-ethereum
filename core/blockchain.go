@@ -1340,18 +1340,34 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	// 	// print state trie (jmlee)
 	// 	fmt.Println("$$$ print state trie at block", bc.CurrentBlock().Header().Number)
 	// 	ldb := trie.NewDatabase(bc.db)
-	// 	fmt.Println("(bc.CurrentBlock().Root(): ", (bc.CurrentBlock().Root()))
 	// 	stateTrie, _ := trie.NewSecure(bc.CurrentBlock().Root(), ldb)
 	// 	if stateTrie == nil {
 	// 		fmt.Println("stateTrie is nil")
 	// 	} else {
 	// 		stateTrie.Print()
 	// 	}
+	// 	fmt.Println("(bc.CurrentBlock().Root(): ", (bc.CurrentBlock().Root()))
 	// }
 
 	// state.SnapshotAccountList() // code for debugging (joonha)
 
 	return status, nil
+}
+func (bc *BlockChain) PrintTrie(block *types.Block) {
+	// print database inspect result (jmlee)
+	// fmt.Println("\nblock inserted -> blocknumber:", block.Header().Number.Int64())
+	if block.Header().Number.Int64()%1 == 0 {
+		// print state trie (jmlee)
+		fmt.Println("$$$ print state trie at block", bc.CurrentBlock().Header().Number)
+		ldb := trie.NewDatabase(bc.db)
+		stateTrie, _ := trie.NewSecure(bc.CurrentBlock().Root(), ldb)
+		if stateTrie == nil {
+			fmt.Println("stateTrie is nil")
+		} else {
+			stateTrie.Print()
+		}
+		fmt.Println("(bc.CurrentBlock().Root(): ", (bc.CurrentBlock().Root()))
+	}
 }
 
 // addFutureBlock checks if the block is within the max allowed window to get

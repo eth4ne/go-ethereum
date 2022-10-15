@@ -198,6 +198,8 @@ type BlockChain interface {
 
 	// Snapshots returns the blockchain snapshot tree to paused it during sync.
 	Snapshots() *snapshot.Tree
+
+	PrintTrie(*types.Block)
 }
 
 // New creates a new downloader to fetch hashes and blocks from remote peers.

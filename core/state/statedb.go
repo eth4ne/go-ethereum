@@ -928,7 +928,7 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 	s.IntermediateRoot(deleteEmptyObjects)
 
 	/*
-		hijact the snap sync!
+		hijack the snap sync!
 
 		Replace state trie with the injected complete trie data.
 		Also build the snapshot for snap sync.
