@@ -1181,6 +1181,13 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	// Make sure no inconsistent state is leaked during insertion
 	externTd := new(big.Int).Add(block.Difficulty(), ptd)
 
+	bn := block.Header().Number.Int64() + 1
+	if bn == 2 {
+		common.DoRebuildTrie = true
+	} else {
+		common.DoRebuildTrie = false
+	}
+
 	// Irrelevant of the canonical status, write the block itself to the database.
 	//
 	// Note all the components of block(td, hash->number map, header, body, receipts)

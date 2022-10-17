@@ -259,3 +259,11 @@ func nibblesToKey(nib []byte) []byte {
 	}
 	return key
 }
+
+// temp function for correct build, this will not be called in Ethane (joonha)
+func (t *odrTrie) Print() {}
+
+// temp function for correct build, this will not be called in Ethane (jmlee)
+func (t *odrTrie) TryUpdate_SetKey(key, value []byte) error {
+	return nil
+}

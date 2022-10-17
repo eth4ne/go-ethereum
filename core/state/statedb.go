@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"os"
 	"sort"
 	"time"
 
@@ -29,10 +30,33 @@ import (
 	"github.com/ethereum/go-ethereum/core/state/snapshot"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/ethdb/leveldb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
+)
+
+// ethane sync simulation
+const (
+	// leveldb cache size (MB) (Geth default: 512) (memory leak might occur when calling reset() frequently with too big cache size)
+	leveldbCache = 20000
+	// leveldb options
+	leveldbNamespace = "eth/db/chaindata-rebuiltTrie/"
+	leveldbReadonly  = false
+)
+
+// ethane sync simulation
+var (
+	// disk to store trie nodes (either leveldb or memorydb)
+	diskdb ethdb.KeyValueStore
+	// # of max open files for leveldb (Geth default: 524288)
+	leveldbHandles = 524288
+	// received state trie
+	receivedTrie *trie.Trie
+	// rebuilt state trie
+	rebuiltTrie *trie.SecureTrie
 )
 
 type revision struct {
@@ -903,6 +927,16 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 	// Finalize any pending changes and merge everything into the tries
 	s.IntermediateRoot(deleteEmptyObjects)
 
+	// (joonha)
+	if common.DoRebuildTrie {
+		leveldbPath_in := "/home/joonha/ethereum_1M"
+		leveldbPath_out_normal := "/home/joonha/rebuiltTrie/normal"
+		leveldbPath_out_stack := "/home/joonha/rebuiltTrie/stack"
+		// specificRoot := common.HexToHash("0x73e1188b303b417de1f05f224a11dcb59ed30e7c24dffbd537eab2ecd5eba8a6") // block no.50 // retrieval target trie's root
+		specificRoot := common.HexToHash("0x0e066f3c2297a5cb300593052617d1bca5946f0caa0635fdb1b85ac7e5236f34") // block no.1M // retrieval target trie's root
+		s.RebuildStorageTrieFromKeyValue(leveldbPath_in, specificRoot, leveldbPath_out_normal, leveldbPath_out_stack)
+	}
+
 	// Commit objects to the trie, measuring the elapsed time
 	var storageCommitted int
 	codeWriter := s.db.TrieDB().DiskDB().NewBatch()
@@ -1043,4 +1077,102 @@ func (s *StateDB) AddressInAccessList(addr common.Address) bool {
 // SlotInAccessList returns true if the given (address, slot)-tuple is in the access list.
 func (s *StateDB) SlotInAccessList(addr common.Address, slot common.Hash) (addressPresent bool, slotPresent bool) {
 	return s.accessList.Contains(addr, slot)
+}
+
+// RebuildStorageTrieFromKeyValue rebuilds a storage trie with hard-coded trie (joonha)
+func (s *StateDB) RebuildStorageTrieFromKeyValue(leveldbPath_in string, trieRoot common.Hash, leveldbPath_out_normal string, leveldbPath_out_stack string) { // state trie
+
+	/*
+		Rebuilding is faster when done with the `stackTrie` structure.
+		So rebuilding with normal trie code has been commented out(it works well anyway).
+
+		You need below functions to activate this function:
+			trie > FindLeafNodes
+			secure_trie > TryUpdate_SetKey
+			trie > Print
+			node > toString
+
+		This function would work well if added into s.Commit()
+		(commenter: joonha)
+	*/
+
+	// open trie
+	diskdb, err := leveldb.New(leveldbPath_in, leveldbCache, leveldbHandles, leveldbNamespace, leveldbReadonly)
+	if err != nil {
+		fmt.Println("leveldb.New error (1) !! ->", err)
+		os.Exit(1)
+	}
+	receivedTrie, _ = trie.New(trieRoot, trie.NewDatabase(diskdb))
+	// fmt.Println("receivedTrie: ", receivedTrie)
+	// receivedTrie.Print()
+
+	// retrieve key-value pairs
+	firstKey := common.HexToHash("0x0")
+	lastKey := common.HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+	accounts, keys, _ := receivedTrie.FindLeafNodes(firstKey[:], lastKey[:])
+	// fmt.Println("len(accounts): ", len(accounts))
+	// fmt.Println("len(keys): ", len(keys))
+
+	// /*
+	// 	normal state trie
+	// */
+	// // new trie
+	// diskdb_out_normal, err := leveldb.New(leveldbPath_out_normal, leveldbCache, leveldbHandles, leveldbNamespace, leveldbReadonly)
+	// if err != nil {
+	// 	fmt.Println("leveldb.New error (2) !! ->", err)
+	// 	os.Exit(1)
+	// }
+	// rebuiltTrie, _ = trie.NewSecure(common.Hash{}, trie.NewDatabase(diskdb_out_normal))
+	// // inject the data
+	// RebuildNormalTrieStarts := time.Now().UnixNano() / int64(time.Millisecond)
+	// for i, enc := range accounts {
+	// 	data := new(types.StateAccount)
+	// 	addr := common.BytesToAddress(enc) // BytesToAddress() turns last 20 bytes into addr
+
+	// 	if err := rlp.DecodeBytes(enc, data); err != nil {
+	// 		log.Error("Failed to decode state object", "addr", addr, "err", err)
+	// 	}
+
+	// 	acc, _ := rlp.EncodeToBytes(data)
+	// 	if err := rebuiltTrie.TryUpdate_SetKey(keys[i][:], acc); err != nil {
+	// 		s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
+	// 	}
+	// }
+	// // commit
+	// if _, _, err = rebuiltTrie.Commit(nil); err != nil {
+	// 	fmt.Println("rebuiltTrie.Commit error !!")
+	// }
+	// RebuildNormalTrieEnds := time.Now().UnixNano() / int64(time.Millisecond)
+	// // // print
+	// // if rebuiltTrie == nil {
+	// // 	fmt.Println("rebuiltTrie is nil")
+	// // } else {
+	// // 	fmt.Println("rebuiltTrie: ", rebuiltTrie)
+	// // 	rebuiltTrie.Print()
+	// // }
+	// fmt.Println("$$$ rebuilding the normal trie done")
+	// fmt.Println("Rebuild Normal Trie Time Duration: ", RebuildNormalTrieEnds-RebuildNormalTrieStarts, "(ms)")
+
+	/*
+		stack state trie
+	*/
+	fmt.Println("$$$ rebuilding a stack trie starts")
+	// new trie
+	diskdb_out_stack, err := leveldb.New(leveldbPath_out_stack, leveldbCache, leveldbHandles, leveldbNamespace, leveldbReadonly)
+	if err != nil {
+		fmt.Println("leveldb.New error (3) !! ->", err)
+		os.Exit(1)
+	}
+	stackTr := *trie.NewStackTrie(diskdb_out_stack.NewBatch())
+	// inject the data
+	RebuildStackTrieStarts := time.Now().UnixNano() / int64(time.Millisecond)
+	for index, key := range keys {
+		stackTr.TryUpdate(key[:], accounts[index])
+	}
+	if _, err := stackTr.Commit(); err != nil {
+		log.Error("Failed to commit stack slots", "err", err)
+	}
+	RebuildStackTrieEnds := time.Now().UnixNano() / int64(time.Millisecond)
+	fmt.Println("$$$ rebuilding the stack trie done")
+	fmt.Println("Rebuild Stack Trie Time Duration: ", RebuildStackTrieEnds-RebuildStackTrieStarts, "(ms)")
 }

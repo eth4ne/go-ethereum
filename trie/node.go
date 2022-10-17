@@ -19,6 +19,7 @@ package trie
 import (
 	"fmt"
 	"io"
+	"math/big"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -30,6 +31,7 @@ var indices = []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b
 type node interface {
 	fstring(string) string
 	cache() (hashNode, bool)
+	toString(string, *Database, int) string // print node details in human readable form (jmlee)
 }
 
 type (
@@ -222,4 +224,61 @@ func wrapError(err error, ctx string) error {
 
 func (err *decodeError) Error() string {
 	return fmt.Sprintf("%v (decode path: %s)", err.what, strings.Join(err.stack, "<-"))
+}
+
+// print node details in human readable form (jmlee)
+func (n *fullNode) toString(ind string, db *Database, depth int) string {
+	// print branch node
+	hashnode, _ := n.cache()
+	hash := common.BytesToHash(hashnode)
+	resp := fmt.Sprintf("[\n")
+	resp += fmt.Sprintf("%s fullNode - hash: %s\n   depth: %d\n", ind, hash.Hex(), depth)
+	for i, node := range &n.Children {
+		if node != nil {
+			resp += fmt.Sprintf("%s branch '%s':\n", ind, indices[i])
+			resp += fmt.Sprintf("%s	%v\n", ind, node.toString(ind+"	", db, depth+1))
+		}
+	}
+	return resp + fmt.Sprintf("\n%s] ", ind)
+}
+func (n *shortNode) toString(ind string, db *Database, depth int) string {
+	// print extension or leaf node
+	// if n.Val is branch node, then this node is extension node & n.Key is common prefix
+	// if n.Val is account, then this node is leaf node & n.Key is left address of the account (along the path)
+	hashnode, _ := n.cache()
+	hash := common.BytesToHash(hashnode)
+	// return fmt.Sprintf("{shortNode hash: %s, key: %x - value: %v} ", hash.Hex(), n.Key, n.Val.toString(ind+"  ", db))
+	// return fmt.Sprintf("\n\t\tdepth(s): \t%d\n\t\tshortNode hash: %s \n\t\tkey:\t\t%x \n\t\t%v \nInactiveBoundaryKey is %d ", depth, hash.Hex(), n.Key, n.Val.toString(ind+"  ", db, depth+1), common.InactiveBoundaryKey) // cleaner printing (joonha)
+	return fmt.Sprintf("\n\t\tdepth(s): \t%d\n\t\tshortNode hash: %s \n\t\tkey:\t\t%x \n\t\t%v \n", depth, hash.Hex(), n.Key, n.Val.toString(ind+"  ", db, depth+1)) // cleaner printing (joonha)
+}
+func (n hashNode) toString(ind string, db *Database, depth int) string {
+	// resolve hashNode (get node from db)
+	hash := common.BytesToHash([]byte(n))
+	if node := db.node(hash); node != nil {
+		return node.toString(ind, db, depth) // no adding 1 to the depth, not sure though... (joonha)
+	} else {
+		// error: should not reach here!
+		return fmt.Sprintf("<%x> ", []byte(n))
+	}
+}
+
+// same struct copied from state_object.go to decode data
+type Account struct {
+	Nonce    uint64
+	Balance  *big.Int
+	Root     common.Hash // merkle root of the storage trie
+	CodeHash []byte
+	Addr     common.Address // 아직 account에 address가 담겨있지 않음. ethane에서는 담아야 함.
+}
+
+func (n valueNode) toString(ind string, db *Database, depth int) string {
+	// decode data into account & print account
+	var acc Account
+	rlp.DecodeBytes([]byte(n), &acc)
+	// return fmt.Sprintf("[ Nonce: %d / Balance: %s ]", acc.Nonce, acc.Balance.String())
+	// return fmt.Sprintf("depth(v):\t%d\n\t\tNonce:\t\t%d\n\t\tBalance:\t%s\n\t\tstorageRoot:\t%s\n\t\tcodeHash:\t%x\n\t\taddr:\t\t%s\n\t\tcounter:\t%s\n", depth, acc.Nonce, acc.Balance.String(), acc.Root, acc.CodeHash, acc.Addr, common.AddrToKey[acc.Addr]) // print (joonha)
+	return fmt.Sprintf("depth(v):\t%d\n\t\tNonce:\t\t%d\n\t\tBalance:\t%s\n\t\tstorageRoot:\t%s\n\t\tcodeHash:\t%x\n\t\taddr:\t\t%s\n", depth, acc.Nonce, acc.Balance.String(), acc.Root, acc.CodeHash, acc.Addr) // print (joonha)
+
+	// watch-out:
+	// printing AddrToKey not AddrToKey_inactive so do not be confused when obeserving ianctive trie (joonha)
 }

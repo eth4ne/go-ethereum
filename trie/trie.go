@@ -36,6 +36,9 @@ var (
 
 	// emptyState is the known hash of an empty state trie entry.
 	emptyState = crypto.Keccak256Hash(nil)
+
+	accountsInTrie = make([][]byte, 0)
+	keysToLeafNode = make([]common.Hash, 0)
 )
 
 // LeafCallback is a callback type invoked when a trie operation reaches a leaf
@@ -586,4 +589,74 @@ func (t *Trie) hashRoot() (node, node, error) {
 func (t *Trie) Reset() {
 	t.root = nil
 	t.unhashed = 0
+}
+
+// print trie nodes details in human readable form (jmlee)
+func (t *Trie) Print() {
+	fmt.Println(t.root.toString("", t.db, 0))
+}
+
+// FindLeafNodes returns all leaf nodes within range (jmlee)
+// ex. leafNodes, keys, err := normTrie.FindLeafNodes(common.HexToHash("0x0").Bytes(),
+// 					common.HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff").Bytes())
+func (t *Trie) FindLeafNodes(startKey, endKey []byte) ([][]byte, []common.Hash, error) {
+	// reset buffers
+	accountsInTrie = make([][]byte, 0)
+	keysToLeafNode = make([]common.Hash, 0)
+	prefix := []byte{}
+
+	// start iterating
+	t.findLeafNodes(t.root, prefix, keybytesToHex(startKey), keybytesToHex(endKey))
+	return accountsInTrie, keysToLeafNode, nil
+}
+
+func (t *Trie) findLeafNodes(n node, prefix, startKey, endKey []byte) {
+
+	switch n := n.(type) {
+	case *shortNode:
+		// update prefix & range
+		prefix = append(prefix, n.Key...)
+		prefixLen := len(prefix)
+		subStartKey := startKey[:prefixLen]
+		subEndKey := endKey[:prefixLen]
+
+		// keep traversing if we are still in range (subStartKey <= prefix <= subEndKey)
+		if bytes.Compare(subStartKey, prefix) <= 0 && bytes.Compare(subEndKey, prefix) >= 0 {
+			t.findLeafNodes(n.Val, prefix, startKey, endKey)
+		}
+
+	case *fullNode:
+		// update range
+		prefixLen := len(prefix) + 1 // add 1 for fullNode's index
+		subStartKey := startKey[:prefixLen]
+		subEndKey := endKey[:prefixLen]
+
+		for i, childNode := range &n.Children {
+			if childNode != nil {
+				// update prefix
+				indexToByte := common.HexToHash("0x" + indices[i])
+				extendedPrefix := append(prefix, indexToByte[len(indexToByte)-1])
+
+				// keep traversing if we are still in range (subStartKey <= prefix <= subEndKey)
+				if bytes.Compare(subStartKey, extendedPrefix) <= 0 && bytes.Compare(subEndKey, extendedPrefix) >= 0 {
+					t.findLeafNodes(childNode, extendedPrefix, startKey, endKey)
+				}
+			}
+		}
+
+	case hashNode:
+		rn, err := t.resolveHash(n, nil)
+		if err != nil {
+			panic("trie.findLeafNodes(): this node do not exist")
+		}
+		t.findLeafNodes(rn, prefix, startKey, endKey)
+
+	case valueNode:
+		// find leaf node within range
+		accountsInTrie = append(accountsInTrie, n)
+		keysToLeafNode = append(keysToLeafNode, common.BytesToHash(hexToKeybytes(prefix)))
+
+	default:
+		panic(fmt.Sprintf("%T: invalid node: %v", n, n))
+	}
 }

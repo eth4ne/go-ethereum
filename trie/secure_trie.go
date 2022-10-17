@@ -132,6 +132,17 @@ func (t *SecureTrie) TryUpdate(key, value []byte) error {
 	return nil
 }
 
+// set key as I want to implement Ethane (jmlee)
+func (t *SecureTrie) TryUpdate_SetKey(key, value []byte) error {
+	hk := key
+	err := t.trie.TryUpdate(hk, value)
+	if err != nil {
+		return err
+	}
+	// t.getSecKeyCache()[string(hk)] = common.CopyBytes(key)
+	return nil
+}
+
 // Delete removes any existing value for key from the trie.
 func (t *SecureTrie) Delete(key []byte) {
 	if err := t.TryDelete(key); err != nil {
@@ -216,4 +227,9 @@ func (t *SecureTrie) getSecKeyCache() map[string][]byte {
 		t.secKeyCache = make(map[string][]byte)
 	}
 	return t.secKeyCache
+}
+
+// print trie nodes details in human readable form (jmlee)
+func (t *SecureTrie) Print() {
+	t.trie.Print()
 }
