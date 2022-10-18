@@ -23,10 +23,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"math/rand"
+	"os"
 	"reflect"
 	"strings"
+	"sync"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"golang.org/x/crypto/sha3"
@@ -44,8 +47,124 @@ var (
 	hashT    = reflect.TypeOf(Hash{})
 	addressT = reflect.TypeOf(Address{})
 
-	DoRebuildTrie bool
+	DoRebuildTrie      bool
+	DoMakeKeyValuePair = false
+	MapMutex           = sync.RWMutex{}
+	Accounts           [][]byte
+	Keys               []Hash
+	BN                 string
 )
+
+// Marshal is a function that marshals the object into an io.Reader.
+// By default, it uses the JSON marshaller.
+var Marshal = func(v interface{}) (io.Reader, error) {
+	b, err := json.MarshalIndent(v, "", "\t")
+	if err != nil {
+		return nil, err
+	}
+	return bytes.NewReader(b), nil
+}
+
+// Unmarshal is a function that unmarshals the data from the reader into the specified value.
+// By default, it uses the JSON unmarshaller.
+var Unmarshal = func(r io.Reader, v interface{}) error {
+	return json.NewDecoder(r).Decode(v)
+}
+
+// Save saves a representation of v to the file at path.
+func SaveAsFile(path string, v interface{}) error {
+	// lock.Lock()
+	// defer lock.Unlock()
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	r, err := Marshal(v)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(f, r)
+	return err
+}
+
+// Load loads the file at path into v.
+// Use os.IsNotExist() to see if the returned error is due to the file being missing.
+func LoadFromFile(path string, v interface{}) error {
+	// lock.Lock()
+	// defer lock.Unlock()
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return Unmarshal(f, v)
+}
+
+// save AddrToKey as a file (jmlee)
+func SaveAccountsAndKeys() error {
+
+	// debugging code
+	// for k, v := range AddrToKey {
+	// 	fmt.Println("common.AddrToKey -> k:", k, " / v:", v)
+	// }
+
+	// lock & unlock mutex
+	MapMutex.Lock()
+	defer MapMutex.Unlock()
+
+	// Accounts
+	path := "accounts" + BN
+	// save it as a file
+	fmt.Println("save Accounts path:", path)
+	err := SaveAsFile(path, Accounts)
+	if err != nil {
+		fmt.Println("save Accounts fail:", err)
+	} else {
+		fmt.Println("save Accounts suceess!")
+	}
+
+	// Keys
+	path1 := "keys" + BN
+	// save it as a file
+	fmt.Println("save Keys path1:", path1)
+	err = SaveAsFile(path1, Keys)
+	if err != nil {
+		fmt.Println("save Keys fail:", err)
+	} else {
+		fmt.Println("save Keys suceess!")
+	}
+
+	return err
+}
+
+// load AddrToKey from a file (jmlee)
+func LoadAccountsAndKeys() error {
+	MapMutex.Lock()
+	defer MapMutex.Unlock()
+
+	// AddrToKey
+	path := "accounts" + BN // from 0
+	fmt.Println("load Accounts path:", path)
+	err := LoadFromFile(path, &Accounts)
+	if err != nil {
+		fmt.Println("load Accounts fail:", err)
+	} else {
+		fmt.Println("load Accounts suceess!")
+	}
+
+	// AddrToKey_inactive
+	path1 := "keys" + BN // from 0
+	fmt.Println("load Keys path:", path1)
+	err = LoadFromFile(path1, &Keys)
+	if err != nil {
+		fmt.Println("load Keys fail:", err)
+	} else {
+		fmt.Println("load Keys suceess!")
+	}
+
+	return err
+}
 
 // Hash represents the 32 byte Keccak256 hash of arbitrary data.
 type Hash [HashLength]byte

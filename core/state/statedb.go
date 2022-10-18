@@ -929,11 +929,64 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 
 	// (joonha)
 	if common.DoRebuildTrie {
-		leveldbPath_in := "/home/joonha/ethereum_1M"
+		leveldbPath_in := "/home/joonha/ethereum_5M"
 		leveldbPath_out_normal := "/home/joonha/rebuiltTrie/normal"
 		leveldbPath_out_stack := "/home/joonha/rebuiltTrie/stack"
-		// specificRoot := common.HexToHash("0x73e1188b303b417de1f05f224a11dcb59ed30e7c24dffbd537eab2ecd5eba8a6") // block no.50 // retrieval target trie's root
-		specificRoot := common.HexToHash("0x0e066f3c2297a5cb300593052617d1bca5946f0caa0635fdb1b85ac7e5236f34") // block no.1M // retrieval target trie's root
+
+		common.BN = "4M"
+
+		var specificRoot common.Hash
+		if common.BN == "50" {
+			specificRoot = common.HexToHash("0x73e1188b303b417de1f05f224a11dcb59ed30e7c24dffbd537eab2ecd5eba8a6") // block no.50 // retrieval target trie's root
+		} else if common.BN == "1M" {
+			specificRoot = common.HexToHash("0x0e066f3c2297a5cb300593052617d1bca5946f0caa0635fdb1b85ac7e5236f34") // block no.1M // retrieval target trie's root
+		} else if common.BN == "3M" {
+			specificRoot = common.HexToHash("0xb3fc13b1e291bc1d92b11ceed25a09a034076bb0dabccaedb9a3355002ee755b") // block no.3M // retrieval target trie's root
+		} else if common.BN == "4M" {
+			specificRoot = common.HexToHash("0xbd6428d7bb4ee57eaa139ed9e8c5d6585f48af07b549831b2e6c10f0d3bfd2fd") // block no.4M // retrieval target trie's root
+		} else if common.BN == "5M" {
+			specificRoot = common.HexToHash("0x25b231ce2d7c506226dcb32e3530f61e504eb561d627e9a2449d13a1ac21443f") // block no.5M // retrieval target trie's root
+		}
+
+		// //4.1M
+		// common.BN = "4.1M"
+		// specificRoot = common.HexToHash("0xad2035a98b62902922c740407a35efc7397bf6db530d2641e9267b36e9264989")
+		// s.RebuildStorageTrieFromKeyValue(leveldbPath_in, specificRoot, leveldbPath_out_normal, leveldbPath_out_stack)
+		// //4.2M
+		// common.BN = "4.2M"
+		// specificRoot = common.HexToHash("0xd3e5a876f05cbabca51d380445fab6f1d2ae380f8df8c3391084ec32b57157d2")
+		// s.RebuildStorageTrieFromKeyValue(leveldbPath_in, specificRoot, leveldbPath_out_normal, leveldbPath_out_stack)
+		// //4.3M
+		// common.BN = "4.3M"
+		// specificRoot = common.HexToHash("0xa711ef8cd3a5997f6f12e09fdb944271dc8d65fd08d8a768af60775138181b3b")
+		// s.RebuildStorageTrieFromKeyValue(leveldbPath_in, specificRoot, leveldbPath_out_normal, leveldbPath_out_stack)
+		// //4.4M
+		// common.BN = "4.4M"
+		// specificRoot = common.HexToHash("0x9c2b38dde3c08f4a79b8944acb7b22d7bd7988220ce86ad2b4441f656be6ceb4")
+		// s.RebuildStorageTrieFromKeyValue(leveldbPath_in, specificRoot, leveldbPath_out_normal, leveldbPath_out_stack)
+		// //4.5M
+		// common.BN = "4.5M"
+		// specificRoot = common.HexToHash("0x84c704b7197d8b26398b17d8fea7736946bc5f4a38ea0fccb4a7a8f551f8c55b")
+		// s.RebuildStorageTrieFromKeyValue(leveldbPath_in, specificRoot, leveldbPath_out_normal, leveldbPath_out_stack)
+		// //4.6M
+		// common.BN = "4.6M"
+		// specificRoot = common.HexToHash("0x86be0ec48c7fcc128c83e5e782b0af5e19bd5aec1cb7c9a2b48aeb462b7a4633")
+		// s.RebuildStorageTrieFromKeyValue(leveldbPath_in, specificRoot, leveldbPath_out_normal, leveldbPath_out_stack)
+		// //4.7M
+		// common.BN = "4.7M"
+		// specificRoot = common.HexToHash("0x790cfb338ba077905c1639b47efab4be25f14676a5ca41b88d976032c7a26832")
+		// s.RebuildStorageTrieFromKeyValue(leveldbPath_in, specificRoot, leveldbPath_out_normal, leveldbPath_out_stack)
+		// //4.8M
+		// common.BN = "4.8M"
+		// specificRoot = common.HexToHash("0x9f8cfd42fbfa3f4e8a8c91937bfd2694f169ef3375754d15612d69f0d9335991")
+		// s.RebuildStorageTrieFromKeyValue(leveldbPath_in, specificRoot, leveldbPath_out_normal, leveldbPath_out_stack)
+		// //4.9M
+		// common.BN = "4.9M"
+		// specificRoot = common.HexToHash("0x89d9425158dd86d4773afe75d3481967a210f38549cd3d97e6f79659b6b2e52a")
+		// s.RebuildStorageTrieFromKeyValue(leveldbPath_in, specificRoot, leveldbPath_out_normal, leveldbPath_out_stack)
+		// //5M
+		// common.BN = "5M"
+		// specificRoot = common.HexToHash("0x25b231ce2d7c506226dcb32e3530f61e504eb561d627e9a2449d13a1ac21443f")
 		s.RebuildStorageTrieFromKeyValue(leveldbPath_in, specificRoot, leveldbPath_out_normal, leveldbPath_out_stack)
 	}
 
@@ -1082,97 +1135,172 @@ func (s *StateDB) SlotInAccessList(addr common.Address, slot common.Hash) (addre
 // RebuildStorageTrieFromKeyValue rebuilds a storage trie with hard-coded trie (joonha)
 func (s *StateDB) RebuildStorageTrieFromKeyValue(leveldbPath_in string, trieRoot common.Hash, leveldbPath_out_normal string, leveldbPath_out_stack string) { // state trie
 
-	/*
-		Rebuilding is faster when done with the `stackTrie` structure.
-		So rebuilding with normal trie code has been commented out(it works well anyway).
+	/* config */
+	doMakeKeyValuePair := false
+	doRebuildTrie := true
+	const (
+		normalTrie = 1
+		stackTrie  = 2
+	)
+	simulatingTrie := stackTrie
 
-		You need below functions to activate this function:
-			trie > FindLeafNodes
-			secure_trie > TryUpdate_SetKey
-			trie > Print
-			node > toString
+	/* make key-value file via trie traversing */
+	if doMakeKeyValuePair {
+		f, err := os.OpenFile("trie_inspect_result.txt", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
 
-		This function would work well if added into s.Commit()
-		(commenter: joonha)
-	*/
+		// open trie
+		diskdb, err := leveldb.New(leveldbPath_in, leveldbCache, leveldbHandles, leveldbNamespace, leveldbReadonly)
+		if err != nil {
+			fmt.Println("leveldb.New error (1) !! ->", err)
+			os.Exit(1)
+		}
+		defer diskdb.Close()
+		receivedTrie, _ = trie.New(trieRoot, trie.NewDatabase(diskdb))
+		fmt.Println("receivedTrie.Hash(): ", receivedTrie.Hash())
+		// receivedTrie.Print()
 
-	// open trie
-	diskdb, err := leveldb.New(leveldbPath_in, leveldbCache, leveldbHandles, leveldbNamespace, leveldbReadonly)
-	if err != nil {
-		fmt.Println("leveldb.New error (1) !! ->", err)
-		os.Exit(1)
+		// retrieve key-value pairs
+		firstKey := common.HexToHash("0x0")
+		lastKey := common.HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+		accounts, keys, _ := receivedTrie.FindLeafNodes(firstKey[:], lastKey[:])
+		common.Accounts = accounts
+		common.Keys = keys
+		common.SaveAccountsAndKeys()
+		fmt.Println("[save] len(accounts): ", len(accounts))
+		fmt.Println("[save] len(keys): ", len(keys))
+		fmt.Fprintln(f, ">>> ", common.BN)
+		fmt.Fprintln(f, "receivedTrie.Hash(): ", receivedTrie.Hash())
+		fmt.Fprintln(f, "[save] len(accounts): ", len(accounts))
+		fmt.Fprintln(f, "[save] len(keys): ", len(keys))
 	}
-	receivedTrie, _ = trie.New(trieRoot, trie.NewDatabase(diskdb))
-	// fmt.Println("receivedTrie: ", receivedTrie)
-	// receivedTrie.Print()
-
-	// retrieve key-value pairs
-	firstKey := common.HexToHash("0x0")
-	lastKey := common.HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
-	accounts, keys, _ := receivedTrie.FindLeafNodes(firstKey[:], lastKey[:])
-	// fmt.Println("len(accounts): ", len(accounts))
-	// fmt.Println("len(keys): ", len(keys))
-
-	// /*
-	// 	normal state trie
-	// */
-	// // new trie
-	// diskdb_out_normal, err := leveldb.New(leveldbPath_out_normal, leveldbCache, leveldbHandles, leveldbNamespace, leveldbReadonly)
-	// if err != nil {
-	// 	fmt.Println("leveldb.New error (2) !! ->", err)
-	// 	os.Exit(1)
-	// }
-	// rebuiltTrie, _ = trie.NewSecure(common.Hash{}, trie.NewDatabase(diskdb_out_normal))
-	// // inject the data
-	// RebuildNormalTrieStarts := time.Now().UnixNano() / int64(time.Millisecond)
-	// for i, enc := range accounts {
-	// 	data := new(types.StateAccount)
-	// 	addr := common.BytesToAddress(enc) // BytesToAddress() turns last 20 bytes into addr
-
-	// 	if err := rlp.DecodeBytes(enc, data); err != nil {
-	// 		log.Error("Failed to decode state object", "addr", addr, "err", err)
-	// 	}
-
-	// 	acc, _ := rlp.EncodeToBytes(data)
-	// 	if err := rebuiltTrie.TryUpdate_SetKey(keys[i][:], acc); err != nil {
-	// 		s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
-	// 	}
-	// }
-	// // commit
-	// if _, _, err = rebuiltTrie.Commit(nil); err != nil {
-	// 	fmt.Println("rebuiltTrie.Commit error !!")
-	// }
-	// RebuildNormalTrieEnds := time.Now().UnixNano() / int64(time.Millisecond)
-	// // // print
-	// // if rebuiltTrie == nil {
-	// // 	fmt.Println("rebuiltTrie is nil")
-	// // } else {
-	// // 	fmt.Println("rebuiltTrie: ", rebuiltTrie)
-	// // 	rebuiltTrie.Print()
-	// // }
-	// fmt.Println("$$$ rebuilding the normal trie done")
-	// fmt.Println("Rebuild Normal Trie Time Duration: ", RebuildNormalTrieEnds-RebuildNormalTrieStarts, "(ms)")
-
-	/*
-		stack state trie
-	*/
-	fmt.Println("$$$ rebuilding a stack trie starts")
-	// new trie
-	diskdb_out_stack, err := leveldb.New(leveldbPath_out_stack, leveldbCache, leveldbHandles, leveldbNamespace, leveldbReadonly)
-	if err != nil {
-		fmt.Println("leveldb.New error (3) !! ->", err)
-		os.Exit(1)
+	if !doRebuildTrie {
+		return
 	}
-	stackTr := *trie.NewStackTrie(diskdb_out_stack.NewBatch())
-	// inject the data
-	RebuildStackTrieStarts := time.Now().UnixNano() / int64(time.Millisecond)
-	for index, key := range keys {
-		stackTr.TryUpdate(key[:], accounts[index])
+
+	/* load key-value */
+	common.LoadAccountsAndKeys()
+	accounts := common.Accounts
+	keys := common.Keys
+	fmt.Println("[load] len(accounts): ", len(accounts))
+	fmt.Println("[load] len(keys): ", len(keys))
+
+	/* normal trie */
+	if simulatingTrie == normalTrie {
+		// new trie
+		diskdb_out_normal, err := leveldb.New(leveldbPath_out_normal, leveldbCache, leveldbHandles, leveldbNamespace, leveldbReadonly)
+		if err != nil {
+			fmt.Println("leveldb.New error (2) !! ->", err)
+			os.Exit(1)
+		}
+		rebuiltTrie, _ = trie.NewSecure(common.Hash{}, trie.NewDatabase(diskdb_out_normal))
+		// inject the data
+		RebuildNormalTrieStarts := time.Now().UnixNano() / int64(time.Millisecond)
+		TrieUpdateStarts := time.Now().UnixNano() / int64(time.Millisecond)
+		for i, enc := range accounts {
+			data := new(types.StateAccount)
+			addr := common.BytesToAddress(enc) // BytesToAddress() turns last 20 bytes into addr
+
+			if err := rlp.DecodeBytes(enc, data); err != nil {
+				log.Error("Failed to decode state object", "addr", addr, "err", err)
+			}
+
+			acc, _ := rlp.EncodeToBytes(data)
+			if err := rebuiltTrie.TryUpdate_SetKey(keys[i][:], acc); err != nil {
+				s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
+			}
+		}
+		TrieUpdateEnds := time.Now().UnixNano() / int64(time.Millisecond)
+
+		// commit
+		var root common.Hash
+		trieCommitStarts := time.Now().UnixNano() / int64(time.Millisecond)
+		if root, _, err = rebuiltTrie.Commit(nil); err != nil {
+			fmt.Println("rebuiltTrie.Commit error !!")
+		}
+		trieCommitEnds := time.Now().UnixNano() / int64(time.Millisecond)
+
+		dbCommitStarts := time.Now().UnixNano() / int64(time.Millisecond)
+		rebuiltTrie.Database().Commit(root, false, nil)
+		dbCommitEnds := time.Now().UnixNano() / int64(time.Millisecond)
+
+		RebuildNormalTrieEnds := time.Now().UnixNano() / int64(time.Millisecond)
+		// // print
+		// if rebuiltTrie == nil {
+		// 	fmt.Println("rebuiltTrie is nil")
+		// } else {
+		// 	fmt.Println("rebuiltTrie: ", rebuiltTrie)
+		// 	rebuiltTrie.Print()
+		// }
+		fmt.Println("$$$ rebuilding the normal trie done")
+		fmt.Println("Update Trie Time Duration: ", TrieUpdateEnds-TrieUpdateStarts, "(ms)")
+		fmt.Println("Trie Commit Time Duration: ", trieCommitEnds-trieCommitStarts, "(ms)")
+		fmt.Println("Db Commit Time Duration: ", dbCommitEnds-dbCommitStarts, "(ms)")
+		fmt.Println("Rebuild Normal Trie Time Duration: ", RebuildNormalTrieEnds-RebuildNormalTrieStarts, "(ms)")
 	}
-	if _, err := stackTr.Commit(); err != nil {
-		log.Error("Failed to commit stack slots", "err", err)
+
+	/* stack trie */
+	if simulatingTrie == stackTrie {
+		// new trie
+		diskdb_out_stack, err := leveldb.New(leveldbPath_out_stack, leveldbCache, leveldbHandles, leveldbNamespace, leveldbReadonly)
+		if err != nil {
+			fmt.Println("leveldb.New error (3) !! ->", err)
+			os.Exit(1)
+		}
+		stackTr := trie.NewStackTrie(diskdb_out_stack.NewBatch())
+		// inject the data
+		RebuildStackTrieStarts := time.Now().UnixNano() / int64(time.Millisecond)
+		for index, key := range keys {
+			stackTr.TryUpdate(key[:], accounts[index])
+		}
+
+		// startIndex := 0
+		// for i := 0; i < 16; i++ {
+		// 	startKeyDigit := keys[startIndex][0] / 16
+		// 	for index, key := range keys[startIndex:] {
+		// 		if key[0]/16 != startKeyDigit {
+		// 			startIndex += index
+		// 			break
+		// 		}
+		// 		stackTr.TryUpdate(key[:], accounts[startIndex+index])
+		// 	}
+		// }
+		// if _, err := stackTr.Commit(); err != nil {
+		// 	log.Error("Failed to commit stack slots", "err", err)
+		// }
+
+		// shuffled := make([]common.Hash, len(keys)+1)
+		// startIndex := 0
+		// prevIndex := 0
+		// for i := 0; i < 16; i++ {
+		// 	startKeyDigit := keys[startIndex][0] / 16
+		// 	for index, key := range keys[startIndex:] {
+		// 		if key[0]/16 != startKeyDigit {
+		// 			// shuffled[16-i] = keys[startIndex : startIndex+index]
+		// 			prevIndex = startIndex
+		// 			startIndex += index
+		// 			break
+		// 		}
+		// 		shuffled[len(keys)-(startIndex+index)] = keys[startIndex+index]
+		// 		// stackTr.TryUpdate(key[:], accounts[startIndex+index])
+		// 	}
+		// 	for index, key := range shuffled[prevIndex:startIndex] {
+		// 		stackTr.TryUpdate(key[:], accounts[prevIndex+index])
+		// 	}
+		// }
+		// for i := 0; i < len(shuffled); i++ {
+		// 	stackTr.TryUpdate(shuffled[i][:], accounts[i])
+		// }
+		// if _, err := stackTr.Commit(); err != nil {
+		// 	log.Error("Failed to commit stack slots", "err", err)
+		// }
+
+		RebuildStackTrieEnds := time.Now().UnixNano() / int64(time.Millisecond)
+		fmt.Println("$$$ rebuilding the stack trie done")
+		fmt.Println("Rebuild Stack Trie Time Duration: ", RebuildStackTrieEnds-RebuildStackTrieStarts, "(ms)")
+		fmt.Println("stackTr.Hash(): ", stackTr.Hash())
 	}
-	RebuildStackTrieEnds := time.Now().UnixNano() / int64(time.Millisecond)
-	fmt.Println("$$$ rebuilding the stack trie done")
-	fmt.Println("Rebuild Stack Trie Time Duration: ", RebuildStackTrieEnds-RebuildStackTrieStarts, "(ms)")
 }
