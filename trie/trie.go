@@ -660,3 +660,7 @@ func (t *Trie) findLeafNodes(n node, prefix, startKey, endKey []byte) {
 		panic(fmt.Sprintf("%T: invalid node: %v", n, n))
 	}
 }
+
+func (t *Trie) Database() *Database {
+	return t.db
+}

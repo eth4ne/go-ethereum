@@ -43,8 +43,10 @@ const (
 	// leveldb cache size (MB) (Geth default: 512) (memory leak might occur when calling reset() frequently with too big cache size)
 	leveldbCache = 20000
 	// leveldb options
-	leveldbNamespace = "eth/db/chaindata-rebuiltTrie/"
-	leveldbReadonly  = false
+	leveldbNamespace  = "eth/db/chaindata-rebuiltTrie/"
+	leveldbNamespace1 = "eth/db/chaindata-rebuiltTrie-normal/"
+	leveldbNamespace2 = "eth/db/chaindata-rebuiltTrie-stack/"
+	leveldbReadonly   = false
 )
 
 // ethane sync simulation
@@ -52,11 +54,9 @@ var (
 	// disk to store trie nodes (either leveldb or memorydb)
 	diskdb ethdb.KeyValueStore
 	// # of max open files for leveldb (Geth default: 524288)
-	leveldbHandles = 524288
+	leveldbHandles = 1000000 //524288
 	// received state trie
 	receivedTrie *trie.Trie
-	// rebuilt state trie
-	rebuiltTrie *trie.SecureTrie
 )
 
 type revision struct {
@@ -1144,7 +1144,7 @@ func (s *StateDB) RebuildStorageTrieFromKeyValue(leveldbPath_in string, trieRoot
 	)
 	simulatingTrie := stackTrie
 
-	/* make key-value file via trie traversing */
+	/* make key-value file through trie traversing */
 	if doMakeKeyValuePair {
 		f, err := os.OpenFile("trie_inspect_result.txt", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 		if err != nil {
@@ -1191,12 +1191,14 @@ func (s *StateDB) RebuildStorageTrieFromKeyValue(leveldbPath_in string, trieRoot
 	/* normal trie */
 	if simulatingTrie == normalTrie {
 		// new trie
-		diskdb_out_normal, err := leveldb.New(leveldbPath_out_normal, leveldbCache, leveldbHandles, leveldbNamespace, leveldbReadonly)
+		diskdb_out_normal, err := leveldb.New(leveldbPath_out_normal, leveldbCache, leveldbHandles, leveldbNamespace1, leveldbReadonly)
 		if err != nil {
 			fmt.Println("leveldb.New error (2) !! ->", err)
 			os.Exit(1)
 		}
-		rebuiltTrie, _ = trie.NewSecure(common.Hash{}, trie.NewDatabase(diskdb_out_normal))
+		defer diskdb_out_normal.Close()
+		normalTr, _ := trie.New(common.Hash{}, trie.NewDatabase(diskdb_out_normal))
+
 		// inject the data
 		RebuildNormalTrieStarts := time.Now().UnixNano() / int64(time.Millisecond)
 		TrieUpdateStarts := time.Now().UnixNano() / int64(time.Millisecond)
@@ -1209,7 +1211,7 @@ func (s *StateDB) RebuildStorageTrieFromKeyValue(leveldbPath_in string, trieRoot
 			}
 
 			acc, _ := rlp.EncodeToBytes(data)
-			if err := rebuiltTrie.TryUpdate_SetKey(keys[i][:], acc); err != nil {
+			if err := normalTr.TryUpdate(keys[i][:], acc); err != nil {
 				s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
 			}
 		}
@@ -1218,22 +1220,23 @@ func (s *StateDB) RebuildStorageTrieFromKeyValue(leveldbPath_in string, trieRoot
 		// commit
 		var root common.Hash
 		trieCommitStarts := time.Now().UnixNano() / int64(time.Millisecond)
-		if root, _, err = rebuiltTrie.Commit(nil); err != nil {
-			fmt.Println("rebuiltTrie.Commit error !!")
+		if root, _, err = normalTr.Commit(nil); err != nil {
+			fmt.Println("normalTr.Commit error !!")
 		}
 		trieCommitEnds := time.Now().UnixNano() / int64(time.Millisecond)
 
+		// flush
 		dbCommitStarts := time.Now().UnixNano() / int64(time.Millisecond)
-		rebuiltTrie.Database().Commit(root, false, nil)
+		normalTr.Database().Commit(root, false, nil)
 		dbCommitEnds := time.Now().UnixNano() / int64(time.Millisecond)
 
 		RebuildNormalTrieEnds := time.Now().UnixNano() / int64(time.Millisecond)
 		// // print
-		// if rebuiltTrie == nil {
-		// 	fmt.Println("rebuiltTrie is nil")
+		// if normalTr == nil {
+		// 	fmt.Println("normalTr is nil")
 		// } else {
-		// 	fmt.Println("rebuiltTrie: ", rebuiltTrie)
-		// 	rebuiltTrie.Print()
+		// 	fmt.Println("normalTr: ", normalTr)
+		// 	normalTr.Print()
 		// }
 		fmt.Println("$$$ rebuilding the normal trie done")
 		fmt.Println("Update Trie Time Duration: ", TrieUpdateEnds-TrieUpdateStarts, "(ms)")
@@ -1244,62 +1247,54 @@ func (s *StateDB) RebuildStorageTrieFromKeyValue(leveldbPath_in string, trieRoot
 
 	/* stack trie */
 	if simulatingTrie == stackTrie {
+
 		// new trie
-		diskdb_out_stack, err := leveldb.New(leveldbPath_out_stack, leveldbCache, leveldbHandles, leveldbNamespace, leveldbReadonly)
+		diskdb_out_stack, err := leveldb.New(leveldbPath_out_stack, leveldbCache, leveldbHandles, leveldbNamespace2, leveldbReadonly)
 		if err != nil {
 			fmt.Println("leveldb.New error (3) !! ->", err)
 			os.Exit(1)
 		}
-		stackTr := trie.NewStackTrie(diskdb_out_stack.NewBatch())
+		defer diskdb_out_stack.Close()
+		batch := diskdb_out_stack.NewBatch()
+		stackTr := trie.NewStackTrie(batch)
+
 		// inject the data
 		RebuildStackTrieStarts := time.Now().UnixNano() / int64(time.Millisecond)
-		for index, key := range keys {
-			stackTr.TryUpdate(key[:], accounts[index])
+		UpdateStackTrieStarts := time.Now().UnixNano() / int64(time.Millisecond)
+
+		// for index, key := range keys {
+		// 	stackTr.TryUpdate(key[:], accounts[index])
+		// }
+		// if _, err := stackTr.Commit(); err != nil {
+		// 	log.Error("Failed to commit stack slots", "err", err)
+		// }
+		startIndex := 0
+		for i := 0; i < 16; i++ {
+			startKeyDigit := keys[startIndex][0] / 16
+			for index, key := range keys[startIndex:] {
+				if key[0]/16 != startKeyDigit {
+					startIndex += index
+					break
+				}
+				stackTr.TryUpdate(key[:], accounts[startIndex+index])
+			}
+			batch.Write()
+			batch.Reset()
 		}
+		if _, err := stackTr.Commit(); err != nil {
+			log.Error("Failed to commit stack slots", "err", err)
+		}
+		UpdateStackTrieEnds := time.Now().UnixNano() / int64(time.Millisecond)
 
-		// startIndex := 0
-		// for i := 0; i < 16; i++ {
-		// 	startKeyDigit := keys[startIndex][0] / 16
-		// 	for index, key := range keys[startIndex:] {
-		// 		if key[0]/16 != startKeyDigit {
-		// 			startIndex += index
-		// 			break
-		// 		}
-		// 		stackTr.TryUpdate(key[:], accounts[startIndex+index])
-		// 	}
-		// }
-		// if _, err := stackTr.Commit(); err != nil {
-		// 	log.Error("Failed to commit stack slots", "err", err)
-		// }
-
-		// shuffled := make([]common.Hash, len(keys)+1)
-		// startIndex := 0
-		// prevIndex := 0
-		// for i := 0; i < 16; i++ {
-		// 	startKeyDigit := keys[startIndex][0] / 16
-		// 	for index, key := range keys[startIndex:] {
-		// 		if key[0]/16 != startKeyDigit {
-		// 			// shuffled[16-i] = keys[startIndex : startIndex+index]
-		// 			prevIndex = startIndex
-		// 			startIndex += index
-		// 			break
-		// 		}
-		// 		shuffled[len(keys)-(startIndex+index)] = keys[startIndex+index]
-		// 		// stackTr.TryUpdate(key[:], accounts[startIndex+index])
-		// 	}
-		// 	for index, key := range shuffled[prevIndex:startIndex] {
-		// 		stackTr.TryUpdate(key[:], accounts[prevIndex+index])
-		// 	}
-		// }
-		// for i := 0; i < len(shuffled); i++ {
-		// 	stackTr.TryUpdate(shuffled[i][:], accounts[i])
-		// }
-		// if _, err := stackTr.Commit(); err != nil {
-		// 	log.Error("Failed to commit stack slots", "err", err)
-		// }
+		// flush
+		DbFlushStarts := time.Now().UnixNano() / int64(time.Millisecond)
+		batch.Write()
+		DbFlushEnds := time.Now().UnixNano() / int64(time.Millisecond)
 
 		RebuildStackTrieEnds := time.Now().UnixNano() / int64(time.Millisecond)
 		fmt.Println("$$$ rebuilding the stack trie done")
+		fmt.Println("Update Stack Trie Time Duration: ", UpdateStackTrieEnds-UpdateStackTrieStarts, "(ms)")
+		fmt.Println("Flush Stack Trie Time Duration: ", DbFlushEnds-DbFlushStarts, "(ms)")
 		fmt.Println("Rebuild Stack Trie Time Duration: ", RebuildStackTrieEnds-RebuildStackTrieStarts, "(ms)")
 		fmt.Println("stackTr.Hash(): ", stackTr.Hash())
 	}

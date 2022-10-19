@@ -2014,6 +2014,7 @@ func (s *Syncer) processStorageResponse(res *storageResponse) {
 				}
 			}
 		}
+		// flag (joonha) storage trie reconstruction
 		// Iterate over all the complete contracts, reconstruct the trie nodes and
 		// push them to disk. If the contract is chunked, the trie nodes will be
 		// reconstructed later.
