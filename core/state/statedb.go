@@ -929,24 +929,35 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 
 	// (joonha)
 	if common.DoRebuildTrie {
-		leveldbPath_in := "/home/joonha/ethereum_5M"
+		// leveldbPath_in := "/home/joonha/ethereum_5M"
+		leveldbPath_in := "/home/joonha/storageTrie_14M_10"
 		leveldbPath_out_normal := "/home/joonha/rebuiltTrie/normal"
 		leveldbPath_out_stack := "/home/joonha/rebuiltTrie/stack"
 
-		common.BN = "4M"
-
 		var specificRoot common.Hash
-		if common.BN == "50" {
-			specificRoot = common.HexToHash("0x73e1188b303b417de1f05f224a11dcb59ed30e7c24dffbd537eab2ecd5eba8a6") // block no.50 // retrieval target trie's root
-		} else if common.BN == "1M" {
-			specificRoot = common.HexToHash("0x0e066f3c2297a5cb300593052617d1bca5946f0caa0635fdb1b85ac7e5236f34") // block no.1M // retrieval target trie's root
-		} else if common.BN == "3M" {
-			specificRoot = common.HexToHash("0xb3fc13b1e291bc1d92b11ceed25a09a034076bb0dabccaedb9a3355002ee755b") // block no.3M // retrieval target trie's root
-		} else if common.BN == "4M" {
-			specificRoot = common.HexToHash("0xbd6428d7bb4ee57eaa139ed9e8c5d6585f48af07b549831b2e6c10f0d3bfd2fd") // block no.4M // retrieval target trie's root
-		} else if common.BN == "5M" {
-			specificRoot = common.HexToHash("0x25b231ce2d7c506226dcb32e3530f61e504eb561d627e9a2449d13a1ac21443f") // block no.5M // retrieval target trie's root
-		}
+
+		// common.BN = "3M"
+
+		// if common.BN == "50" {
+		// 	specificRoot = common.HexToHash("0x73e1188b303b417de1f05f224a11dcb59ed30e7c24dffbd537eab2ecd5eba8a6") // block no.50 // retrieval target trie's root
+		// } else if common.BN == "1M" {
+		// 	specificRoot = common.HexToHash("0x0e066f3c2297a5cb300593052617d1bca5946f0caa0635fdb1b85ac7e5236f34") // block no.1M // retrieval target trie's root
+		// } else if common.BN == "3M" {
+		// 	specificRoot = common.HexToHash("0xb3fc13b1e291bc1d92b11ceed25a09a034076bb0dabccaedb9a3355002ee755b") // block no.3M // retrieval target trie's root
+		// } else if common.BN == "4M" {
+		// 	specificRoot = common.HexToHash("0xbd6428d7bb4ee57eaa139ed9e8c5d6585f48af07b549831b2e6c10f0d3bfd2fd") // block no.4M // retrieval target trie's root
+		// } else if common.BN == "5M" {
+		// 	specificRoot = common.HexToHash("0x25b231ce2d7c506226dcb32e3530f61e504eb561d627e9a2449d13a1ac21443f") // block no.5M // retrieval target trie's root
+		// }
+
+		// // 1M
+		// common.BN = "1M"
+		// specificRoot = common.HexToHash("0x0e066f3c2297a5cb300593052617d1bca5946f0caa0635fdb1b85ac7e5236f34")
+		// s.RebuildStorageTrieFromKeyValue(leveldbPath_in, specificRoot, leveldbPath_out_normal, leveldbPath_out_stack)
+		// // 3M
+		// common.BN = "3M"
+		// specificRoot = common.HexToHash("0xb3fc13b1e291bc1d92b11ceed25a09a034076bb0dabccaedb9a3355002ee755b")
+		// s.RebuildStorageTrieFromKeyValue(leveldbPath_in, specificRoot, leveldbPath_out_normal, leveldbPath_out_stack)
 
 		// //4.1M
 		// common.BN = "4.1M"
@@ -980,13 +991,45 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 		// common.BN = "4.8M"
 		// specificRoot = common.HexToHash("0x9f8cfd42fbfa3f4e8a8c91937bfd2694f169ef3375754d15612d69f0d9335991")
 		// s.RebuildStorageTrieFromKeyValue(leveldbPath_in, specificRoot, leveldbPath_out_normal, leveldbPath_out_stack)
-		// //4.9M
+		//4.9M
 		// common.BN = "4.9M"
 		// specificRoot = common.HexToHash("0x89d9425158dd86d4773afe75d3481967a210f38549cd3d97e6f79659b6b2e52a")
 		// s.RebuildStorageTrieFromKeyValue(leveldbPath_in, specificRoot, leveldbPath_out_normal, leveldbPath_out_stack)
 		// //5M
 		// common.BN = "5M"
 		// specificRoot = common.HexToHash("0x25b231ce2d7c506226dcb32e3530f61e504eb561d627e9a2449d13a1ac21443f")
+		// s.RebuildStorageTrieFromKeyValue(leveldbPath_in, specificRoot, leveldbPath_out_normal, leveldbPath_out_stack)
+
+		// storage sample test (from 9000000, merging all slots at each block)
+		common.BN = "10per"
+		specificRoot = common.HexToHash("0xe1570c40d846fe08e9b06c7c94d3417348bb4a25d27551885bbb54dad4370140")
+		s.RebuildStorageTrieFromKeyValue(leveldbPath_in, specificRoot, leveldbPath_out_normal, leveldbPath_out_stack)
+		common.BN = "20per"
+		specificRoot = common.HexToHash("0x72b73474801206701a1e24b0e2012e501926b15a7abab03e5f679462b97d80a4")
+		s.RebuildStorageTrieFromKeyValue(leveldbPath_in, specificRoot, leveldbPath_out_normal, leveldbPath_out_stack)
+		common.BN = "30per"
+		specificRoot = common.HexToHash("0x8cdab9ac3c68ab40e36ec0784d8f8e96f92ae2e74459739f2926d574b42c642e")
+		s.RebuildStorageTrieFromKeyValue(leveldbPath_in, specificRoot, leveldbPath_out_normal, leveldbPath_out_stack)
+		common.BN = "40per"
+		specificRoot = common.HexToHash("0x489d5fa773d23311d1a39ca4946339e8e283d4df4e4d7791db55d84106f2c093")
+		s.RebuildStorageTrieFromKeyValue(leveldbPath_in, specificRoot, leveldbPath_out_normal, leveldbPath_out_stack)
+		common.BN = "50per"
+		specificRoot = common.HexToHash("0x40408d7cc5fc0a0bafdc2f9089f393a1105fc4cbd8574b2dc5e1758ebcff52c2")
+		s.RebuildStorageTrieFromKeyValue(leveldbPath_in, specificRoot, leveldbPath_out_normal, leveldbPath_out_stack)
+		common.BN = "60per"
+		specificRoot = common.HexToHash("0x8053d8b93eba6d0fc2e19677722852c1fef983dec6d6a1fe30ab2dc42be31ce5")
+		s.RebuildStorageTrieFromKeyValue(leveldbPath_in, specificRoot, leveldbPath_out_normal, leveldbPath_out_stack)
+		common.BN = "70per"
+		specificRoot = common.HexToHash("0x50dc38ff35bda003301fa05b9aa817e56115bfc933d33dc5dad8015ed692528b")
+		s.RebuildStorageTrieFromKeyValue(leveldbPath_in, specificRoot, leveldbPath_out_normal, leveldbPath_out_stack)
+		common.BN = "80per"
+		specificRoot = common.HexToHash("0xc2346ac652d2e6bf85ede3ffb775fabeded1c49631500fcd18cb268b991c1082")
+		s.RebuildStorageTrieFromKeyValue(leveldbPath_in, specificRoot, leveldbPath_out_normal, leveldbPath_out_stack)
+		// common.BN = "90per"
+		// specificRoot = common.HexToHash("")
+		// s.RebuildStorageTrieFromKeyValue(leveldbPath_in, specificRoot, leveldbPath_out_normal, leveldbPath_out_stack)
+		common.BN = "100per"
+		specificRoot = common.HexToHash("0xcdcab8a0e58261ef48cb9904f2f2103fb29412b9ef7c98472b64745ef88604ac")
 		s.RebuildStorageTrieFromKeyValue(leveldbPath_in, specificRoot, leveldbPath_out_normal, leveldbPath_out_stack)
 	}
 
@@ -1142,7 +1185,8 @@ func (s *StateDB) RebuildStorageTrieFromKeyValue(leveldbPath_in string, trieRoot
 		normalTrie = 1
 		stackTrie  = 2
 	)
-	simulatingTrie := stackTrie
+	// simulatingTrie := stackTrie
+	isStorage := true
 
 	/* make key-value file through trie traversing */
 	if doMakeKeyValuePair {
@@ -1188,8 +1232,21 @@ func (s *StateDB) RebuildStorageTrieFromKeyValue(leveldbPath_in string, trieRoot
 	fmt.Println("[load] len(accounts): ", len(accounts))
 	fmt.Println("[load] len(keys): ", len(keys))
 
+	/* export result */
+	f_r, err := os.OpenFile("trie_rebuild.txt", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	if err != nil {
+		panic(err)
+	}
+	defer f_r.Close()
+	fmt.Fprintln(f_r, ">>> ", common.BN)
+	fmt.Fprintln(f_r, "[load] len(accounts): ", len(accounts))
+	fmt.Fprintln(f_r, "[load] len(keys): ", len(keys))
+
 	/* normal trie */
-	if simulatingTrie == normalTrie {
+	if true { // simulatingTrie == normalTrie {
+		// init the db
+		os.RemoveAll("/home/joonha/rebuiltTrie/normal")
+
 		// new trie
 		diskdb_out_normal, err := leveldb.New(leveldbPath_out_normal, leveldbCache, leveldbHandles, leveldbNamespace1, leveldbReadonly)
 		if err != nil {
@@ -1200,37 +1257,43 @@ func (s *StateDB) RebuildStorageTrieFromKeyValue(leveldbPath_in string, trieRoot
 		normalTr, _ := trie.New(common.Hash{}, trie.NewDatabase(diskdb_out_normal))
 
 		// inject the data
-		RebuildNormalTrieStarts := time.Now().UnixNano() / int64(time.Millisecond)
-		TrieUpdateStarts := time.Now().UnixNano() / int64(time.Millisecond)
+		RebuildNormalTrieStarts := time.Now().UnixNano()
+		TrieUpdateStarts := time.Now().UnixNano()
 		for i, enc := range accounts {
-			data := new(types.StateAccount)
-			addr := common.BytesToAddress(enc) // BytesToAddress() turns last 20 bytes into addr
+			if isStorage {
+				if err := normalTr.TryUpdate(keys[i][:], enc); err != nil {
+					s.setError(fmt.Errorf("updateStateObject error: %v", err))
+				}
+			} else {
+				data := new(types.StateAccount)
+				addr := common.BytesToAddress(enc) // BytesToAddress() turns last 20 bytes into addr
 
-			if err := rlp.DecodeBytes(enc, data); err != nil {
-				log.Error("Failed to decode state object", "addr", addr, "err", err)
-			}
+				if err := rlp.DecodeBytes(enc, data); err != nil {
+					log.Error("Failed to decode state object", "addr", addr, "err", err)
+				}
 
-			acc, _ := rlp.EncodeToBytes(data)
-			if err := normalTr.TryUpdate(keys[i][:], acc); err != nil {
-				s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
+				acc, _ := rlp.EncodeToBytes(data)
+				if err := normalTr.TryUpdate(keys[i][:], acc); err != nil {
+					s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
+				}
 			}
 		}
-		TrieUpdateEnds := time.Now().UnixNano() / int64(time.Millisecond)
+		TrieUpdateEnds := time.Now().UnixNano()
 
 		// commit
 		var root common.Hash
-		trieCommitStarts := time.Now().UnixNano() / int64(time.Millisecond)
+		trieCommitStarts := time.Now().UnixNano()
 		if root, _, err = normalTr.Commit(nil); err != nil {
 			fmt.Println("normalTr.Commit error !!")
 		}
-		trieCommitEnds := time.Now().UnixNano() / int64(time.Millisecond)
+		trieCommitEnds := time.Now().UnixNano()
 
 		// flush
-		dbCommitStarts := time.Now().UnixNano() / int64(time.Millisecond)
+		dbCommitStarts := time.Now().UnixNano()
 		normalTr.Database().Commit(root, false, nil)
-		dbCommitEnds := time.Now().UnixNano() / int64(time.Millisecond)
+		dbCommitEnds := time.Now().UnixNano()
 
-		RebuildNormalTrieEnds := time.Now().UnixNano() / int64(time.Millisecond)
+		RebuildNormalTrieEnds := time.Now().UnixNano()
 		// // print
 		// if normalTr == nil {
 		// 	fmt.Println("normalTr is nil")
@@ -1239,14 +1302,22 @@ func (s *StateDB) RebuildStorageTrieFromKeyValue(leveldbPath_in string, trieRoot
 		// 	normalTr.Print()
 		// }
 		fmt.Println("$$$ rebuilding the normal trie done")
-		fmt.Println("Update Trie Time Duration: ", TrieUpdateEnds-TrieUpdateStarts, "(ms)")
-		fmt.Println("Trie Commit Time Duration: ", trieCommitEnds-trieCommitStarts, "(ms)")
-		fmt.Println("Db Commit Time Duration: ", dbCommitEnds-dbCommitStarts, "(ms)")
-		fmt.Println("Rebuild Normal Trie Time Duration: ", RebuildNormalTrieEnds-RebuildNormalTrieStarts, "(ms)")
+		fmt.Println("Update Trie Time Duration: ", TrieUpdateEnds-TrieUpdateStarts)
+		fmt.Println("Trie Commit Time Duration: ", trieCommitEnds-trieCommitStarts)
+		fmt.Println("Db Commit Time Duration: ", dbCommitEnds-dbCommitStarts)
+		fmt.Println("Rebuild Normal Trie Time Duration: ", RebuildNormalTrieEnds-RebuildNormalTrieStarts)
+
+		fmt.Fprintln(f_r, "[normal] Root:\t\t", root)
+		fmt.Fprintln(f_r, "[normal] Update:\t", TrieUpdateEnds-TrieUpdateStarts)
+		fmt.Fprintln(f_r, "[normal] Commit:\t", trieCommitEnds-trieCommitStarts)
+		fmt.Fprintln(f_r, "[normal] Flush:\t\t", dbCommitEnds-dbCommitStarts)
+		fmt.Fprintln(f_r, "[normal] Total:\t\t", RebuildNormalTrieEnds-RebuildNormalTrieStarts)
 	}
 
 	/* stack trie */
-	if simulatingTrie == stackTrie {
+	if true { // simulatingTrie == stackTrie {
+		// init the db
+		os.RemoveAll("/home/joonha/rebuiltTrie/stack")
 
 		// new trie
 		diskdb_out_stack, err := leveldb.New(leveldbPath_out_stack, leveldbCache, leveldbHandles, leveldbNamespace2, leveldbReadonly)
@@ -1259,8 +1330,8 @@ func (s *StateDB) RebuildStorageTrieFromKeyValue(leveldbPath_in string, trieRoot
 		stackTr := trie.NewStackTrie(batch)
 
 		// inject the data
-		RebuildStackTrieStarts := time.Now().UnixNano() / int64(time.Millisecond)
-		UpdateStackTrieStarts := time.Now().UnixNano() / int64(time.Millisecond)
+		RebuildStackTrieStarts := time.Now().UnixNano()
+		UpdateStackTrieStarts := time.Now().UnixNano()
 
 		// for index, key := range keys {
 		// 	stackTr.TryUpdate(key[:], accounts[index])
@@ -1268,34 +1339,91 @@ func (s *StateDB) RebuildStorageTrieFromKeyValue(leveldbPath_in string, trieRoot
 		// if _, err := stackTr.Commit(); err != nil {
 		// 	log.Error("Failed to commit stack slots", "err", err)
 		// }
-		startIndex := 0
-		for i := 0; i < 16; i++ {
-			startKeyDigit := keys[startIndex][0] / 16
-			for index, key := range keys[startIndex:] {
-				if key[0]/16 != startKeyDigit {
-					startIndex += index
+
+		// // state trie
+		// startIndex := 0
+		// for i := 0; i < 16; i++ {
+		// 	startKeyDigit := keys[startIndex][0] / 16
+		// 	for index, key := range keys[startIndex:] {
+		// 		if key[0]/16 != startKeyDigit {
+		// 			startIndex += index
+		// 			break
+		// 		}
+		// 		stackTr.TryUpdate(key[:], accounts[startIndex+index])
+		// 	}
+		// 	batch.Write()
+		// 	batch.Reset()
+		// }
+		// if _, err := stackTr.Commit(); err != nil {
+		// 	log.Error("Failed to commit stack slots", "err", err)
+		// }
+
+		// // storage trie
+		// startIndex := 0
+		// endIndex := 0
+		// for i := 0; i < 16; i++ {
+		// 	startKeyDigit := keys[startIndex][0] / 16
+		// 	for index, key := range keys[startIndex:] {
+		// 		if key[0]/16 != startKeyDigit {
+		// 			startIndex += index
+		// 			break
+		// 		}
+		// 		// fmt.Println("index: ", index, "startIndex+index: ", startIndex+index, "key: ", key)
+		// 		stackTr.TryUpdate(key[:], accounts[startIndex+index])
+		// 		endIndex = startIndex + index
+		// 	}
+		// 	if endIndex >= len(keys)-1 {
+		// 		break
+		// 	}
+		// 	batch.Write()
+		// 	batch.Reset()
+		// }
+		// if _, err := stackTr.Commit(); err != nil {
+		// 	log.Error("Failed to commit stack slots", "err", err)
+		// }
+
+		// storage trie
+		batchSize := 3
+		globalIdx := 0
+		for {
+			for index, key := range keys[globalIdx : globalIdx+batchSize] {
+				if globalIdx+index > len(keys)-1 {
 					break
 				}
-				stackTr.TryUpdate(key[:], accounts[startIndex+index])
+				// fmt.Println("globalIdx: ", globalIdx, "globalIdx+index: ", globalIdx+index, "key: ", key)
+				stackTr.TryUpdate(key[:], accounts[globalIdx+index])
 			}
+			globalIdx += batchSize
 			batch.Write()
 			batch.Reset()
+			if globalIdx >= len(keys)-batchSize {
+				break
+			}
 		}
 		if _, err := stackTr.Commit(); err != nil {
 			log.Error("Failed to commit stack slots", "err", err)
 		}
-		UpdateStackTrieEnds := time.Now().UnixNano() / int64(time.Millisecond)
+		batch.Write()
+		batch.Reset()
+
+		UpdateStackTrieEnds := time.Now().UnixNano()
 
 		// flush
-		DbFlushStarts := time.Now().UnixNano() / int64(time.Millisecond)
+		DbFlushStarts := time.Now().UnixNano()
 		batch.Write()
-		DbFlushEnds := time.Now().UnixNano() / int64(time.Millisecond)
+		DbFlushEnds := time.Now().UnixNano()
 
-		RebuildStackTrieEnds := time.Now().UnixNano() / int64(time.Millisecond)
+		RebuildStackTrieEnds := time.Now().UnixNano()
 		fmt.Println("$$$ rebuilding the stack trie done")
-		fmt.Println("Update Stack Trie Time Duration: ", UpdateStackTrieEnds-UpdateStackTrieStarts, "(ms)")
-		fmt.Println("Flush Stack Trie Time Duration: ", DbFlushEnds-DbFlushStarts, "(ms)")
-		fmt.Println("Rebuild Stack Trie Time Duration: ", RebuildStackTrieEnds-RebuildStackTrieStarts, "(ms)")
+		fmt.Println("Update Stack Trie Time Duration: ", UpdateStackTrieEnds-UpdateStackTrieStarts)
+		fmt.Println("Flush Stack Trie Time Duration: ", DbFlushEnds-DbFlushStarts)
+		fmt.Println("Rebuild Stack Trie Time Duration: ", RebuildStackTrieEnds-RebuildStackTrieStarts)
 		fmt.Println("stackTr.Hash(): ", stackTr.Hash())
+
+		fmt.Fprintln(f_r, "[stack] batchSize:\t", batchSize)
+		fmt.Fprintln(f_r, "[stack] Root:\t\t", stackTr.Hash())
+		fmt.Fprintln(f_r, "[stack] Update:\t\t", UpdateStackTrieEnds-UpdateStackTrieStarts)
+		fmt.Fprintln(f_r, "[stack] Final Flush:", DbFlushEnds-DbFlushStarts)
+		fmt.Fprintln(f_r, "[stack] Total:\t\t", RebuildStackTrieEnds-RebuildStackTrieStarts, "\n\n")
 	}
 }
