@@ -11,6 +11,8 @@ import csv
 import multiprocessing
 from multiprocessing.pool import ThreadPool as Pool
 
+import matplotlib.pyplot as plt 
+
 # ethereum tx data DB options
 db_host = 'localhost'
 db_user = 'ethereum'
@@ -25,7 +27,7 @@ cursor_thread = conn_thread.cursor() # another cursor for async thread
 
 # simulator server IP address
 SERVER_IP = "localhost"
-SERVER_PORT = 8999
+SERVER_PORT = 7999
 
 # simulator options
 deleteDisk = True # delete disk when reset simulator or not
@@ -57,6 +59,11 @@ cache_slot = {}
 
 # destructed addresses (needed to check Ethanos's state correctness)
 deletedAddrs = {}
+
+# for storage trie rebuilding test (joonha)
+blockNumberToStorageTrieRoot = {} # block number to storage trie root 
+storageTrieSizeToRoot = {} # storage trie size to storage trie root
+blockCAId = {} # block's first contract account id
 
 # read block header
 def select_block_header(cursor, blocknumber):
@@ -839,6 +846,7 @@ def simulateEthereum(startBlockNum, endBlockNum):
     currentStorageRoot = ""
     # insert random accounts
     for blockNum in range(startBlockNum, endBlockNum+batchsize*2, batchsize):
+        curBlock = -1 # current block number
         #print("do block", blockNum ,"\n")
         
         # get read/write list from DB
@@ -892,6 +900,12 @@ def simulateEthereum(startBlockNum, endBlockNum):
                 # print("do writes in block", item['blocknumber'])
                 # print("item:", item)
 
+                # to merge all slots of the block into one CA's storage trie, memo when a block number changes (joonha)(joonha)
+                doAssignContractAddrId = False
+                if curBlock != item['blocknumber']:
+                    doAssignContractAddrId = True 
+                    curBlock = item['blocknumber']
+
                 addrId = item['address_id']
                 addr = select_address(cursor, addrId)
 
@@ -926,8 +940,16 @@ def simulateEthereum(startBlockNum, endBlockNum):
                         # print("txHash:", item['txhash'].hex())
                         for slotWrite in slotWriteList:
                             contractAddrId = slotWrite['address_id']
-                            contractAddress = select_address(cursor, contractAddrId)
+                            contractAddress = select_address(cursor, contractAddrId)         
 
+                            # block's first CA id which would draw in all slots of the block's  (joonha)
+                            if doAssignContractAddrId: # set the block-representing CA id                                
+                                contractAddress = select_address(cursor, contractAddrId)
+                                doAssignContractAddrId = False
+                                blockCAId[curBlock] = contractAddrId
+                            elif curBlock in blockCAId: # re-use the CA id                                
+                                contractAddress = select_address(cursor, blockCAId[curBlock])
+                            
                             slotId = slotWrite['slot_id']
                             slot = select_slot(cursor, slotId)
 
@@ -942,6 +964,7 @@ def simulateEthereum(startBlockNum, endBlockNum):
                             # print("slotValue:", slotValue)
                             # print("\n")
                             currentStorageRoot = updateStorageTrie(contractAddress, slot, slotValue)[2:]
+                            blockNumberToStorageTrieRoot[curBlock] = currentStorageRoot # memo the storage root (joonha)
                             storageWriteCount += 1
 
                         # check current storage trie is made correctly
@@ -1511,6 +1534,49 @@ def inspectTriesEthanos(startBlockNum, endBlockNum, inactivateCriterion):
     print("total trie inspect time:", datetime.now()-totalStartTime)
 
 
+# get storage trie size and make a mapping (size to root) (joonha)
+def getStorageTrieSize(startBlockNum, endBlockNum):
+    for bn, storageRoot in blockNumberToStorageTrieRoot.items():
+        storageTrieSize = inspectSubTrie(storageRoot)[0].split()[1] # return value is the trie size
+        storageTrieSizeToRoot[storageTrieSize] = storageRoot
+
+    # export blockNumberToStorageTrieRoot
+    fileName1 = "ethereum_block_number_to_root_infos_" + str(startBlockNum) + "_" + str(endBlockNum) +".txt"
+    storageTrieInfosLogFilePath = "/home/joonha/go-ethereum/simulator/storageTrieInfos/"
+    if os.path.exists(storageTrieInfosLogFilePath+fileName1):
+        os.remove(storageTrieInfosLogFilePath+fileName1)
+    file1 = open(storageTrieInfosLogFilePath+fileName1, 'w')
+    file1.write(json.dumps(blockNumberToStorageTrieRoot))
+    file1.close()
+
+    # export storageTrieSizeToRoot
+    fileName2 = "ethereum_storage_size_to_root_infos_" + str(startBlockNum) + "_" + str(endBlockNum) +".txt"
+    storageTrieInfosLogFilePath = "/home/joonha/go-ethereum/simulator/storageTrieInfos/"
+    if os.path.exists(storageTrieInfosLogFilePath+fileName2):
+        os.remove(storageTrieInfosLogFilePath+fileName2)
+    file2 = open(storageTrieInfosLogFilePath+fileName2, 'w')
+    file2.write(json.dumps(storageTrieSizeToRoot))
+    file2.close()
+
+    print(">>> (joonha) export storageTrieSizeToRoot done")
+    print(f">>> (joonha) len(block num to storage root): ", len(blockNumberToStorageTrieRoot))
+    print(f">>> (joonha) len(storage trie size to root): ", len(storageTrieSizeToRoot))
+
+    # export storage trie size distribution
+    # print(storageTrieSizeToRoot.keys())
+    figName1 = "storageTrieSize" + str(startBlockNum) + "_" + str(endBlockNum) +".png"
+    storageTrieInfosLogFilePath = "/home/joonha/go-ethereum/simulator/storageTrieInfos/"
+    if os.path.exists(storageTrieInfosLogFilePath+figName1):
+        os.remove(storageTrieInfosLogFilePath+figName1)
+    list_x = list(range(len(storageTrieSizeToRoot)))
+    list_y = list(storageTrieSizeToRoot.keys())
+    list_x = list(map(int, list_x))
+    list_y = list(map(int, list_y))
+    list_y.sort()
+    # print(list_x)
+    # print(list_y)
+    plt.scatter(list_x, list_y)
+    plt.savefig(storageTrieInfosLogFilePath+figName1)
 
 if __name__ == "__main__":
     print("start")
@@ -1526,24 +1592,25 @@ if __name__ == "__main__":
     # set simulation options
     deleteDisk = True
     doStorageTrieUpdate = True
-    stopWhenErrorOccurs = True
+    stopWhenErrorOccurs = False
     doReset = True
-    collectDeletedAddresses = True
+    collectDeletedAddresses = False
     # set simulation mode (0: original Ethereum, 1: Ethane, 2: Ethanos)
     simulationMode = 0
     # set simulation params
-    startBlockNum = 0
-    endBlockNum = 100000
-    deleteEpoch = 10000
-    inactivateEpoch = 10000
-    inactivateCriterion = 10000
+    startBlockNum = 9000000
+    endBlockNum = 9000100
+    deleteEpoch = 0
+    inactivateEpoch = 0
+    inactivateCriterion = 0
     fromLevel = 0 # how many parent nodes to omit in Merkle proofs
 
     # run simulation
     if simulationMode == 0:
         # replay txs in Ethereum for Ethereum
         simulateEthereum(startBlockNum, endBlockNum)
-        inspectTriesEthereum(startBlockNum, endBlockNum, inactivateCriterion)
+        # inspectTriesEthereum(startBlockNum, endBlockNum, inactivateCriterion)
+        getStorageTrieSize(startBlockNum, endBlockNum) # (joonha)
     elif simulationMode == 1:
          # replay txs in Ethereum for Ethane
         simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion, fromLevel)

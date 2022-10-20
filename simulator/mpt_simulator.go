@@ -33,7 +33,7 @@ import (
 
 const (
 	// port for requests
-	serverPort = "8999"
+	serverPort = "7999"
 
 	// maximum byte length of response
 	maxResponseLen = 4096
@@ -49,9 +49,9 @@ const (
 	// choose leveldb vs memorydb
 	useLeveldb = true
 	// leveldb path ($ sudo chmod -R 777 /ethereum)
-	leveldbPath = "/ethereum/mptSimulator_jmlee/trieNodes/port_" + serverPort
+	leveldbPath = "/ethereum/mptSimulator_jhlee/trieNodes/port_" + serverPort
 	// leveldb cache size (MB) (Geth default: 512) (memory leak might occur when calling reset() frequently with too big cache size)
-	leveldbCache = 20000
+	leveldbCache = 10000
 	// leveldb options
 	leveldbNamespace = "eth/db/chaindata/"
 	leveldbReadonly  = false
@@ -1953,12 +1953,18 @@ func connHandler(conn net.Conn) {
 					}
 
 					// open storage trie
+					//	
+					// If starting the simulation from the middle, storageTrie might not be retrieved from the db.
+					// In that case, make new empty storage trie. (joonha)
 					storageTrie, err = trie.NewSecure(storageRoot, trie.NewDatabase(diskdb))
 					if err != nil {
-						fmt.Println("trie.NewSecure() failed:", err)
-						fmt.Println("contractAddr:", contractAddr)
-						fmt.Println("storageRoot:", storageRoot.Hex())
-						os.Exit(1)
+						// fmt.Println("trie.NewSecure() failed:", err)
+						// fmt.Println("contractAddr:", contractAddr)
+						// fmt.Println("storageRoot:", storageRoot.Hex())
+						// // os.Exit(1)
+						// fmt.Println(">>> (joonha) New storage trie")
+						storageTrie, err = trie.NewSecure(common.Hash{}, trie.NewDatabase(diskdb))
+						// fmt.Println(">>> (joonha) New storage trie has been made")
 					}
 
 					// add to dirty storage tries
