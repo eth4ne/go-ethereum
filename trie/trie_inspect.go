@@ -19,7 +19,7 @@ var path = "/home/jhkim/go/src/github.com/ethereum/go-ethereum/txDetail/" // use
 var _ = os.MkdirAll(path, 0777)
 
 // inspect storage tries or not (jmlee)
-var DoInspectStorageTrie = false
+var DoInspectStorageTrie = true
 
 func increaseSize(nodeSize int, node string, tir *TrieInspectResult, depth int) {
 	rwMutex.Lock()
@@ -402,18 +402,20 @@ type TrieInspectResult struct {
 	StorageTrieShortNodeNum  int
 	StorageTrieShortNodeSize int
 
-	StorageTrieLeafNodeDepth map[string]([20]int) // map Key:codeHash, value:leafnode depth. 20 is hard coded number. Depth of Trie will not exceed 20
-	StorageTrieNodeMap       map[string]([6]int)  // map Key:codeHash, value: [shortnode count, size, fullnode count, size, leafnode count, size]
-	AddressHashTocodeHash    map[string]string    // In state trie, map Key: addressHash, value: codeHash
-	StorageTrieSlotHash      map[string][]string  // Storage Trie SlotHash, key: addressHash, value: slotHash List
-	StorageTrieRoot          map[string]string    // map Key: storageTrie Root Hash, value: addressHash
+	StorageTrieLeafNodeDepth           map[string]([20]int) // map Key:addresshash, value:leafnode depth. 20 is hard coded number. Depth of Trie will not exceed 20
+	StorageTrieNodeMap                 map[string]([6]int)  // map Key:addresshash, value: [shortnode count, size, fullnode count, size, leafnode count, size]
+	AddressHashTocodeHash              map[string]string    // In state trie, map Key: addressHash, value: codeHash
+	StorageTrieSlotHash                map[string][]string  // Storage Trie SlotHash, key: addressHash, value: slotHash List
+	StorageTrieRoot                    map[string][]string  // map Key: storageTrie Root Hash, value: addressHash
+	AddressHashToStorageTrieRoot       map[string]string    // map Key: addressHash, value: storagetrie Root
+	StorageTrieRootToAddressHashnumber map[string]int       // map Key: addressHash, value: storagetrie Root
 
 }
 
 func (tir *TrieInspectResult) PrintTrieInspectResult(blockNumber uint64, elapsedTime int) {
 	// f1, err := os.Create("/home/jhkim/go/src/github.com/ethereum/go-ethereum/build/bin/new_result_" + strconv.FormatUint(blockNumber, 10) + ".txt") // goroutine version
 	// f1, err := os.Create("/home/jhkim/go/src/github.com/ethereum/new_result_" + strconv.FormatUint(blockNumber, 10) + "_vanilla.txt") // vanilla version
-	f1, err := os.Create("./trie_inspect_result.txt") // vanilla version
+	f1, err := os.Create("/home/jmlee/go-ethereum/simulator/trie_inspect_result.txt") // vanilla version
 
 	if err != nil {
 		fmt.Printf("Cannot create result file.\n")
@@ -439,7 +441,7 @@ func (tir *TrieInspectResult) PrintTrieInspectResult(blockNumber uint64, elapsed
 	output += fmt.Sprintln("")
 
 	output += fmt.Sprintf("  # of empty root hash: %d\n", tir.EmptyRootHash)
-	output += fmt.Sprintf("  # of non-empty storage tries: %d ( %d bytes = %d MB )\n", tir.StorageTrieNum, tir.StorageTrieSizeSum, tir.StorageTrieSizeSum/1000000)
+	output += fmt.Sprintf("  # of accounts which hash non-empty storage trie: %d ( %d bytes = %d MB )\n", tir.StorageTrieNum, tir.StorageTrieSizeSum, tir.StorageTrieSizeSum/1000000)
 	output += fmt.Sprintf("  # of Full nodes of storage tries: %d\n", tir.StorageTrieFullNodeNum)
 	output += fmt.Sprintf("  \ttotal size of Full nodes storage tries: %d\n", tir.StorageTrieFullNodeSize)
 	output += fmt.Sprintf("  # of short nodes of storage tries: %d\n", tir.StorageTrieShortNodeNum)
@@ -454,24 +456,140 @@ func (tir *TrieInspectResult) PrintTrieInspectResult(blockNumber uint64, elapsed
 
 	// output = fmt.Sprintf("Balance of Accounts\n")
 	// for key, value := range tir.AccountBalance {
-	// 	output += fmt.Sprintf("  %s,%v\n", key, value.Uint64())
+	//    output += fmt.Sprintf("  %s,%v\n", key, value.Uint64())
 	// }
 	// fmt.Fprintln(f1, output) // write text file
 	// fmt.Println(output) // console print
 
 	// list all StorageTrie's codehash, leafnode depth, each node size
-	// output = fmt.Sprintf("\n\nNonZero StorageTrie Leaf Node Depth: addressHash, codeHash, leaf node depth, [SN #, size, FN #, size, LN #, size]\n")
-	// for key, value := range tir.StorageTrieLeafNodeDepth {
-	// 	output += fmt.Sprintf("\n  %s,%v,%v,%v\n", key, tir.AddressHashTocodeHash[key], value, tir.StorageTrieNodeMap[key])
-	// 	output += fmt.Sprintf("    StorageTrieRoot: %v\n", tir.StorageTrieRoot[key])
-	// 	output += fmt.Sprintf("    SlotHash: %v\n", tir.StorageTrieSlotHash[key])
-	// 	// for _, v := range tir.StorageTrieSlotHash[key] {
-	// 	// 	output += fmt.Sprintf("      %v\n", v)
-	// 	// }
-	// }
+	output = fmt.Sprintf("\n\nNonZero StorageTrie Leaf Node Depth: addressHash, codeHash, leaf node depth, [SN #, size, FN #, size, LN #, size]\n")
+	fmt.Fprintln(f1, output)
+	for key, value := range tir.AddressHashToStorageTrieRoot {
+		output = fmt.Sprintf("  %s,%v,%v,%v\n", key, tir.AddressHashTocodeHash[key], value, tir.StorageTrieNodeMap[key])
+		output += fmt.Sprintf("    StorageTrieRoot: %v\n", tir.AddressHashToStorageTrieRoot[key])
+		//    output += fmt.Sprintf("    SlotHash: %v\n", tir.StorageTrieSlotHash[key])
+		//    // for _, v := range tir.StorageTrieSlotHash[key] {
+		//    //    output += fmt.Sprintf("      %v\n", v)
+		// }
+		fmt.Fprintln(f1, output) // write text file
+	}
 	// fmt.Fprintln(f1, output) // write text file
 	// fmt.Println(output)      // console print
 
+	f2, err := os.Create("/home/jmlee/go-ethereum/simulator/trie_inspect_uniquestorage.txt") // vanilla version
+	if err != nil {
+		fmt.Printf("Cannot create result file.\n")
+		os.Exit(1)
+	}
+	defer f2.Close()
+
+	for k, v := range tir.StorageTrieRoot { // key: storage trie root hash, value: address hash
+		// fmt.Println(v)
+		node := ""
+		for _, vv := range tir.StorageTrieNodeMap[v[0]] {
+			// fmt.Println(kk, vv)
+			node += fmt.Sprint(vv, ",")
+		}
+		addresshash := ""
+		for _, vv := range v {
+			// fmt.Println(kk, vv)
+			addresshash += fmt.Sprint(vv, ",")
+		}
+		// output := fmt.Sprint("!", k, "/", tir.StorageTrieNodeMap[v[0]], "@", tir.StorageTrieRootToAddressHashnumber[k], "$", v, "\n")
+		output := fmt.Sprint("!", k, "/", node, "@", tir.StorageTrieRootToAddressHashnumber[k], "$", addresshash, "\n")
+		fmt.Fprint(f2, output)
+	}
+}
+
+func (tir *TrieInspectResult) PrintIntermediateTrieInspectResult(blockNumber uint64, elapsedTime int, million int) {
+	// f1, err := os.Create("/home/jhkim/go/src/github.com/ethereum/go-ethereum/build/bin/new_result_" + strconv.FormatUint(blockNumber, 10) + ".txt") // goroutine version
+	// f1, err := os.Create("/home/jhkim/go/src/github.com/ethereum/new_result_" + strconv.FormatUint(blockNumber, 10) + "_vanilla.txt") // vanilla version
+	s := fmt.Sprintf("/home/jmlee/go-ethereum/simulator/trie_inspect_intermediate_result_%dM_CA.txt", million)
+	f1, err := os.Create(s) // vanilla version
+
+	if err != nil {
+		fmt.Printf("Cannot create result file.\n")
+		os.Exit(1)
+	}
+	defer f1.Close()
+
+	output := ""
+	// output += fmt.Sprintf("trie inspect result at block %d with %d goroutines (it took %d seconds)\n", blockNumber, maxGoroutine, elapsedTime)
+	output += fmt.Sprintf("trie inspect result at block %d with vanilla goroutines (it took %d seconds)\n", blockNumber, elapsedTime) // vanilla version
+	output += fmt.Sprintf("  total trie size: %d bytes (about %d MB)\n", tir.TrieSize, tir.TrieSize/1000000)
+	output += fmt.Sprintf("  # of full nodes: %d\n", tir.FullNodeNum)
+	output += fmt.Sprintf("  \ttotal size of full nodes: %d\n", tir.FullNodeSize)
+	output += fmt.Sprintf("  # of short nodes: %d\n", tir.ShortNodeNum)
+	output += fmt.Sprintf("  \ttotal size of short nodes: %d\n", tir.ShortNodeSize)
+	// output += fmt.Sprintf("  # of intermediate nodes: %d\n", tir.IntermediateNodeNum)
+	output += fmt.Sprintf("  # of leaf nodes: %d ( EOA: %d / CA: %d )\n", tir.LeafNodeNum, tir.EOANum, tir.CANum)
+	output += fmt.Sprintf("  \ttotal size of leaf nodes: %d( EOA: %d / CA: %d )\n", tir.LeafNodeSize, tir.LeafNodeEOASize, tir.LeafNodeCASize)
+
+	output += fmt.Sprintf("  depth distribution of Full nodes: %d\n", tir.StateTrieFullNodeDepth)
+	output += fmt.Sprintf("  depth distribution of Short nodes: %d\n", tir.StateTrieShortNodeDepth)
+	output += fmt.Sprintf("  depth distribution of Leaf nodes: %d\n", tir.StateTrieLeafNodeDepth)
+	output += fmt.Sprintln("")
+
+	output += fmt.Sprintf("  # of empty root hash: %d\n", tir.EmptyRootHash)
+	output += fmt.Sprintf("  # of accounts which hash non-empty storage trie: %d ( %d bytes = %d MB )\n", tir.StorageTrieNum, tir.StorageTrieSizeSum, tir.StorageTrieSizeSum/1000000)
+	output += fmt.Sprintf("  # of Full nodes of storage tries: %d\n", tir.StorageTrieFullNodeNum)
+	output += fmt.Sprintf("  \ttotal size of Full nodes storage tries: %d\n", tir.StorageTrieFullNodeSize)
+	output += fmt.Sprintf("  # of short nodes of storage tries: %d\n", tir.StorageTrieShortNodeNum)
+	output += fmt.Sprintf("  \ttotal size of Short nodes storage tries: %d\n", tir.StorageTrieShortNodeSize)
+	output += fmt.Sprintf("  # of leaf nodes of storage tries: %d\n", tir.StorageTrieLeafNodeNum)
+	output += fmt.Sprintf("  \ttotal size of Leaf nodes storage tries: %d\n", tir.StorageTrieLeafNodeSize)
+
+	output += fmt.Sprintf("  # of errors: %d\n", tir.ErrorNum) // this should be 0, of course
+
+	fmt.Fprintln(f1, output) // write text file
+	// fmt.Println(output)      // console print
+
+	// output = fmt.Sprintf("Balance of Accounts\n")
+	// for key, value := range tir.AccountBalance {
+	//    output += fmt.Sprintf("  %s,%v\n", key, value.Uint64())
+	// }
+	// fmt.Fprintln(f1, output) // write text file
+	// fmt.Println(output) // console print
+
+	// list all StorageTrie's codehash, leafnode depth, each node size
+	output = fmt.Sprintf("\n\nNonZero StorageTrie Leaf Node Depth: addressHash, codeHash, leaf node depth, [SN #, size, FN #, size, LN #, size]\n")
+	fmt.Fprintln(f1, output)
+	for key, value := range tir.AddressHashToStorageTrieRoot {
+		output = fmt.Sprintf("  %s,%v,%v,%v\n", key, tir.AddressHashTocodeHash[key], value, tir.StorageTrieNodeMap[key])
+		output += fmt.Sprintf("    StorageTrieRoot: %v\n", tir.AddressHashToStorageTrieRoot[key])
+		//    output += fmt.Sprintf("    SlotHash: %v\n", tir.StorageTrieSlotHash[key])
+		//    // for _, v := range tir.StorageTrieSlotHash[key] {
+		//    //    output += fmt.Sprintf("      %v\n", v)
+		// }
+		fmt.Fprintln(f1, output) // write text file
+	}
+	// fmt.Fprintln(f1, output) // write text file
+	// fmt.Println(output)      // console print
+
+	s2 := fmt.Sprintf("/home/jmlee/go-ethereum/simulator/trie_inspect_uniquestorage_intermediate_result_%dM_CA.txt", million)
+	f2, err := os.Create(s2) // vanilla version
+	if err != nil {
+		fmt.Printf("Cannot create result file.\n")
+		os.Exit(1)
+	}
+	defer f2.Close()
+
+	for k, v := range tir.StorageTrieRoot { // key: storage trie root hash, value: address hash
+		// fmt.Println(v)
+		node := ""
+		for _, vv := range tir.StorageTrieNodeMap[v[0]] {
+			// fmt.Println(kk, vv)
+			node += fmt.Sprint(vv, ",")
+		}
+		addresshash := ""
+		for _, vv := range v {
+			// fmt.Println(kk, vv)
+			addresshash += fmt.Sprint(vv, ",")
+		}
+		// output := fmt.Sprint("!", k, "/", tir.StorageTrieNodeMap[v[0]], "@", tir.StorageTrieRootToAddressHashnumber[k], "$", v, "\n")
+		output := fmt.Sprint("!", k, "/", node, "@", tir.StorageTrieRootToAddressHashnumber[k], "$", addresshash, "\n")
+		fmt.Fprint(f2, output)
+	}
 }
 
 // convert trie.TrieInspectResult to common.NodeStat (jmlee)
@@ -562,10 +680,10 @@ func (tir *TrieInspectResult) ToNodeStat() common.NodeStat {
 }
 
 // type Account struct {
-// 	Nonce    uint64
-// 	Balance  *big.Int
-// 	Root     common.Hash // merkle root of the storage trie
-// 	CodeHash []byte
+//    Nonce    uint64
+//    Balance  *big.Int
+//    Root     common.Hash // merkle root of the storage trie
+//    CodeHash []byte
 // }
 
 type trieType int
@@ -578,9 +696,9 @@ const storageTrie trieType = 2
 func (t *Trie) InspectTrie() TrieInspectResult {
 	// if isFirst {
 
-	// 	isFirst = false
-	// 	debug.SetMaxThreads(15000) // default MaxThread is 10000
-	// 	runtime.GOMAXPROCS(runtime.NumCPU())
+	//    isFirst = false
+	//    debug.SetMaxThreads(15000) // default MaxThread is 10000
+	//    runtime.GOMAXPROCS(runtime.NumCPU())
 	// }
 	// debug.FreeOSMemory()
 	var tir TrieInspectResult
@@ -589,7 +707,10 @@ func (t *Trie) InspectTrie() TrieInspectResult {
 	tir.StorageTrieNodeMap = map[string][6]int{}
 	tir.AddressHashTocodeHash = map[string]string{}
 	tir.StorageTrieSlotHash = map[string][]string{}
-	tir.StorageTrieRoot = map[string]string{}
+	tir.StorageTrieRoot = map[string][]string{}
+
+	tir.AddressHashToStorageTrieRoot = map[string]string{}
+	tir.StorageTrieRootToAddressHashnumber = map[string]int{}
 	tir.AccountBalance = map[string]big.Int{}
 
 	// fmt.Println("\n\n#################\nINSPECTATION START\n#################")
@@ -600,9 +721,9 @@ func (t *Trie) InspectTrie() TrieInspectResult {
 	// timeout := 48 * time.Hour
 
 	// if waitTimeout(&wg, timeout) {
-	// 	fmt.Println("Timed out waiting for wait group")
+	//    fmt.Println("Timed out waiting for wait group")
 	// } else {
-	// 	fmt.Println("Wait group finished")
+	//    fmt.Println("Wait group finished")
 	// }
 	wg.Wait() // ***WARNING: if you sets maxgoroutine number wrong, infinite waiting
 	// fmt.Println("\n\n#################\nINSPECTATION DONE\n#################")
@@ -655,13 +776,14 @@ func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGro
 		_, nodeSize := h.shortnodeToHash(collapsed, false)
 
 		// increase tir
-		if n.Key[len(n.Key)-1] != 16 {
-			// this is intermediate short node
-			increaseSize(nodeSize, "short", tir, depth)
-		} else {
-			// this is leaf short node
-			increaseSize(nodeSize, "value", tir, depth)
-		}
+		// if n.Key[len(n.Key)-1] != 16 {
+		// 	// this is intermediate short node
+		// 	increaseSize(nodeSize, "short", tir, depth)
+		// } else {
+		// 	// this is leaf short node
+		// 	increaseSize(nodeSize, "value", tir, depth)
+		// }
+		increaseSize(nodeSize, "short", tir, depth)
 
 		t.inspectTrieNodes(n.Val, tir, wg, depth+1, trie, addressKey) // go child node
 
@@ -708,29 +830,29 @@ func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGro
 		// goroutine version
 		// gortn := runtime.NumGoroutine()
 		// if gortn < maxGoroutine && trie == "state" { // if current number of goroutines exceed max goroutine number
-		// 	for i, child := range &n.Children {
-		// 		if child != nil {
-		// 			nodeKeyByte := common.HexToHash("0x" + indices[i])
-		// 			addressKey = append(addressKey, nodeKeyByte[len(nodeKeyByte)-1])
+		//    for i, child := range &n.Children {
+		//       if child != nil {
+		//          nodeKeyByte := common.HexToHash("0x" + indices[i])
+		//          addressKey = append(addressKey, nodeKeyByte[len(nodeKeyByte)-1])
 
-		// 			wg.Add(1)
-		// 			go func(child node, tir *TrieInspectResult, wg *sync.WaitGroup, depth int, trie string) {
-		// 				defer wg.Done()
-		// 				t.inspectTrieNodes(child, tir, wg, depth+1, trie, addressKey)
-		// 				// t.inspectTrieNodes(child, tir, wg, depth+1, trie)
-		// 			}(child, tir, wg, depth, trie)
-		// 		}
-		// 	}
+		//          wg.Add(1)
+		//          go func(child node, tir *TrieInspectResult, wg *sync.WaitGroup, depth int, trie string) {
+		//             defer wg.Done()
+		//             t.inspectTrieNodes(child, tir, wg, depth+1, trie, addressKey)
+		//             // t.inspectTrieNodes(child, tir, wg, depth+1, trie)
+		//          }(child, tir, wg, depth, trie)
+		//       }
+		//    }
 		// } else {
-		// 	for i, child := range &n.Children {
-		// 		if child != nil {
-		// 			// t.inspectTrieNodes(child, tir, wg, depth+1, trie)
-		// 			nodeKeyByte := common.HexToHash("0x" + indices[i])
-		// 			addressKey = append(addressKey, nodeKeyByte[len(nodeKeyByte)-1])
+		//    for i, child := range &n.Children {
+		//       if child != nil {
+		//          // t.inspectTrieNodes(child, tir, wg, depth+1, trie)
+		//          nodeKeyByte := common.HexToHash("0x" + indices[i])
+		//          addressKey = append(addressKey, nodeKeyByte[len(nodeKeyByte)-1])
 
-		// 			t.inspectTrieNodes(child, tir, wg, depth+1, trie, addressKey)
-		// 		}
-		// 	}
+		//          t.inspectTrieNodes(child, tir, wg, depth+1, trie, addressKey)
+		//       }
+		//    }
 		// }
 
 	case hashNode:
@@ -747,12 +869,13 @@ func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGro
 		}
 
 	case valueNode:
+		increaseSize(len(n), "value", tir, depth)
 
 		// Value nodes don't have children so they're left as were
 
 		// value node has account info, decode it
 		addressHash := common.BytesToHash(hexToKeybytes(addressKey)).Hex()
-		// fmt.Printf("	inspectTrieNodes, addressKey %v ->", hex.EncodeToString(addressKey))
+		// fmt.Printf("   inspectTrieNodes, addressKey %v ->", hex.EncodeToString(addressKey))
 		// fmt.Printf("this node is value node (size: %d bytes) ", len(n))
 		// fmt.Println("addressHash:", addressHash)
 
@@ -787,7 +910,7 @@ func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGro
 			codeHash := common.Bytes2Hex(acc.CodeHash)
 			tir.AddressHashTocodeHash[addressHash] = codeHash
 
-			if codeHash == "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470" { // empty code hash. This account is EOA
+			if codeHash == "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470" && acc.Root.Hex() == "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421" { // empty code hash. This account is EOA
 				rwMutex.Lock()
 				tir.EOANum += 1
 				tir.LeafNodeEOASize += len(n)
@@ -799,6 +922,11 @@ func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGro
 				tir.LeafNodeCASize += len(n)
 				tir.AccountBalance[addressHash] = *acc.Balance
 				rwMutex.Unlock()
+
+				if tir.CANum%1000000 == 0 {
+					// fmt.Println(tir.CANum/1000, int(tir.CANum/1000))
+					tir.PrintIntermediateTrieInspectResult(1000000, 0, tir.CANum/1000000)
+				}
 
 				// inspect CA's storage trie (if it is not empty trie)
 				if acc.Root.Hex() != "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421" { // empty root hash
@@ -820,48 +948,57 @@ func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGro
 						if !DoInspectStorageTrie {
 							return
 						}
+						tir.AddressHashToStorageTrieRoot[addressHash] = storageTrieRootHash.Hex()
+						if _, exist := tir.StorageTrieRoot[storageTrieRootHash.Hex()]; !exist {
+							tir.StorageTrieRoot[storageTrieRootHash.Hex()] = append(tir.StorageTrieRoot[storageTrieRootHash.Hex()], addressHash)
+							tir.StorageTrieRootToAddressHashnumber[storageTrieRootHash.Hex()] = 1
 
-						// storage trie inspect
-						storageTir := storageTrie.InspectStorageTrie()
-						// storageTir.PrintTrieInspectResult()
-						tir.StorageTrieRoot[addressHash] = storageTrieRootHash.Hex()
-						rwMutex.Lock()
+							// storage trie inspect
+							storageTir := storageTrie.InspectStorageTrie()
+							// storageTir.PrintTrieInspectResult()
 
-						tir.StorageTrieSizeSum += storageTir.TrieSize
-						tir.ErrorNum += storageTir.ErrorNum
+							rwMutex.Lock()
 
-						tir.StorageTrieFullNodeNum += storageTir.FullNodeNum
-						tir.StorageTrieFullNodeSize += storageTir.FullNodeSize
-						tir.StorageTrieShortNodeNum += storageTir.ShortNodeNum
-						tir.StorageTrieShortNodeSize += storageTir.ShortNodeSize
-						tir.StorageTrieLeafNodeNum += storageTir.LeafNodeNum
-						tir.StorageTrieLeafNodeSize += storageTir.LeafNodeSize
+							tir.StorageTrieSizeSum += storageTir.TrieSize
+							tir.ErrorNum += storageTir.ErrorNum
 
-						// if you want to see storage trie's node distribution, add fields of storageTrie
+							tir.StorageTrieFullNodeNum += storageTir.FullNodeNum
+							tir.StorageTrieFullNodeSize += storageTir.FullNodeSize
+							tir.StorageTrieShortNodeNum += storageTir.ShortNodeNum
+							tir.StorageTrieShortNodeSize += storageTir.ShortNodeSize
+							tir.StorageTrieLeafNodeNum += storageTir.LeafNodeNum
+							tir.StorageTrieLeafNodeSize += storageTir.LeafNodeSize
 
-						tir.StorageTrieLeafNodeDepth[addressHash] = storageTir.StateTrieLeafNodeDepth
-						// fmt.Println("@@@@@", storageTir.AddressHashTocodeHash)
-						tmpSlice := []string{}
-						for k := range storageTir.AddressHashTocodeHash {
-							tmpSlice = append(tmpSlice, k)
-						}
-						tir.StorageTrieSlotHash[addressHash] = tmpSlice
-						// fmt.Println("StorageTir addresshash to slotHash: ", addressHash, tir.StorageTrieSlotHash[addressHash])
+							// if you want to see storage trie's node distribution, add fields of storageTrie
 
-						tir.StorageTrieNodeMap[addressHash] = [6]int{
-							storageTir.FullNodeNum,
-							storageTir.FullNodeSize,
-							storageTir.ShortNodeNum,
-							storageTir.ShortNodeSize,
-							storageTir.LeafNodeNum,
-							storageTir.LeafNodeSize,
-						}
+							tir.StorageTrieLeafNodeDepth[addressHash] = storageTir.StateTrieLeafNodeDepth
+							// fmt.Println("@@@@@", storageTir.AddressHashTocodeHash)
+							// tmpSlice := []string{}
+							// for k := range storageTir.AddressHashTocodeHash {
+							// 	tmpSlice = append(tmpSlice, k)
+							// }
+							// tir.StorageTrieSlotHash[addressHash] = tmpSlice
+							// fmt.Println("StorageTir addresshash to slotHash: ", addressHash, tir.StorageTrieSlotHash[addressHash])
 
-						rwMutex.Unlock()
+							tir.StorageTrieNodeMap[addressHash] = [6]int{
+								storageTir.FullNodeNum,
+								storageTir.FullNodeSize,
+								storageTir.ShortNodeNum,
+								storageTir.ShortNodeSize,
+								storageTir.LeafNodeNum,
+								storageTir.LeafNodeSize,
+							}
 
-						if storageTir.ErrorNum != 0 {
-							fmt.Print("!!! ERROR: something is wrong while inspecting storage trie ->", storageTir.ErrorNum, "errors\n\n")
-							// os.Exit(1)
+							rwMutex.Unlock()
+
+							if storageTir.ErrorNum != 0 {
+								fmt.Print("!!! ERROR: something is wrong while inspecting storage trie ->", storageTir.ErrorNum, "errors\n\n")
+								// os.Exit(1)
+							}
+						} else {
+							tir.StorageTrieRoot[storageTrieRootHash.Hex()] = append(tir.StorageTrieRoot[storageTrieRootHash.Hex()], addressHash)
+							tir.StorageTrieRootToAddressHashnumber[storageTrieRootHash.Hex()] = tir.StorageTrieRootToAddressHashnumber[storageTrieRootHash.Hex()] + 1
+							// fmt.Println("Skip duplicate Storage trie root/addresshash:", addressHash, "storagetrieroot:", storageTrieRootHash)
 						}
 					}
 				} else {
