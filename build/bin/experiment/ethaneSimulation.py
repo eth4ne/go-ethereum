@@ -1014,7 +1014,7 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
 
     # initialize
     if doReset:
-    reset()
+        reset()
     updateCount = 0
     stateReadCount = 0
     stateWriteCount = 0
@@ -1198,7 +1198,7 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
 
     # initialize
     if doReset:
-    reset()
+        reset()
     updateCount = 0
     stateReadCount = 0
     stateWriteCount = 0
