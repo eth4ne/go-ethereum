@@ -1007,6 +1007,8 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
         + "_" + str(deleteEpoch) + "_" + str(inactivateEpoch) + "_" + str(inactivateCriterion) + ".txt"
     blockInfosLogFileName = "ethane_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) \
         + "_" + str(deleteEpoch) + "_" + str(inactivateEpoch) + "_" + str(inactivateCriterion) + ".txt"
+    blockInfosTempLogFileName = "ethane_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) \
+        + "_" + str(deleteEpoch) + "_" + str(inactivateEpoch) + "_" + str(inactivateCriterion) + "_temp.txt"
 
     # get restore list
     restoreListVersion = 0
@@ -1026,6 +1028,8 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
     batchsize = 200
     # print log interval
     loginterval = 10000
+    # block info save interval
+    blockInfosSaveInterval = 1000000
 
     oldblocknumber = startBlockNum
     start = time.time()
@@ -1052,6 +1056,11 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
                 blockcount += 1
                 flush()
                 # print("flush finished -> generated block", oldblocknumber, "\n\n\n")
+
+                # save intermediate result
+                if item['blocknumber'] % blockInfosSaveInterval == 0:
+                    saveBlockInfos(blockInfosTempLogFileName)
+                    print("create temp log file:", blockInfosTempLogFileName)
 
                 if oldblocknumber % loginterval == 0:
                     currentTime = time.time()
@@ -1191,6 +1200,7 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
     # set log file name
     logFileName = "ethanos_simulate_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateCriterion) + ".txt"
     blockInfosLogFileName = "ethanos_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateCriterion) + ".txt"
+    blockInfosTempLogFileName = "ethanos_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateCriterion) + "_temp.txt"
 
     # get restore list exist
     restoreListVersion = 0
@@ -1210,6 +1220,8 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
     batchsize = 200
     # print log interval
     loginterval = 10000
+    # block info save interval
+    blockInfosSaveInterval = 1000000
 
     oldblocknumber = startBlockNum
     start = time.time()
@@ -1236,6 +1248,11 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
                 blockcount += 1
                 flush()
                 # print("flush finished -> generated block", oldblocknumber, "\n\n\n")
+
+                # save intermediate result
+                if item['blocknumber'] % blockInfosSaveInterval == 0:
+                    saveBlockInfos(blockInfosTempLogFileName)
+                    print("create temp log file:", blockInfosTempLogFileName)
 
                 if oldblocknumber % loginterval == 0:
                     currentTime = time.time()
