@@ -112,6 +112,12 @@ var (
 
 	// option: active trie & inactive trie vs one state trie
 	InactiveTrieExist = true
+	// option: do light deletion 
+	// for Ethane's light inactive trie delete (jmlee)
+	DoLightInactiveDeletion = true
+	// this is not an option, but a flag
+	// for Ethane's light inactive trie delete (jmlee)
+	DeletingInactiveTrieFlag = false
 
 	// TODO(jmlee): implement this
 	// option: forcely stop simulation when error occurs or not

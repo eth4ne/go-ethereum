@@ -1007,7 +1007,7 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
         + "_" + str(deleteEpoch) + "_" + str(inactivateEpoch) + "_" + str(inactivateCriterion) + ".txt"
     blockInfosLogFileName = "ethane_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) \
         + "_" + str(deleteEpoch) + "_" + str(inactivateEpoch) + "_" + str(inactivateCriterion) + ".txt"
-    
+
     # get restore list
     restoreListVersion = 0
     restoreList, lastBlockInRestoreList, incompleteRestoreList, restoreListVersion = getRestoreList(startBlockNum, endBlockNum, inactivateEpoch, inactivateCriterion, restoreListVersion)

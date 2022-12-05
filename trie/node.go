@@ -48,6 +48,18 @@ var StringToIndex = map[string]byte{
 	"f": 15,
 }
 
+// to implement light inactive trie delete for Ethane (jmlee)
+var ZeroHashNode = make(hashNode, 32)
+
+// check whether this node is zero hash node or not
+func IsZeroHashNode(n []byte) bool {
+	if bytes.Compare(n, ZeroHashNode) == 0 {
+		return true
+	} else {
+		return false
+	}
+}
+
 type node interface {
 	fstring(string) string
 	cache() (hashNode, bool)
@@ -279,6 +291,12 @@ func (n *shortNode) toString(ind string, db *Database) string {
 }
 
 func (n hashNode) toString(ind string, db *Database) string {
+	// for Ethane's light inactive trie delete (jmlee)
+	// print zero hash node
+	if IsZeroHashNode(n) {
+		return fmt.Sprintf("<%x> ", []byte(n))
+	}
+
 	// resolve hashNode (get node from db)
 	hash := common.BytesToHash([]byte(n))
 	if node := db.node(hash); node != nil {

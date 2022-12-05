@@ -757,6 +757,12 @@ func (db *Database) Commit(node common.Hash, report bool, callback func(common.H
 
 // commit is the private locked version of Commit.
 func (db *Database) commit(hash common.Hash, batch ethdb.Batch, uncacher *cleaner, callback func(common.Hash)) error {
+	// for Ethane's light inactive trie delete (jmlee)
+	// ignore zero hash node
+	if IsZeroHashNode(hash.Bytes()) {
+		return nil
+	}
+
 	// If the node does not exist, it's a previously committed node
 	node, ok := db.dirties[hash]
 	if !ok {

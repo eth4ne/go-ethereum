@@ -1202,6 +1202,9 @@ func deleteRestoredLeafNodes() {
 	inactiveTrie := normTrie
 	if common.InactiveTrieExist {
 		inactiveTrie = subNormTrie
+		if common.DoLightInactiveDeletion {
+			common.DeletingInactiveTrieFlag = true // for Ethane's light inactive trie delete (jmlee)
+		}
 	}
 
 	// delete all used merkle proofs for restoration
@@ -1209,9 +1212,19 @@ func deleteRestoredLeafNodes() {
 		err := inactiveTrie.TryDelete(keyToDelete[:])
 		if err != nil {
 			fmt.Println("ERROR deleteRestoredLeafNodes(): trie.TryDelete ->", err)
-			os.Exit(1)
+			fmt.Println("  but this might be due to light inactive trie deletion")
+
+			// try once again after hashing nodes
+			// this might be due to light inactive trie deletion
+			inactiveTrie.Hash()
+			err := inactiveTrie.TryDelete(keyToDelete[:])
+			if err != nil {
+				fmt.Println("ERROR deleteRestoredLeafNodes() again: trie.TryDelete ->", err)
+				os.Exit(1)
+			}
 		}
 	}
+	common.DeletingInactiveTrieFlag = false
 
 	// logging
 	common.DeletedInactiveNodeNum += uint64(len(common.RestoredKeys))
@@ -2454,7 +2467,7 @@ func connHandler(conn net.Conn) {
 				restoreAccountForEthanos(addr)
 
 				response = []byte("success")
-			
+
 			case "setHead":
 				// get params
 				// fmt.Println("execute setHead()")
@@ -2659,6 +2672,220 @@ func makeTestTrie() {
 		// fmt.Println("\n\n")
 	}
 
+}
+
+// check whether inactive trie can be updated only with its rightmost merkle path nodes
+// for Ethane's light inactive trie delete (jmlee)
+// just run testLightInactiveTrieUpdate() in main() to test the functionality
+func testLightInactiveTrieUpdate() {
+	fmt.Println("start testLightInactiveTrieUpdate()")
+	for i := 0; i < 16; i++ {
+		trie.ZeroHashNode[i] = 15
+	}
+
+	// set DBs
+	memdb := memorydb.New()
+	tempMemdb := memorydb.New()
+	archiveMemdb := memorydb.New()
+
+	// store keys to delete restored merkle proofs
+	keysToDelete := make(map[common.Hash]struct{})
+	allDeletedKeys := make(map[common.Hash]struct{})
+
+	// open tries
+	myTrie, _ := trie.New(common.Hash{}, trie.NewDatabase(memdb))             // inactive trie only with its rightmost merkle path nodes
+	archiveTrie, _ := trie.New(common.Hash{}, trie.NewDatabase(archiveMemdb)) // total inactive trie
+
+	// set account to be inserted in tries
+	var acc types.StateAccount
+	acc.Balance = big.NewInt(0)
+	acc.Nonce = 0
+	acc.CodeHash = emptyCodeHash
+	acc.Root = emptyRoot
+
+	cnt := uint64(0)
+	totalInsertedAccNum := 0
+	totalDeletedAccNum := 0
+	var err error
+	roundNumToRun := 10000
+	currentAccNum := 0
+	maxInsertNum := 100
+	maxDeleteNum := 85
+	for i := 0; i < roundNumToRun; i++ {
+
+		// insert accounts in both tries identically
+		mrand.Seed(time.Now().UnixNano())
+		randInsertNum := mrand.Intn(maxInsertNum) + 1
+		// randInsertNum := 4
+		totalInsertedAccNum += randInsertNum
+		currentAccNum += randInsertNum
+		fmt.Println("\n\n\n\n\n\ninsert :", randInsertNum, "accounts in the trie / i:", i)
+		// fmt.Println("archive trie (before)")
+		// archiveTrie.Print()
+		var addrKey common.Hash
+		for j := 0; j < randInsertNum; j++ {
+			// update trie
+			addrKey = common.HexToHash(strconv.FormatUint(cnt, 16))
+			cnt++
+			data, _ := rlp.EncodeToBytes(acc)
+			acc.Nonce++
+			err1 := myTrie.TryUpdate(addrKey[:], data)
+			err2 := archiveTrie.TryUpdate(addrKey[:], data)
+			if err1 != nil {
+				fmt.Println("ERROR: cannot update trie only with rightmost merkle proofs")
+				fmt.Println("  => err1:", err1)
+				fmt.Println("  => err2:", err2)
+
+				fmt.Println("archive trie (after)")
+				archiveTrie.Print()
+
+				os.Exit(1)
+			}
+		}
+		// delete accounts from both tries identically
+		fmt.Println("delete :", len(keysToDelete), "accounts")
+		common.DeletingInactiveTrieFlag = true
+		for key, _ := range keysToDelete {
+			// fmt.Println("  key to delete:", key.Hex())
+			// fmt.Println("light trie delete start")
+			err1 := myTrie.TryDelete(key[:])
+			myTrie.Hash() // this might be needed
+			// fmt.Println("full trie delete start")
+			err2 := archiveTrie.TryDelete(key[:])
+			archiveTrie.Hash() // this might be needed
+			if err1 != nil {
+				fmt.Println("ERROR: cannot delete trie only with rightmost merkle proofs")
+				fmt.Println("  => error key to delete:", key.Hex())
+				fmt.Println("  => err1:", err1)
+				fmt.Println("  => err2:", err2)
+
+				fmt.Println("archive trie (after)")
+				archiveTrie.Print()
+
+				os.Exit(1)
+			}
+
+			myTrieRoot := myTrie.Hash().Hex()
+			archiveTrieRoot := archiveTrie.Hash().Hex()
+			if myTrieRoot != archiveTrieRoot {
+				fmt.Println("ERROR: myTrie and archiveTrie have different roots (should be same)")
+				fmt.Println("myTrieRoot:", myTrieRoot, "/ archiveTrieRoot:", archiveTrieRoot)
+				myTrie.Print()
+				fmt.Println("%%%%%%%%%%")
+				archiveTrie.Print()
+				fmt.Println("  key to delete:", key.Hex())
+				os.Exit(1)
+			}
+			currentAccNum--
+		}
+		common.DeletingInactiveTrieFlag = false
+		keysToDelete = make(map[common.Hash]struct{}) // clear map
+		// check result
+		myTrieRoot := myTrie.Hash().Hex()
+		archiveTrieRoot := archiveTrie.Hash().Hex()
+		if myTrieRoot != archiveTrieRoot {
+			fmt.Println("ERROR: myTrie and archiveTrie have different roots (should be same)")
+			fmt.Println("myTrieRoot:", myTrieRoot, "/ archiveTrieRoot:", archiveTrieRoot)
+			os.Exit(1)
+		}
+		// fmt.Println("archive trie (after)")
+		// archiveTrie.Print()
+
+		// flush tries
+		myTrie.Commit(nil)
+		myTrie.TrieDB().Commit(myTrie.Hash(), false, nil)
+		archiveTrie.Commit(nil)
+		archiveTrie.TrieDB().Commit(archiveTrie.Hash(), false, nil)
+
+		// get rightmost merkle path nodes
+		trie.RestoreProofHashes = make(map[common.Hash]int) // reset multi proof
+		var proof proofList
+		myTrie.Prove(addrKey[:], 0, &proof)
+		// for k, _ := range trie.RestoreProofHashes {
+		// 	fmt.Println("merkle key:", k.Hex())
+		// }
+		// get merkle paths to delete
+		mrand.Seed(time.Now().UnixNano())
+		randDeleteNum := mrand.Intn(maxDeleteNum) + 1
+		if currentAccNum < maxDeleteNum {
+			randDeleteNum = mrand.Intn(currentAccNum) + 1
+		}
+		totalDeletedAccNum += randDeleteNum
+		proofNumToDelete := 0
+		for j := 0; proofNumToDelete < randDeleteNum; j++ {
+			mrand.Seed(time.Now().UnixNano())
+			randNum := int64(mrand.Intn(int(cnt)))
+			randAddrKey := common.HexToHash(strconv.FormatInt(randNum, 16))
+			// fmt.Println("(candid) selected key to delete:", randAddrKey.Hex())
+
+			value, _ := archiveTrie.TryGet(randAddrKey[:])
+			_, exist1 := keysToDelete[randAddrKey]
+			_, exist2 := allDeletedKeys[randAddrKey]
+			if value != nil && !exist1 && !exist2 {
+				var proof proofList
+				archiveTrie.Prove(randAddrKey[:], 0, &proof)
+				keysToDelete[randAddrKey] = struct{}{}
+				allDeletedKeys[randAddrKey] = struct{}{}
+				// fmt.Println("selected key to delete:", randAddrKey.Hex())
+				proofNumToDelete++
+			}
+		}
+		merklePathNodeNum := len(trie.RestoreProofHashes)
+		fmt.Println("selected nodes num:", merklePathNodeNum)
+
+		// iterate current mem db and only save rightmost merkle path nodes in the new mem db
+		it := archiveMemdb.NewIterator(nil, nil)
+		insertedNodeNum := 0
+		for it.Next() {
+			var (
+				key   = it.Key()
+				value = it.Value()
+			)
+
+			if len(key) == 32 {
+				keyHash := common.BytesToHash(key)
+				if _, exist := trie.RestoreProofHashes[keyHash]; exist {
+					// fmt.Println("  key:", keyHash.Hex(), "find! insert to new mem DB")
+					tempMemdb.Put(key, value)
+					insertedNodeNum++
+				}
+			}
+		}
+		if merklePathNodeNum != insertedNodeNum {
+			fmt.Println("ERROR: tempMemdb do not has all rightmost merkle path nodes")
+			fmt.Println("merklePathNodeNum:", merklePathNodeNum, "/ insertedNodeNum:", insertedNodeNum)
+		}
+
+		// now memdb has only rightmost merkle path nodes, and clear new mem db
+		memdb = tempMemdb
+		tempMemdb = memorydb.New()
+
+		memdbNodeNum, _ := inspectDatabase(memdb)
+		tempMemdbNodeNum, _ := inspectDatabase(tempMemdb)
+		// archiveMemdbNodeNum, _ := inspectDatabase(archiveMemdb)
+		// fmt.Println("memdbNodeNum:", memdbNodeNum, "/ tempMemdbNodeNum:", tempMemdbNodeNum, "/ archiveMemdbNodeNum:", archiveMemdbNodeNum)
+		if uint64(merklePathNodeNum) != memdbNodeNum {
+			fmt.Println("ERROR: memdb has more/less nodes than nodes in the rightmost merkle path")
+			fmt.Println("merklePathNodeNum:", merklePathNodeNum, "/ memdbNodeNum:", memdbNodeNum)
+		}
+		if tempMemdbNodeNum != 0 {
+			fmt.Println("ERROR: tempMemdb is not cleared correctly")
+			fmt.Println("tempMemdbNodeNum:", tempMemdbNodeNum)
+		}
+
+		// reopen trie which has rightmost merkle path nodes only
+		myTrie, err = trie.New(myTrie.Hash(), trie.NewDatabase(memdb))
+		if err != nil {
+			fmt.Println("ERROR: cannot open trie")
+			os.Exit(1)
+		}
+	}
+	// myTrie.Print()
+
+	fmt.Println("SUCCESS: finish test simulation, inactive trie can be updated only with the rightmost merkle proof")
+	fmt.Println("  => total inserted accounts:", totalInsertedAccNum)
+	fmt.Println("  => total deleted accounts:", totalDeletedAccNum)
+	os.Exit(1)
 }
 
 func main() {

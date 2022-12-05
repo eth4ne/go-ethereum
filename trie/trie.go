@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"os"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -153,6 +154,12 @@ func (t *Trie) tryGet(origNode node, key []byte, pos int) (value []byte, newnode
 		}
 		return value, n, didResolve, err
 	case hashNode:
+		// for Ethane's light inactive trie delete (jmlee)
+		// zeroHashNode means there is no leaf node
+		if IsZeroHashNode(n) {
+			return nil, nil, false, nil
+		}
+
 		child, err := t.resolveHash(n, key[:pos])
 		if err != nil {
 			return nil, n, true, err
@@ -456,6 +463,45 @@ func (t *Trie) delete(n node, prefix, key []byte) (bool, node, error) {
 				// shortNode{..., shortNode{...}}.  Since the entry
 				// might not be loaded yet, resolve it just for this
 				// check.
+
+				// for Ethane's light inactive trie delete (jmlee)
+				if common.DeletingInactiveTrieFlag {
+					hn, ok := n.Children[pos].(hashNode)
+					if !ok {
+						hn, _ := n.Children[pos].cache()
+						if hn != nil {
+							ok = true
+						}
+					}
+
+					if ok {
+						if IsZeroHashNode(hn) {
+							// single child node is zero hash node, delete together
+							fmt.Println("in trie.delete(): single child is zeroNode, delete both")
+							return true, nil, nil
+						} else {
+							// mark as zero hash node if single child node is not zero hash node
+							fmt.Println("in trie.delete(): leave zeroNode")
+							n = n.copy()
+							n.flags = t.newFlag()
+							n.Children[key[0]] = ZeroHashNode
+							return true, n, nil
+						}
+					} else {
+						// to reach here, it might be a node whose size is smaller than 32 bytes
+						// thus should be storage trie
+						// but storage trie is not a inactive trie
+						// so this should not happen
+						fmt.Println("ERROR: in trie.delete() for light inactive trie delete: this should not happen")
+						fmt.Println(n.toString("", t.db))
+						fmt.Println("")
+						fmt.Println(n.Children[pos].toString("", t.db))
+						// return false, nil, &MissingNodeError{NodeHash: common.Hash{}, Path: nil}
+						os.Exit(1)
+					}
+				}
+
+				// original code
 				cnode, err := t.resolve(n.Children[pos], prefix)
 				if err != nil {
 					return false, nil, err
@@ -653,8 +699,7 @@ func (t *Trie) getLastKey(origNode node, lastKey []byte) *big.Int {
 }
 
 // FindLeafNodes returns all leaf nodes within range (jmlee)
-// ex. leafNodes, keys, err := normTrie.FindLeafNodes(common.HexToHash("0x0").Bytes(), 
-// 					common.HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff").Bytes())
+// ex. leafNodes, keys, err := normTrie.FindLeafNodes(common.HexToHash("0x0").Bytes(), common.HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff").Bytes())
 func (t *Trie) FindLeafNodes(startKey, endKey []byte) ([][]byte, []common.Hash, error) {
 	// reset buffers
 	accountsInTrie = make([][]byte, 0)
