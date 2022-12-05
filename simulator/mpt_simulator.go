@@ -2888,6 +2888,25 @@ func testLightInactiveTrieUpdate() {
 	os.Exit(1)
 }
 
+// inspect trie in specific db path
+// ex. dbPath = "/ethereum/geth/geth/chaindata"
+// ex. rootHash = "0x74477eaabece6bce00c346dc12275b2ed74ec9d6c758c4023c2040ba0e72e05d"
+func inspectTrieInSpecificPath(dbPath, rootHash string) {
+
+	startTime := time.Now()
+	limit, _ := fdlimit.Maximum()
+	raised, _ := fdlimit.Raise(uint64(limit))
+	leveldbHandles = int(raised / 2)
+	fmt.Println("open file limit:", limit, "/ raised:", raised, "/ leveldbHandles:", leveldbHandles)
+
+	diskdb, _ = leveldb.New(dbPath, leveldbCache, leveldbHandles, leveldbNamespace, leveldbReadonly)
+
+	hash := common.HexToHash(rootHash)
+	inspectTrieDisk(hash)
+	elapsed := time.Since(startTime)
+	fmt.Println("inspect trie time:", elapsed)
+}
+
 func main() {
 
 	// initialize
