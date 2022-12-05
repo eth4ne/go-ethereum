@@ -8,6 +8,7 @@ from itertools import zip_longest
 from pathlib import Path
 from matplotlib.ticker import MaxNLocator
 from datetime import datetime
+from statistics import median
 
 # file paths
 blockInfosLogFilePath = "./blockInfos/"
@@ -68,8 +69,13 @@ def parseBlockInfos(simulMode, startBlockNum, endBlockNum, deleteEpoch, inactiva
     # logs[46][blockNum] = CrumbAddressNum
     # logs[47][blockNum] = InactiveAddressNum
 
-    # logs[48][blockNum] = MinProofSize
-    # logs[49][blockNum] = MaxProofSize
+    # logs[48][blockNum] = BlockRestoreStat.MinProofSize
+    # logs[49][blockNum] = BlockRestoreStat.MaxProofSize
+    # logs[50][blockNum] = BlockRestoreStat.VoidMerkleProofNumAtMaxProof
+    # logs[51][blockNum] = BlockRestoreStat.FirstEpochNumAtMaxProof
+
+    # TODO(jmlee): add this later, this is temply has wrong values
+    # logs[52][blockNum] = BlockRestoreStat.MaxVoidMerkleProofNum
 
     columnNum = 100 # big enough value
     logs = TwoD(endBlockNum-startBlockNum+1, columnNum, True)
@@ -281,28 +287,57 @@ def drawGraphsForBlockInfosCompare(startBlockNum, endBlockNum, deleteEpoch, inac
     #
 
     flushTimes = []
-    epochNum = 0
+    deleteTimes = []
+    inactivateTimes = []
+    epochNum = 1
 
-    if deleteEpoch != 1:
-        for bn in blockNums:
-            flushTime = blockInfosLogs[1][32][bn]
-            deleteTime = blockInfosLogs[1][33][bn]
-            inactivateTime = blockInfosLogs[1][34][bn]
+    for bn in blockNums:
+        flushTime = blockInfosLogs[1][32][bn]
+        deleteTime = blockInfosLogs[1][33][bn]
+        inactivateTime = blockInfosLogs[1][34][bn]
 
-            if (bn+1) % deleteEpoch == 0:
-                print("at epoch", epochNum)
-                print("avg flush time:", sum(flushTimes)/(deleteEpoch-1)/1000000, "ms")
-                print(" max:", max(flushTimes)/1000000, "ms", " 90%:", np.percentile(flushTimes, 90)/1000000, " 75%:", np.percentile(flushTimes, 75)/1000000)
-                print("  flush time:", flushTime/1000000, "ms")
-                print("  delete time:", deleteTime/1000000, "ms")
-                print("  inactivate time:", inactivateTime/1000000, "ms")
-                print()
+        if (bn+1) % deleteEpoch == 0:
+            deleteTimes.append(deleteTime)
+            inactivateTimes.append(inactivateTime)
+            if deleteEpoch == 1:
+                flushTimes.append(flushTime - deleteTime - inactivateTime)
+        else:
+            flushTimes.append(flushTime)
+        
+        # show statistics
+        if (bn+1) % inactivateCriterion == 0:
+            # print("\nat epoch", epochNum)
+            divScale = 1000000 # (10^3: microsecond, 10^6: millisecond, 10^9: second)
 
-                # go to next epoch
-                epochNum += 1
-                flushTimes = []
-            else:
-                flushTimes.append(flushTime)
+            # tex code to draw box plot
+            print("\t% at epoch", epochNum)
+            listsToDrawBoxPlot = [flushTimes, inactivateTimes, deleteTimes]
+            for myList in listsToDrawBoxPlot:
+
+                q1 = np.percentile(myList, 25)
+                med = median(myList)
+                q3 = np.percentile(myList, 75)
+                iqr = q3 - q1
+
+                myListWithoutOutliers = [x for x in myList if x >= q1 - 1.5*iqr]
+                myListWithoutOutliers.sort()
+                lowerWhisker = myListWithoutOutliers[0]
+
+                myListWithoutOutliers = [x for x in myList if x <= q3 + 1.5*iqr]
+                myListWithoutOutliers.sort()
+                upperWhisker = myListWithoutOutliers[-1]
+                
+                print("\t\\addplot+ [boxplot prepared={")
+                print("\t\tlower whisker=", round(lowerWhisker/divScale, 2), ", lower quartile=", round(q1/divScale, 2), \
+                    ", median=", round(med/divScale, 2), ", upper quartile=", round(q3/divScale, 2), ", upper whisker=", round(upperWhisker/divScale, 2))
+                print("\t}] coordinates {};")
+            print("")
+
+            # go to next epoch
+            epochNum += 1
+            flushTimes = []
+            deleteTimes = []
+            inactivateTimes = []
 
 
 
