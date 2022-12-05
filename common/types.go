@@ -217,8 +217,12 @@ type RestoreStat struct {
 	MerkleProofNum       int // # of merkle proofs for membership/void-proof
 	MerkleProofsSize     int // total size of merkle proofs
 	MerkleProofsNodesNum int // # of nodes in merkle proofs
-	MinProofSize         int // min restore proof size in this block
-	MaxProofSize         int // max restore proof size in this block
+
+	MinProofSize                 int // min restore proof size in this block
+	MaxProofSize                 int // max restore proof size in this block
+	VoidMerkleProofNumAtMaxProof int // # of void merkle proof when restore proof size was max
+	FirstEpochNumAtMaxProof      int // first epoch num of the restoration when restore proof size was max
+	MaxVoidMerkleProofNum        int // # of max void merkle proof num in this block
 }
 
 // BlockInfo stores block related information
@@ -359,6 +363,10 @@ func (rs *RestoreStat) Reset() {
 	rs.MerkleProofsNodesNum = 0
 	rs.MinProofSize = 0
 	rs.MaxProofSize = 0
+
+	rs.VoidMerkleProofNumAtMaxProof = 0
+	rs.FirstEpochNumAtMaxProof = 0
+	rs.MaxVoidMerkleProofNum = 0
 }
 
 // ToString collects values and converts them to string

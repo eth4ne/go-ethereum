@@ -503,6 +503,8 @@ func flushTrieNodes() {
 
 	// increase next block number after flush
 	common.NextBlockNum++
+
+	fmt.Println("  -> finish")
 }
 
 func countOpenFiles() int64 {
@@ -1000,6 +1002,11 @@ func restoreAccountForEthanos(restoreAddr common.Address) {
 	}
 
 	// collect proofs for restoration
+	firstEpochNum := epochNum
+	restoredAccountNum := 0
+	voidMerkleProofNum := 0
+	bloomFilterNum := 0
+	merkleProofNum := 0
 	trie.RestoreProofHashes = make(map[common.Hash]int) // reset multi proof
 	for ; epochNum < currentEpochNum-1; epochNum++ {
 		// check bloom filter first
@@ -1007,12 +1014,12 @@ func restoreAccountForEthanos(restoreAddr common.Address) {
 		if !exist {
 			// bloom filter can be void proof
 			// fmt.Println("at epoch", epochNum, ": bloom")
-			common.BlockRestoreStat.BloomFilterNum++
+			bloomFilterNum++
 			continue
 		} else {
 			// need merkle proof
 			// fmt.Println("at epoch", epochNum, ": merkle")
-			common.BlockRestoreStat.MerkleProofNum++
+			merkleProofNum++
 		}
 
 		// open checkpoint block's state trie
@@ -1029,9 +1036,10 @@ func restoreAccountForEthanos(restoreAddr common.Address) {
 		checkpointTrie.Prove(addrHash[:], common.FromLevel, &proof)
 		if exists[epochNum] {
 			// this is membership proof
-			common.BlockRestoreStat.RestoredAccountNum++
+			restoredAccountNum++
 		} else {
 			// this is void proof
+			voidMerkleProofNum++
 		}
 
 	}
@@ -1078,14 +1086,40 @@ func restoreAccountForEthanos(restoreAddr common.Address) {
 	// logging restore stats
 	// RESTORE_ALL: restore all inactive leaf nodes of this address
 	nodeNum, proofSize := trie.GetMultiProofStats()
+	// is restoredAccountNum is not 1, this is weird restoration in RESTORE_ALL mode, so do not logging
+	if restoredAccountNum == 1 {
+		// logging restore stats
 	common.BlockRestoreStat.RestorationNum++
+		common.BlockRestoreStat.BloomFilterNum += bloomFilterNum
+		common.BlockRestoreStat.MerkleProofNum += merkleProofNum
 	common.BlockRestoreStat.MerkleProofsSize += proofSize
 	common.BlockRestoreStat.MerkleProofsNodesNum += nodeNum
+		common.BlockRestoreStat.RestoredAccountNum += restoredAccountNum
+
+		// update max/min proof size
 	if common.BlockRestoreStat.MaxProofSize < proofSize {
 		common.BlockRestoreStat.MaxProofSize = proofSize
+			common.BlockRestoreStat.VoidMerkleProofNumAtMaxProof = voidMerkleProofNum
+			common.BlockRestoreStat.FirstEpochNumAtMaxProof = firstEpochNum
 	}
 	if common.BlockRestoreStat.MinProofSize > proofSize || common.BlockRestoreStat.MinProofSize == 0 {
 		common.BlockRestoreStat.MinProofSize = proofSize
+		}
+
+		// update maximum void proof num
+		if common.BlockRestoreStat.MaxVoidMerkleProofNum < voidMerkleProofNum {
+			common.BlockRestoreStat.MaxVoidMerkleProofNum = voidMerkleProofNum
+		}
+	} else {
+		// writing error case
+		delimiter := " "
+		errLog := ""
+		errLog += "restoredAccountNumIsNotOne" + delimiter
+		errLog += restoreAddr.Hex() + delimiter
+		errLog += strconv.Itoa(restoredAccountNum) + delimiter
+		errLog += strconv.Itoa(proofSize) + delimiter
+
+		writeErrorLog(errLog)
 	}
 
 	// fmt.Println("restoreAccountForEthanos for", restoreAddr.Hex(), "finish")
@@ -1389,16 +1423,32 @@ func restoreAccountForEthane(restoreAddr common.Address) {
 	// logging restore stats
 	// RESTORE_ALL: restore all inactive leaf nodes of this address
 	nodeNum, proofSize := trie.GetMultiProofStats()
+	// is restoredAccountNum is not 1, this is weird restoration in RESTORE_ALL mode, so do not logging
+	if len(common.AddrToKeyInactive[restoreAddr]) == 1 {
+		// logging restore stats
 	common.BlockRestoreStat.RestorationNum++
 	common.BlockRestoreStat.RestoredAccountNum += len(common.AddrToKeyInactive[restoreAddr])
 	common.BlockRestoreStat.MerkleProofNum += len(common.AddrToKeyInactive[restoreAddr])
 	common.BlockRestoreStat.MerkleProofsSize += proofSize
 	common.BlockRestoreStat.MerkleProofsNodesNum += nodeNum
+
+		// update max/min proof size
 	if common.BlockRestoreStat.MaxProofSize < proofSize {
 		common.BlockRestoreStat.MaxProofSize = proofSize
 	}
 	if common.BlockRestoreStat.MinProofSize > proofSize || common.BlockRestoreStat.MinProofSize == 0 {
 		common.BlockRestoreStat.MinProofSize = proofSize
+		}
+	} else {
+		// writing error case
+		delimiter := " "
+		errLog := ""
+		errLog += "restoredAccountNumIsNotOne" + delimiter
+		errLog += restoreAddr.Hex() + delimiter
+		errLog += strconv.Itoa(len(common.AddrToKeyInactive[restoreAddr])) + delimiter
+		errLog += strconv.Itoa(proofSize) + delimiter
+
+		writeErrorLog(errLog)
 	}
 
 	// record merkle proofs for restoration (to delete these later)
@@ -1623,6 +1673,9 @@ func saveBlockInfos(fileName string, startBlockNum, endBlockNum uint64) {
 		// TODO(jmlee): merge these to BlockRestoreStat.ToString() later
 		log += strconv.Itoa(blockInfo.BlockRestoreStat.MinProofSize) + delimiter
 		log += strconv.Itoa(blockInfo.BlockRestoreStat.MaxProofSize) + delimiter
+		log += strconv.Itoa(blockInfo.BlockRestoreStat.VoidMerkleProofNumAtMaxProof) + delimiter
+		log += strconv.Itoa(blockInfo.BlockRestoreStat.FirstEpochNumAtMaxProof) + delimiter
+		log += strconv.Itoa(blockInfo.BlockRestoreStat.MaxVoidMerkleProofNum) + delimiter
 
 		// fmt.Println("log at block", blockNum, ":", log)
 
@@ -1630,6 +1683,25 @@ func saveBlockInfos(fileName string, startBlockNum, endBlockNum uint64) {
 		fmt.Fprintln(f, log)
 	}
 
+}
+
+// write error logs in file
+func writeErrorLog(errLog string) {
+	fileName := "errorLog_Port_" + serverPort + ".txt"
+	// open new log file
+	f, _ := os.OpenFile(blockInfosLogFilePath+fileName, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	defer f.Close()
+
+	delimiter := " "
+	log := strconv.FormatUint(common.NextBlockNum, 10) + delimiter
+	log += strconv.FormatUint(uint64(common.SimulationMode), 10) + delimiter
+	log += strconv.FormatUint(common.DeleteEpoch, 10) + delimiter
+	log += strconv.FormatUint(common.InactivateEpoch, 10) + delimiter
+	log += strconv.FormatUint(common.InactivateCriterion, 10) + delimiter
+	log += errLog + delimiter
+
+	// write log to file
+	fmt.Fprintln(f, log)
 }
 
 func getTrieLastKey() {
@@ -2380,7 +2452,7 @@ func connHandler(conn net.Conn) {
 				// get params
 				// fmt.Println("execute restoreAccountForEthane()")
 				addr := common.HexToAddress(params[1])
-				fmt.Println("addr to restore:", addr.Hex())
+				// fmt.Println("addr to restore:", addr.Hex())
 
 				restoreAccountForEthane(addr)
 
