@@ -33,6 +33,7 @@ doStorageTrieUpdate = True # update storage tries or state trie only
 stopWhenErrorOccurs = True # stop simulation when state/storage trie root is generated incorrectly
 doReset = True # in Ethereum mode, do reset or not at the beginning of simulation
 collectDeletedAddresses = True # in Ethanos mode, this should be true to check state correctness
+doRestore = True # in Ethane/Ethanos mode, do restore inactive accounts
 
 # file paths
 blockInfosLogFilePath = "/home/jmlee/go-ethereum/simulator/blockInfos/"
@@ -613,6 +614,9 @@ def checkEthaneStateCorrectness(endBlockNum):
 
 def getRestoreList(startBlockNum, endBlockNum, inactivateEpoch, inactivateCriterion, restoreListVersion):
 
+    if not doRestore:
+        return {}, 100000000, False, 0
+    
     # set restore list file names
     completeRestoreFileName = "restore_list_" + str(startBlockNum) + "_" + str(endBlockNum) \
         + "_"  + str(inactivateEpoch) + "_" + str(inactivateCriterion) + "_complete.json"
@@ -1009,6 +1013,7 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
     restoreList, lastBlockInRestoreList, incompleteRestoreList, restoreListVersion = getRestoreList(startBlockNum, endBlockNum, inactivateEpoch, inactivateCriterion, restoreListVersion)
 
     # initialize
+    if doReset:
     reset()
     updateCount = 0
     stateReadCount = 0
@@ -1192,6 +1197,7 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
     restoreList, lastBlockInRestoreList, incompleteRestoreList, restoreListVersion = getRestoreList(startBlockNum, endBlockNum, inactivateCriterion, inactivateCriterion, restoreListVersion)
 
     # initialize
+    if doReset:
     reset()
     updateCount = 0
     stateReadCount = 0
@@ -1528,7 +1534,8 @@ if __name__ == "__main__":
     doStorageTrieUpdate = True
     stopWhenErrorOccurs = True
     doReset = True
-    collectDeletedAddresses = True
+    collectDeletedAddresses = False
+    doRestore = True
     # set simulation mode (0: original Ethereum, 1: Ethane, 2: Ethanos)
     simulationMode = 0
     # set simulation params
