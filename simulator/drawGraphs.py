@@ -413,9 +413,165 @@ def drawGraphsForBlockInfosCompare(startBlockNum, endBlockNum, deleteEpoch, inac
 
     print("drawing", graphName, "  -> success\n")
 
+    # get statistics
+    avgProofSizesEthane = []
+    avgProofSizesEthanos = []
+    restoredAccountNum = 0
+    bloomFilterNum = 0
+    merkleProofNum = 0
+    MAX_PROOF_SIZE = 99999999999
+    minProofSizeEthane = MAX_PROOF_SIZE
+    minProofSizeEthanos = MAX_PROOF_SIZE
+    maxProofSizeEthane = 0
+    maxProofSizeEthanos = 0
+    maxProofBlockNumEthane = 0
+    maxProofBlockNumEthanos = 0
+    restorationNumEthane = 0
+    restorationNumEthanos = 0
+    totalRestorationNumEthane = 0
+    totalRestorationNumEthanos = 0
+    merkleProofSizeEthane = 0
+    merkleProofSizeEthanos = 0
+
+    voidMerkleProofNumAtMaxProof = 0
+    firstEpochNumAtMaxProof = 0
 
 
+    epochNum = 1
 
+    for bn in blockNums:
+
+        # get avg restore proof size per block
+        if (bn+1) % inactivateCriterion != 0:
+            # for Ethane
+            restorationNum = blockInfosLogs[1][35][bn]
+            restorationNumEthane += restorationNum
+            merkleProofsSize = blockInfosLogs[1][39][bn]
+            merkleProofSizeEthane += merkleProofsSize
+            minProofSize = blockInfosLogs[1][48][bn]
+            maxProofSize = blockInfosLogs[1][49][bn]
+            if restorationNum != 0:
+                avgProofSize = int(merkleProofsSize/restorationNum)
+                avgProofSizesEthane.append(avgProofSize)
+                if minProofSizeEthane > minProofSize:
+                    minProofSizeEthane = minProofSize
+                if maxProofSizeEthane < maxProofSize:
+                    maxProofSizeEthane = maxProofSize
+                    maxProofBlockNumEthane = bn
+
+            # for Ethanos
+            restorationNum = blockInfosLogs[2][35][bn]
+            restorationNumEthanos += restorationNum
+            merkleProofsSize = blockInfosLogs[2][39][bn]
+            merkleProofSizeEthanos += merkleProofsSize
+            minProofSize = blockInfosLogs[2][48][bn]
+            maxProofSize = blockInfosLogs[2][49][bn]
+            if restorationNum != 0:
+                avgProofSize = int(merkleProofsSize/restorationNum)
+                avgProofSizesEthanos.append(avgProofSize)
+
+                restoredAccountNum += blockInfosLogs[2][36][bn]
+                bloomFilterNum += blockInfosLogs[2][37][bn]
+                merkleProofNum += blockInfosLogs[2][38][bn]
+                if minProofSizeEthanos > minProofSize:
+                    minProofSizeEthanos = minProofSize
+                if maxProofSizeEthanos < maxProofSize:
+                    maxProofSizeEthanos = maxProofSize
+                    maxProofBlockNumEthanos = bn
+                    voidMerkleProofNumAtMaxProof = blockInfosLogs[2][50][bn]
+                    firstEpochNumAtMaxProof = blockInfosLogs[2][51][bn]
+
+        # show statistics
+        else:
+            # print("\nat epoch", epochNum)
+            divScale = 1000 # (10^3: KB, 10^6: MB, 10^9: GB)
+
+            # tex code to draw box plot
+            print("\t% at epoch", epochNum)
+            listsToDrawBoxPlot = [avgProofSizesEthane, avgProofSizesEthanos]
+            if minProofSizeEthane == MAX_PROOF_SIZE:
+                minProofSizeEthane = 0
+            if minProofSizeEthanos == MAX_PROOF_SIZE:
+                minProofSizeEthanos = 0
+            minProofSizes = [minProofSizeEthane, minProofSizeEthanos]
+            maxProofSizes = [maxProofSizeEthane, maxProofSizeEthanos]
+            restoreNums = [restorationNumEthane, restorationNumEthanos]
+            totalRestorationNumEthane += restorationNumEthane
+            totalRestorationNumEthanos += restorationNumEthanos
+            merkleProofSizes = [merkleProofSizeEthane, merkleProofSizeEthanos]
+            maxProofBlockNums = [maxProofBlockNumEthane, maxProofBlockNumEthanos]
+            index = 0
+            for myList in listsToDrawBoxPlot:
+
+                if len(myList) == 0:
+                    myList = [0]
+                
+                # min = np.percentile(myList, 0)
+                min = minProofSizes[index]
+                q1 = np.percentile(myList, 25)
+                # med = median(myList)
+                if restoreNums[index] != 0:
+                    med = merkleProofSizes[index]/restoreNums[index]
+                else:
+                    med = 0
+                q3 = np.percentile(myList, 75)
+                iqr = q3 - q1
+                # max = np.percentile(myList, 100)
+                max = maxProofSizes[index]
+                
+
+                myListWithoutOutliers = [x for x in myList if x >= q1 - 1.5*iqr]
+                myListWithoutOutliers.sort()
+                lowerWhisker = myListWithoutOutliers[0]
+
+                myListWithoutOutliers = [x for x in myList if x <= q3 + 1.5*iqr]
+                myListWithoutOutliers.sort()
+                upperWhisker = myListWithoutOutliers[-1]
+
+                print("\t\\addplot+ [boxplot prepared={")
+                # print("\t\tlower whisker=", round(min/divScale, 2), ", lower quartile=", round(q1/divScale, 2), \
+                #     ", median=", round(med/divScale, 2), ", upper quartile=", round(q3/divScale, 2), ", upper whisker=", round(max/divScale, 2))
+                print("\t\tlower whisker=", round(min/divScale, 2), ", lower quartile=", round(med/divScale, 2)-0.01, \
+                    ", median=", round(med/divScale, 2), ", upper quartile=", round(med/divScale, 2)+0.01, ", upper whisker=", round(max/divScale, 2))
+                print("\t}] coordinates {};")
+                print("\t% => lower whisker:", round(lowerWhisker/divScale, 2), "/ upper whisker:", round(upperWhisker/divScale, 2))
+                print("\t% => min:", round(min/divScale, 2), "/ max:", round(max/divScale, 2))
+                print("\t% => bn with max proof:", maxProofBlockNums[index])
+                if index == 1:
+                    print("\t% => void Merkle Proof Num At Max Proof:", voidMerkleProofNumAtMaxProof)
+                    print("\t% => first Epoch Num At Max Proof:", firstEpochNumAtMaxProof)
+                index += 1
+            
+            # Ethanos void proof ratio: bloom filter vs merkle proof
+            voidMerkleProofNum = merkleProofNum - restoredAccountNum
+            if bloomFilterNum != 0 or voidMerkleProofNum != 0:
+                print("\t% => bloom filter num:", bloomFilterNum, "/ void merkle proof num:", voidMerkleProofNum, "(", round(bloomFilterNum/(bloomFilterNum+voidMerkleProofNum)*100, 2), "% )")
+            else:
+                print("\t% => bloom filter num:", bloomFilterNum, "/ void merkle proof num:", voidMerkleProofNum, "(no void proof)")
+
+            print("")
+            # go to next epoch
+            epochNum += 1
+            avgProofSizesEthane = []
+            avgProofSizesEthanos = []
+            restoredAccountNum = 0
+            bloomFilterNum = 0
+            merkleProofNum = 0
+            minProofSizeEthane = MAX_PROOF_SIZE
+            minProofSizeEthanos = MAX_PROOF_SIZE
+            maxProofSizeEthane = 0
+            maxProofSizeEthanos = 0
+            maxProofBlockNumEthane = 0
+            maxProofBlockNumEthanos = 0
+            restorationNumEthane = 0
+            restorationNumEthanos = 0
+            merkleProofSizeEthane = 0
+            merkleProofSizeEthanos = 0
+            voidMerkleProofNumAtMaxProof = 0
+            firstEpochNumAtMaxProof = 0
+    
+    print("total restore num ethane:", totalRestorationNumEthane)
+    print("total restore num ethanos:", totalRestorationNumEthanos)
 
 # draw graphs for block infos log file
 def drawGraphsForTrieInspects(simulMode, startBlockNum, endBlockNum, deleteEpoch=0, inactivateEpoch=0, inactivateCriterion=0):
