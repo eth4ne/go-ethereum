@@ -1385,7 +1385,7 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
     # print("create log file:", logFileName)
 
 # inspect tries after simulation for ethereum
-def inspectTriesEthereum(startBlockNum, endBlockNum, inactivateCriterion):
+def inspectTriesEthereum(startBlockNum, endBlockNum, trieInspectIntervals):
 
     print("inspectTriesEthereum() start")
     totalStartTime = datetime.now()
@@ -1393,7 +1393,7 @@ def inspectTriesEthereum(startBlockNum, endBlockNum, inactivateCriterion):
     delimiter = " "
 
     blockInfosLogFileName = "ethereum_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + ".txt"
-    trieInspectLogFileName = "ethereum_simulate_trie_inspects_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateCriterion) + ".txt"
+    trieInspectLogFileName = "ethereum_simulate_trie_inspects_" + str(startBlockNum) + "_" + str(endBlockNum) + ".txt"
 
     blockInfosFile = open(blockInfosLogFilePath+blockInfosLogFileName, 'r')
     if os.path.exists(trieInspectsLogFilePath+trieInspectLogFileName):
@@ -1411,7 +1411,7 @@ def inspectTriesEthereum(startBlockNum, endBlockNum, inactivateCriterion):
         # print("blockNum:", blockNum)
 
         # inspect trie
-        if (blockNum+1) % inactivateCriterion == 0:
+        if (blockNum+1) in trieInspectIntervals:
             activeTrieRoot = params[0]
             startTime = datetime.now()
             nodeStat = inspectSubTrie(activeTrieRoot)[0]
@@ -1427,7 +1427,7 @@ def inspectTriesEthereum(startBlockNum, endBlockNum, inactivateCriterion):
     print("total trie inspect time:", datetime.now()-totalStartTime)
 
 # inspect tries after simulation for ethane
-def inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion):
+def inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion, trieInspectIntervals):
 
     print("inspectTriesEthane() start")
     totalStartTime = datetime.now()
@@ -1455,8 +1455,8 @@ def inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch,
         blockNum = int(params[2])
         # print("blockNum:", blockNum)
 
-        # inspect max active trie (before delete/inactivate)
-        if (blockNum+2) % inactivateCriterion == 0:
+        # inspect active trie
+        if (blockNum+2) in trieInspectIntervals:
             activeTrieRoot = params[0]
             inactiveTrieRoot = params[1]
 
@@ -1471,8 +1471,8 @@ def inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch,
             log = str(blockNum) + delimiter + activeTrieRoot + delimiter + activeNodeStat + inactiveTrieRoot + delimiter + inactiveNodeStat + "\n"
             trieInspectFile.write(log)
 
-        # inspect max inactive trie (after inactivate)
-        if (blockNum+1) % inactivateCriterion == 0:
+        # inspect inactive trie
+        if (blockNum+1) in trieInspectIntervals:
             activeTrieRoot = params[0]
             inactiveTrieRoot = params[1]
 
@@ -1492,7 +1492,7 @@ def inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch,
     print("total trie inspect time:", datetime.now()-totalStartTime)
 
 # inspect tries after simulation for Ethanos (same as inspectTriesEthereum())
-def inspectTriesEthanos(startBlockNum, endBlockNum, inactivateCriterion):
+def inspectTriesEthanos(startBlockNum, endBlockNum, inactivateCriterion, trieInspectIntervals):
 
     print("inspectTriesEthanos() start")
     totalStartTime = datetime.now()
@@ -1518,7 +1518,7 @@ def inspectTriesEthanos(startBlockNum, endBlockNum, inactivateCriterion):
         # print("blockNum:", blockNum)
 
         # inspect trie
-        if (blockNum+1) % inactivateCriterion == 0:
+        if (blockNum+1) in trieInspectIntervals:
             activeTrieRoot = params[0]
             startTime = datetime.now()
             nodeStat = inspectSubTrie(activeTrieRoot)[0]
@@ -1561,22 +1561,23 @@ if __name__ == "__main__":
     deleteEpoch = 10000
     inactivateEpoch = 10000
     inactivateCriterion = 10000
+    trieInspectIntervals = range(6000000, endBlockNum+1, 1000000)
     fromLevel = 0 # how many parent nodes to omit in Merkle proofs
 
     # run simulation
     if simulationMode == 0:
         # replay txs in Ethereum for Ethereum
         simulateEthereum(startBlockNum, endBlockNum)
-        inspectTriesEthereum(startBlockNum, endBlockNum, inactivateCriterion)
+        inspectTriesEthereum(startBlockNum, endBlockNum, trieInspectIntervals)
     elif simulationMode == 1:
          # replay txs in Ethereum for Ethane
         simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion, fromLevel)
-        inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
+        inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion, trieInspectIntervals)
         # checkEthaneStateCorrectness(endBlockNum)
     elif simulationMode == 2:
         # replay txs in Ethereum for Ethanos
         simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel)
-        inspectTriesEthanos(startBlockNum, endBlockNum, inactivateCriterion)
+        inspectTriesEthanos(startBlockNum, endBlockNum, inactivateCriterion, trieInspectIntervals)
         # checkEthanosStateCorrectness(endBlockNum)
     else:
         print("wrong mode:", simulationMode)
