@@ -20,7 +20,6 @@ import (
 	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/holiman/uint256"
@@ -393,21 +392,16 @@ func opExtCodeCopy(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext)
 // opExtCodeHash returns the code hash of a specified account.
 // There are several cases when the function is called, while we can relay everything
 // to `state.GetCodeHash` function to ensure the correctness.
-//
-//	(1) Caller tries to get the code hash of a normal contract account, state
-//
+//   (1) Caller tries to get the code hash of a normal contract account, state
 // should return the relative code hash and set it as the result.
 //
-//	(2) Caller tries to get the code hash of a non-existent account, state should
-//
+//   (2) Caller tries to get the code hash of a non-existent account, state should
 // return common.Hash{} and zero will be set as the result.
 //
-//	(3) Caller tries to get the code hash for an account without contract code,
-//
+//   (3) Caller tries to get the code hash for an account without contract code,
 // state should return emptyCodeHash(0xc5d246...) as the result.
 //
-//	(4) Caller tries to get the code hash of a precompiled account, the result
-//
+//   (4) Caller tries to get the code hash of a precompiled account, the result
 // should be zero or emptyCodeHash.
 //
 // It is worth noting that in order to avoid unnecessary create and clean,
@@ -416,12 +410,10 @@ func opExtCodeCopy(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext)
 // If the precompile account is not transferred any amount on a private or
 // customized chain, the return value will be zero.
 //
-//	(5) Caller tries to get the code hash for an account which is marked as suicided
-//
+//   (5) Caller tries to get the code hash for an account which is marked as suicided
 // in the current transaction, the code hash of this account should be returned.
 //
-//	(6) Caller tries to get the code hash for an account which is marked as deleted,
-//
+//   (6) Caller tries to get the code hash for an account which is marked as deleted,
 // this account should be regarded as a non-existent account and zero should be returned.
 func opExtCodeHash(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	slot := scope.Stack.peek()
@@ -443,15 +435,6 @@ func opGasprice(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([
 func opBlockhash(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	num := scope.Stack.peek()
 	num64, overflow := num.Uint64WithOverflow()
-
-	// stage1-substate: convert vm.StateDB to state.StateDB and save block hash
-	defer func() {
-		statedb, ok := interpreter.evm.StateDB.(*state.StateDB)
-		if ok {
-			statedb.ResearchBlockHashes[num64] = common.BytesToHash(num.Bytes())
-		}
-	}()
-
 	if overflow {
 		num.Clear()
 		return nil, nil
@@ -533,8 +516,6 @@ func opMstore8(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]
 func opSload(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	loc := scope.Stack.peek()
 	hash := common.Hash(loc.Bytes32())
-	// fmt.Println("opSload", scope.Contract.Address(), hash) //jhkim
-	// common.TxReadList[common.GlobalTxHash][scope.Contract.Address()].Storage[loc.Bytes32()] = hash // opSstore에서 txwritelist처럼 무슨 문제가 생길지 몰라서 위치 바꿔야할듯?
 	val := interpreter.evm.StateDB.GetState(scope.Contract.Address(), hash)
 	loc.SetBytes(val.Bytes())
 	return nil, nil
@@ -596,17 +577,6 @@ func opGas(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte
 	return nil, nil
 }
 
-func deletebyKey(key common.Address, lst []common.Address) []common.Address {
-	newlst := []common.Address{}
-	for i, v := range lst {
-		if v == key {
-			newlst = append(lst[:i], lst[i+1:]...)
-		}
-	}
-	return newlst
-}
-
-// jhkim: contract creates new account
 func opCreate(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	if interpreter.readOnly {
 		return nil, ErrWriteProtection
@@ -630,30 +600,14 @@ func opCreate(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 		bigVal = value.ToBig()
 	}
 
-	res, addr, returnGas, suberr := interpreter.evm.Create(scope.Contract, input, gas, bigVal) // contract deploy by internal tx?
-
-	// jhkim: caching internally created address
-	//fmt.Println("!@!@1", common.GlobalBlockNumber, common.GlobalTxHash, common.TxDetail[common.GlobalTxHash])
-	//fmt.Println("!@!@1", common.TxDetail[common.GlobalTxHash].InternalDeployedAddress)
-	if len(common.TxDetail[common.GlobalTxHash].InternalDeployedAddress) == 0 {
-		common.TxDetail[common.GlobalTxHash].InternalDeployedAddress = []common.Address{addr}
-	} else {
-		common.TxDetail[common.GlobalTxHash].InternalDeployedAddress = append(common.TxDetail[common.GlobalTxHash].InternalDeployedAddress, addr)
-	}
-
+	res, addr, returnGas, suberr := interpreter.evm.Create(scope.Contract, input, gas, bigVal)
 	// Push item on the stack based on the returned error. If the ruleset is
 	// homestead we must check for CodeStoreOutOfGasError (homestead only
 	// rule) and treat as an error, if the ruleset is frontier we must
 	// ignore this error and pretend the operation was successful.
 	if interpreter.evm.chainRules.IsHomestead && suberr == ErrCodeStoreOutOfGas {
-		deletebyKey(addr, common.TxDetail[common.GlobalTxHash].InternalDeployedAddress)
-		delete(common.TxWriteList[common.GlobalTxHash], addr)
-		// fmt.Println(common.GlobalBlockNumber, "delete1", addr, "from internalDeployed address and txwritelist")
 		stackvalue.Clear()
 	} else if suberr != nil && suberr != ErrCodeStoreOutOfGas {
-		deletebyKey(addr, common.TxDetail[common.GlobalTxHash].InternalDeployedAddress)
-		delete(common.TxWriteList[common.GlobalTxHash], addr)
-		// fmt.Println(common.GlobalBlockNumber, "delete2", addr, "from internalDeployed address and txwritelist")
 		stackvalue.Clear()
 	} else {
 		stackvalue.SetBytes(addr.Bytes())
@@ -670,7 +624,6 @@ func opCreate(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 }
 
 func opCreate2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-
 	if interpreter.readOnly {
 		return nil, ErrWriteProtection
 	}
@@ -694,24 +647,8 @@ func opCreate2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]
 	}
 	res, addr, returnGas, suberr := interpreter.evm.Create2(scope.Contract, input, gas,
 		bigEndowment, &salt)
-
-	// jhkim: caching internally created address
-	//fmt.Println("!@!@2", common.GlobalBlockNumber, common.GlobalTxHash, common.TxDetail[common.GlobalTxHash])
-	//fmt.Println("!@!@2", common.TxDetail[common.GlobalTxHash].InternalDeployedAddress)
-	if len(common.TxDetail[common.GlobalTxHash].InternalDeployedAddress) == 0 {
-		common.TxDetail[common.GlobalTxHash].InternalDeployedAddress = []common.Address{addr}
-	} else {
-		common.TxDetail[common.GlobalTxHash].InternalDeployedAddress = append(common.TxDetail[common.GlobalTxHash].InternalDeployedAddress, addr)
-	}
-	// path := common.Path + "create2/Create2_" + strconv.Itoa(common.GlobalBlockNumber) + "_" + common.GlobalTxHash.Hex()
-	// f, _ := os.Create(path)
-	// defer f.Close()
-	//panic(0)
 	// Push item on the stack based on the returned error.
 	if suberr != nil {
-		deletebyKey(addr, common.TxDetail[common.GlobalTxHash].InternalDeployedAddress)
-		delete(common.TxWriteList[common.GlobalTxHash], addr)
-		// fmt.Println(common.GlobalBlockNumber, "delete3", addr, "from internalDeployed address and txwritelist")
 		stackvalue.Clear()
 	} else {
 		stackvalue.SetBytes(addr.Bytes())
@@ -789,7 +726,6 @@ func opCallCode(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([
 	}
 
 	ret, returnGas, err := interpreter.evm.CallCode(scope.Contract, toAddr, args, gas, bigVal)
-
 	if err != nil {
 		temp.Clear()
 	} else {

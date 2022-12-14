@@ -156,7 +156,6 @@ var (
 		utils.GpoMaxGasPriceFlag,
 		utils.GpoIgnoreGasPriceFlag,
 		utils.MinerNotifyFullFlag,
-
 		configFileFlag,
 	}
 

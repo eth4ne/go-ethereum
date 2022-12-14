@@ -18,7 +18,6 @@ package trie
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -90,20 +89,15 @@ func (t *SecureTrie) TryGetNode(path []byte) ([]byte, int, error) {
 
 // TryUpdate account will abstract the write of an account to the
 // secure trie.
-func (t *SecureTrie) TryUpdateAccount(key []byte, acc *types.StateAccount, txHash common.Hash) error {
+func (t *SecureTrie) TryUpdateAccount(key []byte, acc *types.StateAccount) error {
 	hk := t.hashKey(key)
 	data, err := rlp.EncodeToBytes(acc)
 	if err != nil {
 		return err
 	}
-
 	if err := t.trie.TryUpdate(hk, data); err != nil {
 		return err
-	} else if t.trie.Hash() == common.HexToHash("0x0") {
-		fmt.Println("0x0 root hash, because only read cached node. After commit or some cache calculation, it will be reflected")
-		os.Exit(0)
 	}
-
 	t.getSecKeyCache()[string(hk)] = common.CopyBytes(key)
 	return nil
 }
@@ -129,17 +123,6 @@ func (t *SecureTrie) Update(key, value []byte) {
 //
 // If a node was not found in the database, a MissingNodeError is returned.
 func (t *SecureTrie) TryUpdate(key, value []byte) error {
-	hk := t.hashKey(key)
-	err := t.trie.TryUpdate(hk, value)
-	if err != nil {
-		return err
-	}
-	t.getSecKeyCache()[string(hk)] = common.CopyBytes(key)
-	return nil
-}
-
-// TryUpdate function for storage trie. write updated slothash of storage trie into common.TxDetail.ContractAddress_SlotHash
-func (t *SecureTrie) MyTryUpdate(key, value []byte, txHash common.Hash, addr common.Address) error {
 	hk := t.hashKey(key)
 	err := t.trie.TryUpdate(hk, value)
 	if err != nil {
@@ -233,18 +216,4 @@ func (t *SecureTrie) getSecKeyCache() map[string][]byte {
 		t.secKeyCache = make(map[string][]byte)
 	}
 	return t.secKeyCache
-}
-
-// get trie of secure trie (jmlee)
-func (t *SecureTrie) Trie() *Trie {
-	return &t.trie
-}
-
-// jhkim
-func (t *SecureTrie) Print() error {
-
-	if t.trie.root != nil {
-		fmt.Println(t.trie.root.toString("", t.trie.db))
-	}
-	return nil
 }

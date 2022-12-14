@@ -112,7 +112,7 @@ func (t *odrTrie) TryGet(key []byte) ([]byte, error) {
 	return res, err
 }
 
-func (t *odrTrie) TryUpdateAccount(key []byte, acc *types.StateAccount, txHash common.Hash) error {
+func (t *odrTrie) TryUpdateAccount(key []byte, acc *types.StateAccount) error {
 	key = crypto.Keccak256(key)
 	value, err := rlp.EncodeToBytes(acc)
 	if err != nil {
@@ -124,20 +124,6 @@ func (t *odrTrie) TryUpdateAccount(key []byte, acc *types.StateAccount, txHash c
 }
 
 func (t *odrTrie) TryUpdate(key, value []byte) error {
-	key = crypto.Keccak256(key)
-	return t.do(key, func() error {
-		return t.trie.TryUpdate(key, value)
-	})
-}
-
-func (t *odrTrie) TryUpdate2(key, value []byte, txHash common.Hash) error {
-	key = crypto.Keccak256(key)
-	return t.do(key, func() error {
-		return t.trie.TryUpdate(key, value)
-	})
-}
-
-func (t *odrTrie) MyTryUpdate(key, value []byte, txHash common.Hash, addr common.Address) error {
 	key = crypto.Keccak256(key)
 	return t.do(key, func() error {
 		return t.trie.TryUpdate(key, value)
@@ -175,11 +161,6 @@ func (t *odrTrie) GetKey(sha []byte) []byte {
 
 func (t *odrTrie) Prove(key []byte, fromLevel uint, proofDb ethdb.KeyValueWriter) error {
 	return errors.New("not implemented, needs client/server interface split")
-}
-
-// jhkim: empty function
-func (t *odrTrie) Print() error {
-	return nil
 }
 
 // do tries and retries to execute a function until it returns with no error or

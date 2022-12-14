@@ -19,11 +19,8 @@ package misc
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"math/big"
-	"os"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
@@ -43,11 +40,10 @@ var (
 // ensure it conforms to DAO hard-fork rules.
 //
 // DAO hard-fork extension to the header validity:
-//
-//	a) if the node is no-fork, do not accept blocks in the [fork, fork+10) range
-//	   with the fork specific extra-data set
-//	b) if the node is pro-fork, require blocks in the specific range to have the
-//	   unique extra-data set.
+//   a) if the node is no-fork, do not accept blocks in the [fork, fork+10) range
+//      with the fork specific extra-data set
+//   b) if the node is pro-fork, require blocks in the specific range to have the
+//      unique extra-data set.
 func VerifyDAOHeaderExtraData(config *params.ChainConfig, header *types.Header) error {
 	// Short circuit validation if the node doesn't care about the DAO fork
 	if config.DAOForkBlock == nil {
@@ -81,78 +77,9 @@ func ApplyDAOHardFork(statedb *state.StateDB) {
 		statedb.CreateAccount(params.DAORefundContract)
 	}
 
-	path := common.Path + "DAOHardFork.txt"
-	f, err := os.Create(path)
-	if err != nil {
-		fmt.Println("Write DAOHardFork state transition fail", err)
-		os.Exit(1)
-	}
-	defer f.Close()
-
-	fmt.Fprintln(f, "*HardFork")
-	// fmt.Fprintln(f, "!TxHash:", common.HexToHash("0xDA0"))
-	// fmt.Fprintln(f, "Type:", nil)
-	// fmt.Fprintln(f, "From:", nil)
-	// fmt.Fprintln(f, "To:", nil)
-
-	fmt.Fprintln(f, "@ReadList")
-	fmt.Fprintf(f, ".address:%v\n", params.DAORefundContract)
-	for _, addr := range params.DAODrainList() {
-		fmt.Fprintf(f, ".address:%v\n", addr)
-	}
-
 	// Move every DAO account and extra-balance account funds into the refund contract
-	fmt.Fprintln(f, "#WriteList")
 	for _, addr := range params.DAODrainList() {
 		statedb.AddBalance(params.DAORefundContract, statedb.GetBalance(addr))
 		statedb.SetBalance(addr, new(big.Int))
-
-		// jhkim: write DAO Hardfork substate for txSubstate
-		// DAO drainlist
-		fmt.Fprintf(f, ".address:%v\n", addr)
-		fmt.Fprintf(f, "Nonce:%v\n", statedb.GetNonce(addr))
-		fmt.Fprintf(f, "Balance:%v\n", statedb.GetBalance(addr))
-		fmt.Fprintf(f, "CodeHash:%v\n", statedb.GetCodeHash(addr))
-		fmt.Fprintf(f, "StorageRoot:%v\n", statedb.GetStorageTrieHash(addr))
-		if statedb.GetStorageTrieHash(addr) != types.EmptyRootHash {
-			fmt.Fprintln(f, "Storage:")
-			statedb.ForEachStorage(addr, func(key, value common.Hash) bool {
-				fmt.Fprint(f, "slot:", key, ",value:")
-				tmp := common.TrimLeftZeroes(value[:])
-				if len(tmp) != 0 {
-					fmt.Fprintf(f, "0x%v\n", common.Bytes2Hex(tmp))
-					// s += fmt.Sprintf("0x%v\n", common.Bytes2Hex(tmp))
-				} else {
-					fmt.Fprintln(f, "0x0")
-					// s += fmt.Sprintln("0x0")
-				}
-				return true
-			})
-
-		}
 	}
-
-	// jhkim: DAO refund Contract
-	fmt.Fprintf(f, ".address:%v\n", params.DAORefundContract)
-	fmt.Fprintf(f, "Nonce:%v\n", statedb.GetNonce(params.DAORefundContract))
-	fmt.Fprintf(f, "Balance:%v\n", statedb.GetBalance(params.DAORefundContract))
-	fmt.Fprintf(f, "CodeHash:%v\n", statedb.GetCodeHash(params.DAORefundContract))
-	fmt.Fprintf(f, "StorageRoot:%v\n", statedb.GetStorageTrieHash(params.DAORefundContract))
-	if statedb.GetStorageTrieHash(params.DAORefundContract) != types.EmptyRootHash {
-		fmt.Fprintln(f, "Storage:")
-		statedb.ForEachStorage(params.DAORefundContract, func(key, value common.Hash) bool {
-			fmt.Fprint(f, "slot:", key, ",value")
-			tmp := common.TrimLeftZeroes(value[:])
-			if len(tmp) != 0 {
-				fmt.Fprintf(f, "0x%v\n", common.Bytes2Hex(tmp))
-				// s += fmt.Sprintf("0x%v\n", common.Bytes2Hex(tmp))
-			} else {
-				fmt.Fprintln(f, "0x0")
-				// s += fmt.Sprintln("0x0")
-			}
-			return true
-		})
-
-	}
-
 }

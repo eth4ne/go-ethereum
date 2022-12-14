@@ -26,7 +26,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethdb/memorydb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 )
@@ -554,8 +553,7 @@ func (t *Trie) Commit(onleaf LeafCallback) (common.Hash, int, error) {
 			h.commitLoop(t.db)
 		}()
 	}
-	// newRoot, committed, err := h.Commit(t.root, t.db)
-	newRoot, committed, err := h.Commit(t, t.root, t.db) //jhkim: add trie argument to use trie.Print
+	newRoot, committed, err := h.Commit(t.root, t.db)
 	if onleaf != nil {
 		// The leafch is created in newCommitter if there was an onleaf callback
 		// provided. The commitLoop only _reads_ from it, and the commit
@@ -588,51 +586,4 @@ func (t *Trie) hashRoot() (node, node, error) {
 func (t *Trie) Reset() {
 	t.root = nil
 	t.unhashed = 0
-}
-
-// print trie nodes details in human readable form (jmlee)
-func (t *Trie) Print() {
-	if t.root != nil {
-		fmt.Println(t.root.toString("", t.db))
-	}
-}
-
-// func (t *Trie) Print() string {
-// 	return t.root.toString("", t.db)
-// }
-
-// get trie's db size (jmlee)
-func (t *Trie) Size() common.StorageSize {
-	size, _ := t.db.Size()
-	return size
-}
-
-// make empty trie (jmlee)
-func NewEmpty() *Trie {
-	trie, _ := New(common.Hash{}, NewDatabase(memorydb.New()))
-	return trie
-}
-
-// get shortnode's size (for debugging)
-func getShortnodeSize(n shortNode) int {
-	h := newHasher(false)
-	defer returnHasherToPool(h)
-	collapsed, _ := h.hashShortNodeChildren(&n)
-	h.tmp.Reset()
-	if err := rlp.Encode(&h.tmp, collapsed); err != nil {
-		panic("encode error: " + err.Error())
-	}
-	return len(h.tmp)
-}
-
-// get fullnode's size (for debugging)
-func getFullnodeSize(n fullNode) int {
-	h := newHasher(false)
-	defer returnHasherToPool(h)
-	collapsed, _ := h.hashFullNodeChildren(&n)
-	h.tmp.Reset()
-	if err := rlp.Encode(&h.tmp, collapsed); err != nil {
-		panic("encode error: " + err.Error())
-	}
-	return len(h.tmp)
 }

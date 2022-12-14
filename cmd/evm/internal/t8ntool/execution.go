@@ -244,9 +244,9 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 			reward.Sub(reward, big.NewInt(0).SetUint64(ommer.Delta))
 			reward.Mul(reward, blockReward)
 			reward.Div(reward, big.NewInt(8))
-			statedb.AddBalance2(ommer.Address, reward) //jhkim
+			statedb.AddBalance(ommer.Address, reward)
 		}
-		statedb.AddBalance2(pre.Env.Coinbase, minerReward) //jhkim
+		statedb.AddBalance(pre.Env.Coinbase, minerReward)
 	}
 	// Commit block
 	root, err := statedb.Commit(chainConfig.IsEIP158(vmContext.BlockNumber))

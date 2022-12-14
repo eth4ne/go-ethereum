@@ -69,7 +69,6 @@ type stateObject struct {
 	data     types.StateAccount
 	db       *StateDB
 
-	txHash common.Hash //jhkim
 	// DB error.
 	// State objects are used by the consensus core and VM which are
 	// unable to deal with database-level errors. Any error that occurs
@@ -92,13 +91,6 @@ type stateObject struct {
 	dirtyCode bool // true if the code was updated
 	suicided  bool
 	deleted   bool
-
-	// stage1-substate: stateObject.ResearchTouched
-	// jhkim: read를 위한 touch와 write를 위한 touch를 구분하자?
-	ResearchTouched      map[common.Hash]struct{}
-	ResearchTouchedWrite map[common.Hash]struct{}
-
-	TxStorage map[common.Hash]Storage
 }
 
 // empty returns whether the account is considered empty.
@@ -125,12 +117,6 @@ func newObject(db *StateDB, address common.Address, data types.StateAccount) *st
 		originStorage:  make(Storage),
 		pendingStorage: make(Storage),
 		dirtyStorage:   make(Storage),
-
-		txHash: common.Hash{}, //jhkim
-		// stage1-substate: init stateObject.ResearchTouched
-		ResearchTouched:      make(map[common.Hash]struct{}),
-		ResearchTouchedWrite: make(map[common.Hash]struct{}),
-		TxStorage:            make(map[common.Hash]Storage),
 	}
 }
 
@@ -184,32 +170,17 @@ func (s *stateObject) getTrie(db Database) Trie {
 
 // GetState retrieves a value from the account storage trie.
 func (s *stateObject) GetState(db Database, key common.Hash) common.Hash {
-	// stage1-substate: mark keys touched by GetState
-	// fmt.Println("  GetState key", key)
-	if _, exist := s.ResearchTouched[key]; !exist {
-
-		s.ResearchTouched[key] = struct{}{}
-	}
-
 	// If the fake storage is set, only lookup the state here(in the debugging mode)
 	if s.fakeStorage != nil {
-		tmp := s.fakeStorage[key]
-		// fmt.Println("GetState1 /addr:", s.address, "/slotHash:", key, "/value:", tmp)
-
-		return tmp
+		return s.fakeStorage[key]
 	}
 	// If we have a dirty value for this state entry, return it
 	value, dirty := s.dirtyStorage[key]
 	if dirty {
-		// fmt.Println("    >>>> From dirty read/ blocknumber:", common.GlobalBlockNumber, "tx:", common.GlobalTxHash, "key:", key, "value:", value)
-		// fmt.Println("GetState2 /addr:", s.address, "/slotHash:", key, "/value:", value)
 		return value
 	}
 	// Otherwise return the entry's original value
-	//jhkim
-	tmp := s.GetCommittedState(db, key)
-	// fmt.Println("GetState3 /addr:", s.address, "/slotHash:", key, "/value:", tmp)
-	return tmp
+	return s.GetCommittedState(db, key)
 }
 
 // GetCommittedState retrieves a value from the committed account storage trie.
@@ -249,8 +220,7 @@ func (s *stateObject) GetCommittedState(db Database, key common.Hash) common.Has
 	// If the snapshot is unavailable or reading from it fails, load from the database.
 	if s.db.snap == nil || err != nil {
 		start := time.Now()
-		enc, err = s.getTrie(db).TryGet(key.Bytes()) // jhkim: 캐싱된것 없을때 진짜로 db에서 가져오는 자리
-
+		enc, err = s.getTrie(db).TryGet(key.Bytes())
 		if metrics.EnabledExpensive {
 			s.db.StorageReads += time.Since(start)
 		}
@@ -267,7 +237,6 @@ func (s *stateObject) GetCommittedState(db Database, key common.Hash) common.Has
 		}
 		value.SetBytes(content)
 	}
-	// fmt.Println("    >>>> Real storage read/ blocknumber:", common.GlobalBlockNumber, "tx:", common.GlobalTxHash, "key:", key, "value:", value)
 	s.originStorage[key] = value
 	return value
 }
@@ -279,35 +248,17 @@ func (s *stateObject) SetState(db Database, key, value common.Hash) {
 		s.fakeStorage[key] = value
 		return
 	}
-
 	// If the new value is the same as old, don't set
-	prev := s.GetState(db, key) // jhkim: 모든 stateobject의 setstate에는 getstate가 먼저 이루어진다.
-	// if value != common.HexToHash("0x0") {
-	// 	fmt.Println("   SetState", key, "value:", prev, "->", value)
-	// } else {
-	// 	fmt.Println("   SetState 0 value", key, "value:", prev, "->", value)
-	// }
-
-	if _, exist := s.ResearchTouchedWrite[key]; !exist {
-		s.ResearchTouchedWrite[key] = struct{}{}
-	}
-
+	prev := s.GetState(db, key)
 	if prev == value {
-		// delete(common.TxWriteList[common.GlobalTxHash][s.address].Storage, key) // jhkim
 		return
 	}
-
 	// New value is different, update and journal the change
 	s.db.journal.append(storageChange{
 		account:  &s.address,
 		key:      key,
 		prevalue: prev,
 	})
-	if _, exist := s.TxStorage[common.GlobalTxHash]; !exist {
-		s.TxStorage[common.GlobalTxHash] = make(Storage)
-	}
-	s.TxStorage[common.GlobalTxHash][key] = value
-
 	s.setState(key, value)
 }
 
@@ -330,13 +281,7 @@ func (s *stateObject) SetStorage(storage map[common.Hash]common.Hash) {
 }
 
 func (s *stateObject) setState(key, value common.Hash) {
-	// fmt.Println("      setstate", key, value)
-	if _, exist := s.TxStorage[common.GlobalTxHash]; !exist {
-		s.TxStorage[common.GlobalTxHash] = make(Storage)
-	}
-	s.TxStorage[common.GlobalTxHash][key] = value
 	s.dirtyStorage[key] = value
-	// fmt.Println("      setstate: dirtyStorage", s.dirtyStorage)
 }
 
 // finalise moves all dirty storage slots into the pending area to be hashed or
@@ -344,7 +289,6 @@ func (s *stateObject) setState(key, value common.Hash) {
 func (s *stateObject) finalise(prefetch bool) {
 	slotsToPrefetch := make([][]byte, 0, len(s.dirtyStorage))
 	for key, value := range s.dirtyStorage {
-		// fmt.Println("    stateObject.finalise move key value from dirty to pending", key, value)
 		s.pendingStorage[key] = value
 		if value != s.originStorage[key] {
 			slotsToPrefetch = append(slotsToPrefetch, common.CopyBytes(key[:])) // Copy needed for closure
@@ -356,16 +300,11 @@ func (s *stateObject) finalise(prefetch bool) {
 	if len(s.dirtyStorage) > 0 {
 		s.dirtyStorage = make(Storage)
 	}
-
-	// stage1-substate: clear stateObject.ResearchTouched
-	s.ResearchTouched = make(map[common.Hash]struct{})
-	s.ResearchTouchedWrite = make(map[common.Hash]struct{})
 }
 
 // updateTrie writes cached storage modifications into the object's storage trie.
 // It will return nil if the trie has not been loaded and no changes have been made
 func (s *stateObject) updateTrie(db Database) Trie {
-	// fmt.Println("      UpdateTrie", s.txHash, s.address, s.data.Balance)
 	// Make sure all dirty slots are finalized into the pending storage area
 	s.finalise(false) // Don't prefetch anymore, pull directly if need be
 	if len(s.pendingStorage) == 0 {
@@ -384,7 +323,6 @@ func (s *stateObject) updateTrie(db Database) Trie {
 	usedStorage := make([][]byte, 0, len(s.pendingStorage))
 	for key, value := range s.pendingStorage {
 		// Skip noop changes, persist actual changes
-		// fmt.Println("       for key value in range s.pendingStorage", key, value)
 		if value == s.originStorage[key] {
 			continue
 		}
@@ -393,72 +331,11 @@ func (s *stateObject) updateTrie(db Database) Trie {
 		var v []byte
 		if (value == common.Hash{}) {
 			s.setError(tr.TryDelete(key[:]))
-			// fmt.Println(" DELETE")
-			if s.txHash != common.HexToHash("0x0") {
-				// fmt.Println("     ", common.GlobalBlockNumber, s.txHash)
-				// fmt.Println("     MyTryUpdate", s.address, key, common.Bytes2Hex(v))
-				// fmt.Println("     MyTryUpdate", common.TxWriteList[common.GlobalTxHash])
-				// fmt.Println("     MyTryUpdate", common.TxWriteList[common.GlobalTxHash][s.address])
-				// fmt.Println("     MyTryUpdate", common.TxWriteList[common.GlobalTxHash][s.address].Storage)
-				// fmt.Println("     MyTryUpdate", common.TxWriteList[common.GlobalTxHash][s.address].Storage[key])
-				// common.TxWriteList[s.txHash][s.address].Storage[key] = value
-				for txhash, storage := range s.TxStorage {
-					if storage[key] == value {
-						// fmt.Println("WHy1", txhash, s.address, key, value)
-						if _, exist := common.TxWriteList[txhash][s.address]; exist {
-							common.TxWriteList[txhash][s.address].Storage[key] = value
-
-						}
-					}
-				}
-			} else {
-				fmt.Println("delete hardfork obj ", common.GlobalTxHash, key)
-				common.HardFork[s.address].Storage[key] = value
-			}
-
 			s.db.StorageDeleted += 1
 		} else {
 			// Encoding []byte cannot fail, ok to ignore the error.
 			v, _ = rlp.EncodeToBytes(common.TrimLeftZeroes(value[:]))
-			// fmt.Println(" UPDATE")
-			if s.txHash != common.HexToHash("0x0") {
-				// if s.address == common.HexToAddress("0x3dBDc81a6edc94c720B0B88FB65dBD7e395fDcf6") {
-				// 	fmt.Println("check ", s.address, s.txHash, key, value)
-				// }
-				// // fmt.Println("     ", common.GlobalBlockNumber, s.txHash, common.GlobalTxHash)
-				// fmt.Println("     MyTryUpdate", s.txHash, key, common.Bytes2Hex(v))
-				// fmt.Println("     MyTryUpdate", common.TxWriteList[s.txHash])
-				// fmt.Println("     MyTryUpdate", common.TxWriteList[s.txHash][s.address])
-				// fmt.Println("     MyTryUpdate", common.TxWriteList[s.txHash][s.address].Storage)
-				// fmt.Println("     MyTryUpdate", common.TxWriteList[s.txHash][s.address].Storage[key])
-				for txhash, storage := range s.TxStorage {
-					if storage[key] == value {
-						// fmt.Println()
-						// fmt.Println("WHy2", txhash, s.address, key, value)
-
-						if _, exist := common.TxWriteList[txhash][s.address]; exist {
-							// fmt.Println("    WHy2")
-							common.TxWriteList[txhash][s.address].Storage[key] = value
-							sa := common.TxWriteList[txhash][s.address]
-							if s.address == common.HexToAddress("0xbaa54d6e90c3f4d7ebec11bd180134c7ed8ebb52") {
-								fmt.Println("Fy.", s.txHash, txhash, s.address, sa.StorageRoot, sa.Storage)
-								fmt.Println("  insertTrie", key, value, common.TxWriteList[txhash][s.address].Storage[key])
-							}
-							// fmt.Println("    Fuckyou", sa.Balance, sa.StorageRoot, sa.Storage, common.TxWriteList[txhash][s.address].Storage[key])
-
-						}
-
-					}
-				}
-
-			} else {
-				fmt.Println("update hardfork obj ", common.GlobalTxHash, key)
-				common.HardFork[s.address].Storage[key] = value
-			}
-
-			s.setError(tr.MyTryUpdate(key[:], v, s.txHash, s.address)) //jhkim
-			// fmt.Println(" after updatetrie/address", s.address, " storageroot", tr.Hash())
-
+			s.setError(tr.TryUpdate(key[:], v))
 			s.db.StorageUpdated += 1
 		}
 		// If state snapshotting is active, cache the data til commit
@@ -480,28 +357,12 @@ func (s *stateObject) updateTrie(db Database) Trie {
 	if len(s.pendingStorage) > 0 {
 		s.pendingStorage = make(Storage)
 	}
-	if s.address == common.HexToAddress("0xbaa54d6e90c3f4d7ebec11bd180134c7ed8ebb52") {
-		fmt.Println("txhash", s.txHash)
-		fmt.Println("address", s.address)
-		fmt.Println("substatealloc", common.TxWriteList[s.txHash])
-		fmt.Println("substate account", common.TxWriteList[s.txHash][s.address])
-		fmt.Println("s.balance", s.Balance())
-		fmt.Println("s.nonce", s.Nonce())
-
-		fmt.Println("s.dirty Storage", s.dirtyStorage)
-	}
-	// fmt.Println("common.TxWriteList[s.txHash]", common.TxWriteList[s.txHash])
-	if _, exist := common.TxWriteList[s.txHash][s.address]; exist {
-		common.TxWriteList[s.txHash][s.address].StorageRoot = tr.Hash()
-	}
-	// fmt.Println("plz", s.txHash, s.address, common.TxWriteList[s.txHash][s.address].Storage)
 	return tr
 }
 
 // UpdateRoot sets the trie root to the current root hash of
 func (s *stateObject) updateRoot(db Database) {
 	// If nothing changed, don't bother with hashing anything
-	// fmt.Println("    updateRoot")
 	if s.updateTrie(db) == nil {
 		return
 	}
@@ -515,7 +376,6 @@ func (s *stateObject) updateRoot(db Database) {
 // CommitTrie the storage trie of the object to db.
 // This updates the trie root.
 func (s *stateObject) CommitTrie(db Database) (int, error) {
-	// fmt.Println("    CommitTrie", s.txHash, s.address)
 	// If nothing changed, don't bother with hashing anything
 	if s.updateTrie(db) == nil {
 		return 0, nil
@@ -527,14 +387,7 @@ func (s *stateObject) CommitTrie(db Database) (int, error) {
 	if metrics.EnabledExpensive {
 		defer func(start time.Time) { s.db.StorageCommits += time.Since(start) }(time.Now())
 	}
-	// jhkim: commit storage trie
 	root, committed, err := s.trie.Commit(nil)
-	// if common.GlobalBlockNumber == 432361 || common.GlobalBlockNumber == 432368 {
-	// 	fmt.Println("  Print Storage Trie", s.trie.Hash())
-	// 	s.trie.Print()
-
-	// 	fmt.Println()
-	// }
 	if err == nil {
 		s.data.Root = root
 	}
@@ -588,18 +441,6 @@ func (s *stateObject) deepCopy(db *StateDB) *stateObject {
 	stateObject.suicided = s.suicided
 	stateObject.dirtyCode = s.dirtyCode
 	stateObject.deleted = s.deleted
-
-	stateObject.txHash = s.txHash // jhkim
-	// stage1-substate: deepCopy stateObject.ResearchTouched
-	stateObject.ResearchTouched = make(map[common.Hash]struct{})
-	for key := range s.ResearchTouched {
-		stateObject.ResearchTouched[key] = struct{}{}
-	}
-
-	stateObject.ResearchTouchedWrite = make(map[common.Hash]struct{})
-	for key := range s.ResearchTouchedWrite {
-		stateObject.ResearchTouchedWrite[key] = struct{}{}
-	}
 	return stateObject
 }
 
@@ -683,10 +524,6 @@ func (s *stateObject) Balance() *big.Int {
 
 func (s *stateObject) Nonce() uint64 {
 	return s.data.Nonce
-}
-
-func (s *stateObject) StorageRoot() common.Hash {
-	return s.data.Root
 }
 
 // Never called, but must be present to allow stateObject to be used

@@ -178,8 +178,6 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 	// explicit STOP, RETURN or SELFDESTRUCT is executed, an error occurred during
 	// the execution of one of the operations or until the done flag is set by the
 	// parent context.
-
-	// jhkim: 스택에서 opcode와 value를 가져와서 실행하는 loop
 	for {
 		if in.cfg.Debug {
 			// Capture pre-execution values for tracing.
@@ -196,7 +194,7 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 		} else if sLen > operation.maxStack {
 			return nil, &ErrStackOverflow{stackLen: sLen, limit: operation.maxStack}
 		}
-		if !contract.UseGas(cost) { // contract account가 실행할 수 있는 가스가 있는지 확인
+		if !contract.UseGas(cost) {
 			return nil, ErrOutOfGas
 		}
 		if operation.dynamicGas != nil {
@@ -230,8 +228,6 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 			}
 		}
 		if in.cfg.Debug {
-			// jhkim: CaptureState is called for each step of the VM with the current VM state.
-			// TODO: capture state에서 가져올 수 있나?
 			in.cfg.Tracer.CaptureState(pc, op, gasCopy, cost, callContext, in.returnData, in.evm.depth, err)
 			logged = true
 		}
