@@ -2751,9 +2751,6 @@ func makeTestTrie() {
 // just run testLightInactiveTrieUpdate() in main() to test the functionality
 func testLightInactiveTrieUpdate() {
 	fmt.Println("start testLightInactiveTrieUpdate()")
-	for i := 0; i < 16; i++ {
-		trie.ZeroHashNode[i] = 15
-	}
 
 	// set DBs
 	memdb := memorydb.New()
@@ -2837,6 +2834,7 @@ func testLightInactiveTrieUpdate() {
 				os.Exit(1)
 			}
 
+			// check intermediate delete result
 			myTrieRoot := myTrie.Hash().Hex()
 			archiveTrieRoot := archiveTrie.Hash().Hex()
 			if myTrieRoot != archiveTrieRoot {
@@ -2852,7 +2850,7 @@ func testLightInactiveTrieUpdate() {
 		}
 		common.DeletingInactiveTrieFlag = false
 		keysToDelete = make(map[common.Hash]struct{}) // clear map
-		// check result
+		// check final delete result
 		myTrieRoot := myTrie.Hash().Hex()
 		archiveTrieRoot := archiveTrie.Hash().Hex()
 		if myTrieRoot != archiveTrieRoot {
