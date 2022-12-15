@@ -1245,17 +1245,8 @@ func deleteRestoredLeafNodes() {
 	for _, keyToDelete := range common.RestoredKeys {
 		err := inactiveTrie.TryDelete(keyToDelete[:])
 		if err != nil {
-			fmt.Println("ERROR deleteRestoredLeafNodes(): trie.TryDelete ->", err)
-			fmt.Println("  but this might be due to light inactive trie deletion")
-
-			// try once again after hashing nodes
-			// this might be due to light inactive trie deletion
-			inactiveTrie.Hash()
-			err := inactiveTrie.TryDelete(keyToDelete[:])
-			if err != nil {
-				fmt.Println("ERROR deleteRestoredLeafNodes() again: trie.TryDelete ->", err)
-				os.Exit(1)
-			}
+			fmt.Println("ERROR in deleteRestoredLeafNodes(): trie.TryDelete() ->", err)
+			os.Exit(1)
 		}
 	}
 	common.DeletingInactiveTrieFlag = false
@@ -2818,10 +2809,8 @@ func testLightInactiveTrieUpdate() {
 			// fmt.Println("  key to delete:", key.Hex())
 			// fmt.Println("light trie delete start")
 			err1 := myTrie.TryDelete(key[:])
-			myTrie.Hash() // this might be needed
 			// fmt.Println("full trie delete start")
 			err2 := archiveTrie.TryDelete(key[:])
-			archiveTrie.Hash() // this might be needed
 			if err1 != nil {
 				fmt.Println("ERROR: cannot delete trie only with rightmost merkle proofs")
 				fmt.Println("  => error key to delete:", key.Hex())
