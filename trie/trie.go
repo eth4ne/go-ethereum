@@ -22,7 +22,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"os"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -466,39 +465,18 @@ func (t *Trie) delete(n node, prefix, key []byte) (bool, node, error) {
 
 				// for Ethane's light inactive trie delete (jmlee)
 				if common.DeletingInactiveTrieFlag {
+					// if single child node is zeroHashNode, delete full node n as a whole
 					hn, ok := n.Children[pos].(hashNode)
-					if !ok {
-						hn, _ := n.Children[pos].cache()
-						if hn != nil {
-							ok = true
-						}
+					if ok && IsZeroHashNode(hn) {
+						fmt.Println("in trie.delete(): single child is zeroHashNode, delete the full node")
+						return true, nil, nil
 					}
-
-					if ok {
-						if IsZeroHashNode(hn) {
-							// single child node is zero hash node, delete together
-							fmt.Println("in trie.delete(): single child is zeroNode, delete both")
-							return true, nil, nil
-						} else {
-							// mark as zero hash node if single child node is not zero hash node
-							fmt.Println("in trie.delete(): leave zeroNode")
-							n = n.copy()
-							n.flags = t.newFlag()
-							n.Children[key[0]] = ZeroHashNode
-							return true, n, nil
-						}
-					} else {
-						// to reach here, it might be a node whose size is smaller than 32 bytes
-						// thus should be storage trie
-						// but storage trie is not a inactive trie
-						// so this should not happen
-						fmt.Println("ERROR: in trie.delete() for light inactive trie delete: this should not happen")
-						fmt.Println(n.toString("", t.db))
-						fmt.Println("")
-						fmt.Println(n.Children[pos].toString("", t.db))
-						// return false, nil, &MissingNodeError{NodeHash: common.Hash{}, Path: nil}
-						os.Exit(1)
-					}
+					// else, mark deleted child node as a zeroHashNode
+					fmt.Println("in trie.delete(): leave zeroHashNode")
+					n = n.copy()
+					n.flags = t.newFlag()
+					n.Children[key[0]] = ZeroHashNode
+					return true, n, nil
 				}
 
 				// original code
