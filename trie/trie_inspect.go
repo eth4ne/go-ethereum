@@ -389,6 +389,8 @@ type TrieInspectResult struct {
 	ErrorNum        int                // # of error occurence while inspecting the trie
 	AccountBalance  map[string]big.Int // key: addressHash, value: account balance
 
+	ZeroHashNodeNum int // # of zero hash nodes (in Ethane's inactive trie)
+
 	StateTrieFullNodeDepth  [20]int
 	StateTrieShortNodeDepth [20]int
 	StateTrieLeafNodeDepth  [20]int
@@ -450,6 +452,7 @@ func (tir *TrieInspectResult) PrintTrieInspectResult(blockNumber uint64, elapsed
 	output += fmt.Sprintf("  \ttotal size of Leaf nodes storage tries: %d\n", tir.StorageTrieLeafNodeSize)
 
 	output += fmt.Sprintf("  # of errors: %d\n", tir.ErrorNum) // this should be 0, of course
+	output += fmt.Sprintf("  # of zero hash nodes: %d\n", tir.ZeroHashNodeNum)
 
 	fmt.Fprintln(f1, output) // write text file
 	// fmt.Println(output)      // console print
@@ -675,6 +678,7 @@ func (tir *TrieInspectResult) ToNodeStat() common.NodeStat {
 	fmt.Println("avg depth:", avgDepth, "( min:", minDepth, "/ max:", maxDepth, ")")
 	storageNodeStat.Print()
 	fmt.Println(storageNodeStat.ToString(" "), minDepth, avgDepth, maxDepth)
+	fmt.Println("zero hash nodes num:", tir.ZeroHashNodeNum)
 
 	return stateNodeStat
 }
@@ -776,14 +780,14 @@ func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGro
 		_, nodeSize := h.shortnodeToHash(collapsed, false)
 
 		// increase tir
-		// if n.Key[len(n.Key)-1] != 16 {
-		// 	// this is intermediate short node
-		// 	increaseSize(nodeSize, "short", tir, depth)
-		// } else {
-		// 	// this is leaf short node
-		// 	increaseSize(nodeSize, "value", tir, depth)
-		// }
-		increaseSize(nodeSize, "short", tir, depth)
+		if n.Key[len(n.Key)-1] != 16 {
+			// this is intermediate short node
+			increaseSize(nodeSize, "short", tir, depth)
+		} else {
+			// this is leaf short node
+			increaseSize(nodeSize, "value", tir, depth)
+		}
+		// increaseSize(nodeSize, "short", tir, depth)
 
 		t.inspectTrieNodes(n.Val, tir, wg, depth+1, trie, addressKey) // go child node
 
@@ -856,6 +860,12 @@ func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGro
 		// }
 
 	case hashNode:
+		// skip zero hash node in Ethane's inactive trie
+		if /*common.SimulationMode == 1 &&*/ IsZeroHashNode(n) {
+			tir.ZeroHashNodeNum++
+			return
+		}
+
 		hash := common.BytesToHash([]byte(n))
 		resolvedNode := t.db.node(hash) // error
 		if resolvedNode != nil {
@@ -869,7 +879,8 @@ func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGro
 		}
 
 	case valueNode:
-		increaseSize(len(n), "value", tir, depth)
+		// if you want to measure value nodes only, delete comment
+		// increaseSize(len(n), "value", tir, depth)
 
 		// Value nodes don't have children so they're left as were
 
