@@ -432,27 +432,32 @@ func flushTrieNodes() {
 	common.NewStorageNodeStat.Reset()
 
 	// flush state trie nodes
-	common.FlushStorageTries = false
-	normTrie.Commit(nil)
-	normTrie.TrieDB().Commit(normTrie.Hash(), false, nil)
-	if common.SimulationMode == 1 && common.InactiveTrieExist {
-		subNormTrie.Commit(nil)
-		subNormTrie.TrieDB().Commit(subNormTrie.Hash(), false, nil)
-		blockInfo.InactiveRoot = subNormTrie.Hash()
-	}
-	if common.SimulationMode == 2 {
-		// this is cached trie's root for Ethanos
-		blockInfo.InactiveRoot = subNormTrie.Hash()
-	}
+	if common.NextBlockNum % common.FlushInterval == 0 {
+		common.FlushStorageTries = false
+		normTrie.Commit(nil)
+		normTrie.TrieDB().Commit(normTrie.Hash(), false, nil)
+		if common.SimulationMode == 1 && common.InactiveTrieExist {
+			subNormTrie.Commit(nil)
+			subNormTrie.TrieDB().Commit(subNormTrie.Hash(), false, nil)
+			blockInfo.InactiveRoot = subNormTrie.Hash()
+		}
+		if common.SimulationMode == 2 {
+			// this is cached trie's root for Ethanos
+			blockInfo.InactiveRoot = subNormTrie.Hash()
+		}
 
-	// flush storage trie nodes
-	common.FlushStorageTries = true
-	for _, storageTrie := range dirtyStorageTries {
-		storageTrie.Commit(nil)
-		storageTrie.TrieDB().Commit(storageTrie.Hash(), false, nil)
+		// flush storage trie nodes
+		common.FlushStorageTries = true
+		for _, storageTrie := range dirtyStorageTries {
+			storageTrie.Commit(nil)
+			storageTrie.TrieDB().Commit(storageTrie.Hash(), false, nil)
+		}
+		// reset dirty storage tries after flush
+		dirtyStorageTries = make(map[common.Address]*trie.SecureTrie)
+
+		// discard unflushed dirty nodes after flush
+		common.TrieNodeInfosDirty = make(map[common.Hash]common.NodeInfo)
 	}
-	// reset dirty storage tries after flush
-	dirtyStorageTries = make(map[common.Address]*trie.SecureTrie)
 
 	// logging flush time
 	blockInfo.TimeToFlush = time.Since(flushStartTime).Nanoseconds()
@@ -479,9 +484,6 @@ func flushTrieNodes() {
 		// fmt.Println("current block num:", bn, "/ block num to delete:", blockNumToDelete)
 		delete(common.Blocks, blockNumToDelete)
 	}
-
-	// discard unflushed dirty nodes after flush
-	common.TrieNodeInfosDirty = make(map[common.Hash]common.NodeInfo)
 
 	// show db stat
 	// totalNodesNum, totalNodesSize := common.TotalNodeStat.GetSum()
@@ -2369,6 +2371,20 @@ func connHandler(conn net.Conn) {
 					common.SimulationMode = int(mode)
 				} else {
 					fmt.Println("Error switchSimulationMode: invalid mode ->", mode)
+					os.Exit(1)
+				}
+
+				response = []byte("success")
+
+			case "setFlushInterval":
+				fmt.Println("execute setFlushInterval()")
+				flushInterval, _ := strconv.ParseUint(params[1], 10, 64)
+
+				if flushInterval >= 1 {
+					common.FlushInterval = flushInterval
+					fmt.Println("set flush interval:", flushInterval)
+				} else {
+					fmt.Println("Error setFlushInterval: invalid flush interval ->", flushInterval)
 					os.Exit(1)
 				}
 

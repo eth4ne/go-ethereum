@@ -53,6 +53,9 @@ var (
 	// option: simulation mode (0: original ethereum, 1: Ethane, 2: Ethanos)
 	SimulationMode = 0
 
+	// option: trie flush interval (default: 1 -> flush state tries at every block / but genesis block is always flushed)
+	FlushInterval = uint64(1)
+
 	// option: don't stop Ethereum simulation when storage trie is different from Geth's
 	AcceptWrongStorageTrie = false
 

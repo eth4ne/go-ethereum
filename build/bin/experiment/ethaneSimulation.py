@@ -444,6 +444,17 @@ def switchSimulationMode(mode):
     print("switchSimulationModeResult result:", switchSimulationModeResult)
     return switchSimulationModeResult
 
+# set flush interval (default: 1)
+def setFlushInterval(flushInterval):
+    cmd = str("setFlushInterval")
+    cmd += str(",")
+    cmd += str(flushInterval)
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    setFlushIntervalResult = data.decode()
+    print("setFlushInterval result:", setFlushIntervalResult)
+    return setFlushIntervalResult
+
 # don't stop Ethereum simulation when storage trie is different from Geth's
 def acceptWrongStorageTrie(option):
     cmd = str("acceptWrongStorageTrie")
@@ -804,9 +815,10 @@ def test_ethane(flushEpoch):
     printCurrentTrie()
 
 # replay txs in Ethereum with original Ethereum client
-def simulateEthereum(startBlockNum, endBlockNum):
+def simulateEthereum(startBlockNum, endBlockNum, flushInterval):
     # set Ethereum's options
     switchSimulationMode(0) # 0: original geth mode
+    setFlushInterval(flushInterval)
 
     if doStorageTrieUpdate and not stopWhenErrorOccurs:
         acceptWrongStorageTrie(1) # 1: accept
@@ -856,8 +868,9 @@ def simulateEthereum(startBlockNum, endBlockNum):
                 # printCurrentTrie()
                 # flush
                 blockcount += 1
-                flush()
-                # print("flush finished -> generated block", oldblocknumber, "\n\n\n")
+                if item['blocknumber'] <= endBlockNum+1:
+                    flush()
+                    # print("flush finished -> generated block", oldblocknumber, "\n\n\n")
                 
                 # check current trie is made correctly
                 if oldblocknumber not in headers:
@@ -913,7 +926,7 @@ def simulateEthereum(startBlockNum, endBlockNum):
                 if item['storageroot'] != None:
                     storageRoot = item['storageroot'].hex()
 
-                # print("in block", blockNum)
+                # print("in block", item['blocknumber'])
                 # print("write account ->")
                 # print("  addr:", addr)
                 # print("  nonce:", nonce)
@@ -986,6 +999,7 @@ def simulateEthereum(startBlockNum, endBlockNum):
     print(stateReadCount, stateWriteCount, storageWriteCount)
     print("initial invalid state block num:", initialInvalidStateBlockNum)
     print("initial invalid storage block num:", initialInvalidStorageBlockNum)
+    print("flush interval:", flushInterval)
 
     # inspectTrie()
     # printCurrentTrie()
@@ -997,9 +1011,10 @@ def simulateEthereum(startBlockNum, endBlockNum):
     # print("create log file:", logFileName)
 
 # replay txs in Ethereum with Ethane client
-def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion, fromLevel):
+def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion, fromLevel, flushInterval):
     # set Ethane's options
     switchSimulationMode(1) # 1: Ethane mode
+    setFlushInterval(flushInterval)
     setEthaneOptions(deleteEpoch, inactivateEpoch, inactivateCriterion, fromLevel)
 
     # set log file name
@@ -1054,11 +1069,12 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
                 # printCurrentTrie()
                 # flush
                 blockcount += 1
-                flush()
-                # print("flush finished -> generated block", oldblocknumber, "\n\n\n")
+                if item['blocknumber'] <= endBlockNum+1:
+                    flush()
+                    # print("flush finished -> generated block", oldblocknumber, "\n\n\n")
 
                 # save intermediate result
-                if item['blocknumber'] % blockInfosSaveInterval == 0:
+                if item['blocknumber'] % blockInfosSaveInterval == 0 and item['blocknumber'] < endBlockNum:
                     saveBlockInfos(blockInfosTempLogFileName)
                     print("create temp log file:", blockInfosTempLogFileName)
 
@@ -1113,7 +1129,7 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
                 if item['storageroot'] != None:
                     storageRoot = item['storageroot'].hex()
 
-                # print("in block", blockNum)
+                # print("in block", item['blocknumber'])
                 # print("write account ->")
                 # print("  addr:", addr)
                 # print("  nonce:", nonce)
@@ -1180,6 +1196,7 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
     print("state reads:", stateReadCount,"/ state writes:", stateWriteCount, "/ storage writes:", storageWriteCount)
     print("restored accounts:", restoreCount)
     print(stateReadCount, stateWriteCount, storageWriteCount)
+    print("flush interval:", flushInterval)
     # inspectTrie()
     # printCurrentTrie()
     printEthaneState()
@@ -1191,10 +1208,11 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
     # print("create log file:", logFileName)
 
 # replay txs in Ethereum with Ethanos client (in Ethanos, inactivateEpoch = inactivateCriterion)
-def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
+def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel, flushInterval):
     
     # set Ethanos's options
     switchSimulationMode(2) # 2: Ethanos mode
+    setFlushInterval(flushInterval)
     setEthaneOptions(inactivateCriterion, inactivateCriterion, inactivateCriterion, fromLevel)
 
     # set log file name
@@ -1246,11 +1264,12 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
                 # printCurrentTrie()
                 # flush
                 blockcount += 1
-                flush()
-                # print("flush finished -> generated block", oldblocknumber, "\n\n\n")
+                if item['blocknumber'] <= endBlockNum+1:
+                    flush()
+                    # print("flush finished -> generated block", oldblocknumber, "\n\n\n")
 
                 # save intermediate result
-                if item['blocknumber'] % blockInfosSaveInterval == 0:
+                if item['blocknumber'] % blockInfosSaveInterval == 0 and item['blocknumber'] < endBlockNum:
                     saveBlockInfos(blockInfosTempLogFileName)
                     print("create temp log file:", blockInfosTempLogFileName)
 
@@ -1304,7 +1323,7 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
                 if item['storageroot'] != None:
                     storageRoot = item['storageroot'].hex()
 
-                # print("in block", blockNum)
+                # print("in block", item['blocknumber'])
                 # print("write account ->")
                 # print("  addr:", addr)
                 # print("  nonce:", nonce)
@@ -1375,6 +1394,7 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel):
     print("state reads:", stateReadCount,"/ state writes:", stateWriteCount, "/ storage writes:", storageWriteCount)
     print("restored accounts:", restoreCount)
     print(stateReadCount, stateWriteCount, storageWriteCount)
+    print("flush interval:", flushInterval)
     # inspectTrie()
     # printCurrentTrie()
     getDBStatistics()
@@ -1561,22 +1581,23 @@ if __name__ == "__main__":
     deleteEpoch = 10000
     inactivateEpoch = 10000
     inactivateCriterion = 10000
-    trieInspectIntervals = range(6000000, endBlockNum+1, 1000000)
+    trieInspectIntervals = range(0, endBlockNum+1, 1000000)
     fromLevel = 0 # how many parent nodes to omit in Merkle proofs
+    flushInterval = 1 # block flush interval (default: 1, at every block / but genesis block is always flushed)
 
     # run simulation
     if simulationMode == 0:
         # replay txs in Ethereum for Ethereum
-        simulateEthereum(startBlockNum, endBlockNum)
+        simulateEthereum(startBlockNum, endBlockNum, flushInterval)
         inspectTriesEthereum(startBlockNum, endBlockNum, trieInspectIntervals)
     elif simulationMode == 1:
          # replay txs in Ethereum for Ethane
-        simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion, fromLevel)
+        simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion, fromLevel, flushInterval)
         inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion, trieInspectIntervals)
         # checkEthaneStateCorrectness(endBlockNum)
     elif simulationMode == 2:
         # replay txs in Ethereum for Ethanos
-        simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel)
+        simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel, flushInterval)
         inspectTriesEthanos(startBlockNum, endBlockNum, inactivateCriterion, trieInspectIntervals)
         # checkEthanosStateCorrectness(endBlockNum)
     else:
