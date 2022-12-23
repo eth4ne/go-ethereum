@@ -287,7 +287,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		var accounts []*state.Account
 		var targetKeys []common.Hash
 		var targetAccounts [][]byte
-		var blockRoot common.Hash
+		var blockRoot_inactive common.Hash
 
 		cnt = cnt + 3
 		for cnt < limit {
@@ -297,10 +297,13 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 			merkleProof, blockHeader := parseProof(data, int64(checkpointBlock), &cnt, limit)
 			merkleProof_1 := merkleProof // for getKey
 			// log.Info("### merkleProof", "merk leProof", merkleProof)
-			blockRoot = blockHeader.Root
+
+			blockRoot_inactive = blockHeader.Root_inactive // inactive state trie root
+
+			fmt.Println("\n>>> blockHeader.Root_inactive: ", blockHeader.Root_inactive)
 
 			// verify Merkle proof
-			_, merkleErr := trie.VerifyProof_restore(blockHeader.Root, merkleProof_1)
+			_, merkleErr := trie.VerifyProof_restore(blockHeader.Root_inactive, merkleProof_1)
 			// optimized above proving function to compare only the top node of the merkleProof and the blockRoot.
 			// (because the inactiveKey was made from the merkleProof, so no need to check its existence.)
 			if merkleErr != nil {
@@ -313,7 +316,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 
 			// retrieve target accounts and keys from the merkle proof
 			// GetAccountsAndKeysFromMerkleProof will return final restoring target excluding the already restored nodes.
-			targetAccounts, targetKeys = trie.GetAccountsAndKeysFromMerkleProof(blockHeader.Root, merkleProof)
+			targetAccounts, targetKeys = trie.GetAccountsAndKeysFromMerkleProof(blockHeader.Root_inactive, merkleProof)
 
 			log.Info("targetAccounts", "targetAccounts", targetAccounts)
 			log.Info("targetKeys", "targetKeys", targetKeys)
@@ -410,7 +413,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 
 		// rebuild CA's storage trie if inactive storage snapshot is on
 		if common.UsingInactiveStorageSnapshot {
-			evm.StateDB.RebuildStorageTrieFromSnapshot(blockRoot, inactiveAddr, targetKeys[0])
+			evm.StateDB.RebuildStorageTrieFromSnapshot(blockRoot_inactive, inactiveAddr, targetKeys[0])
 
 			// TODO (joonha) move this verifying into RebuildStorageTrieFromSnapshot (before updateTrie)
 			// // compare rebuilt storage trie's root to the retrieved account's root // cannot debug now so comment-out. Activate later after debugging.

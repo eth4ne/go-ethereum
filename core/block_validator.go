@@ -99,6 +99,12 @@ func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateD
 	if root := statedb.IntermediateRoot(v.config.IsEIP158(header.Number)); header.Root != root {
 		return fmt.Errorf("invalid merkle root (remote: %x local: %x)", header.Root, root)
 	}
+	// Validate the state root against the received state root and throw
+	// an error if they don't match.
+	// This is for the inactive trie (joonha)
+	if root_inactive := statedb.IntermediateRoot_inactive(v.config.IsEIP158(header.Number)); header.Root_inactive != root_inactive {
+		return fmt.Errorf("invalid merkle root (remote: %x local: %x)", header.Root_inactive, root_inactive)
+	}
 	return nil
 }
 

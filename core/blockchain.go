@@ -191,13 +191,15 @@ type BlockChain struct {
 	currentBlock     atomic.Value // Current head of the block chain
 	currentFastBlock atomic.Value // Current head of the fast-sync chain (may be above the block chain!)
 
-	stateCache    state.Database // State database to reuse between imports (contains state cache)
-	bodyCache     *lru.Cache     // Cache for the most recent block bodies
-	bodyRLPCache  *lru.Cache     // Cache for the most recent block bodies in RLP encoded format
-	receiptsCache *lru.Cache     // Cache for the most recent receipts per block
-	blockCache    *lru.Cache     // Cache for the most recent entire blocks
-	txLookupCache *lru.Cache     // Cache for the most recent transaction lookup data.
-	futureBlocks  *lru.Cache     // future blocks are blocks added for later processing
+	stateCache          state.Database // State database to reuse between imports (contains state cache)
+	stateCache_inactive state.Database // State database to reuse between imports for inactive trie (contains inactive state cache) (joonha)
+
+	bodyCache     *lru.Cache // Cache for the most recent block bodies
+	bodyRLPCache  *lru.Cache // Cache for the most recent block bodies in RLP encoded format
+	receiptsCache *lru.Cache // Cache for the most recent receipts per block
+	blockCache    *lru.Cache // Cache for the most recent entire blocks
+	txLookupCache *lru.Cache // Cache for the most recent transaction lookup data.
+	futureBlocks  *lru.Cache // future blocks are blocks added for later processing
 
 	wg            sync.WaitGroup //
 	quit          chan struct{}  // shutdown signal, closed in Stop.
@@ -232,6 +234,11 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		db:          db,
 		triegc:      prque.New(nil),
 		stateCache: state.NewDatabaseWithConfig(db, &trie.Config{
+			Cache:     cacheConfig.TrieCleanLimit,
+			Journal:   cacheConfig.TrieCleanJournal,
+			Preimages: cacheConfig.Preimages,
+		}),
+		stateCache_inactive: state.NewDatabaseWithConfig(db, &trie.Config{ // init inactive state (joonha)
 			Cache:     cacheConfig.TrieCleanLimit,
 			Journal:   cacheConfig.TrieCleanJournal,
 			Preimages: cacheConfig.Preimages,
@@ -285,7 +292,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	// Make sure the state associated with the block is available
 	head := bc.CurrentBlock()
 	// if _, err := state.New(head.Root(), bc.stateCache, bc.snaps); err != nil { // --> original code
-	if _, err := state.New_inactiveSnapshot(head.Root(), bc.stateCache, bc.snaps, bc.snaps_inactive); err != nil { // New state with inactive snapshot (joonha)
+	if _, err := state.New_Ethane(head.Root(), head.Root_inactive(), bc.stateCache, bc.stateCache_inactive, bc.snaps, bc.snaps_inactive); err != nil { // New Ethane state (joonha)
 		// Head state is missing, before the state recovery, find out the
 		// disk layer point of snapshot(if it's enabled). Make sure the
 		// rewound point is lower than disk layer.
@@ -378,7 +385,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 			recover = true
 		}
 		bc.snaps, _ = snapshot.New(bc.db, bc.stateCache.TrieDB(), bc.cacheConfig.SnapshotLimit, head.Root(), !bc.cacheConfig.SnapshotWait, true, recover)
-		bc.snaps_inactive, _ = snapshot.New(bc.db, bc.stateCache.TrieDB(), bc.cacheConfig.SnapshotLimit, head.Root(), !bc.cacheConfig.SnapshotWait, true, recover) // make inactive snapshot (joonha)
+		bc.snaps_inactive, _ = snapshot.New(bc.db, bc.stateCache_inactive.TrieDB(), bc.cacheConfig.SnapshotLimit, head.Root_inactive(), !bc.cacheConfig.SnapshotWait, true, recover) // make inactive snapshot from inactive trie (joonha)
 	}
 
 	// [Ethane]
@@ -415,6 +422,22 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 			triedb.SaveCachePeriodically(bc.cacheConfig.TrieCleanJournal, bc.cacheConfig.TrieCleanRejournal, bc.quit)
 		}()
 	}
+
+	// If periodic cache journal is required, spin it up.
+	// Do this for the inactive trie (joonha)
+	if bc.cacheConfig.TrieCleanRejournal > 0 {
+		if bc.cacheConfig.TrieCleanRejournal < time.Minute {
+			log.Warn("Sanitizing invalid trie cache journal time", "provided", bc.cacheConfig.TrieCleanRejournal, "updated", time.Minute)
+			bc.cacheConfig.TrieCleanRejournal = time.Minute
+		}
+		triedb := bc.stateCache_inactive.TrieDB()
+		bc.wg.Add(1)
+		go func() {
+			defer bc.wg.Done()
+			triedb.SaveCachePeriodically(bc.cacheConfig.TrieCleanJournal, bc.cacheConfig.TrieCleanRejournal, bc.quit)
+		}()
+	}
+
 	return bc, nil
 }
 
@@ -542,7 +565,7 @@ func (bc *BlockChain) setHeadBeyondRoot(head uint64, root common.Hash, repair bo
 						beyondRoot, rootNumber = true, newHeadBlock.NumberU64()
 					}
 					// if _, err := state.New(newHeadBlock.Root(), bc.stateCache, bc.snaps); err != nil { // --> original code
-					if _, err := state.New_inactiveSnapshot(newHeadBlock.Root(), bc.stateCache, bc.snaps, bc.snaps_inactive); err != nil { // New state with inactive snapshot (joonha)
+					if _, err := state.New_Ethane(newHeadBlock.Root(), newHeadBlock.Root_inactive(), bc.stateCache, bc.stateCache_inactive, bc.snaps, bc.snaps_inactive); err != nil { // New Ethane state (joonha)
 						log.Trace("Block state missing, rewinding further", "number", newHeadBlock.NumberU64(), "hash", newHeadBlock.Hash())
 						if pivot == nil || newHeadBlock.NumberU64() > *pivot {
 							parent := bc.GetBlock(newHeadBlock.ParentHash(), newHeadBlock.NumberU64()-1)
@@ -654,6 +677,10 @@ func (bc *BlockChain) SnapSyncCommitHead(hash common.Hash) error {
 		return fmt.Errorf("non existent block [%x..]", hash[:4])
 	}
 	if _, err := trie.NewSecure(block.Root(), bc.stateCache.TrieDB()); err != nil {
+		return err
+	}
+	// Do this also for the inactive state trie (joonha)
+	if _, err := trie.NewSecure(block.Root_inactive(), bc.stateCache_inactive.TrieDB()); err != nil {
 		return err
 	}
 
@@ -814,7 +841,7 @@ func (bc *BlockChain) Stop() {
 	var snapBase_inactive common.Hash
 	if bc.snaps_inactive != nil {
 		var err error
-		if snapBase_inactive, err = bc.snaps_inactive.Journal(bc.CurrentBlock().Root()); err != nil {
+		if snapBase_inactive, err = bc.snaps_inactive.Journal(bc.CurrentBlock().Root_inactive()); err != nil {
 			log.Error("Failed to journal state snapshot (2)", "err", err)
 		}
 	}
@@ -843,7 +870,35 @@ func (bc *BlockChain) Stop() {
 				log.Error("Failed to commit recent state trie", "err", err)
 			}
 		}
-		// do it also for the inactive snapshot (joonha)
+		for !bc.triegc.Empty() {
+			triedb.Dereference(bc.triegc.PopItem().(common.Hash))
+		}
+		if size, _ := triedb.Size(); size != 0 {
+			log.Error("Dangling trie nodes after full cleanup")
+		}
+	}
+	// Ensure all live cached entries be saved into disk, so that we can skip
+	// cache warmup when node restarts.
+	if bc.cacheConfig.TrieCleanJournal != "" {
+		triedb := bc.stateCache.TrieDB()
+		triedb.SaveCache(bc.cacheConfig.TrieCleanJournal)
+	}
+
+	// Do this also for the inactive state trie (joonha)
+	if !bc.cacheConfig.TrieDirtyDisabled {
+		triedb := bc.stateCache_inactive.TrieDB()
+
+		for _, offset := range []uint64{0, 1, TriesInMemory - 1} {
+			if number := bc.CurrentBlock().NumberU64(); number > offset {
+				recent := bc.GetBlockByNumber(number - offset)
+
+				log.Info("Writing cached state to disk", "block", recent.Number(), "hash", recent.Hash(), "root", recent.Root())
+				if err := triedb.Commit(recent.Root_inactive(), true, nil); err != nil {
+					log.Error("Failed to commit recent state trie", "err", err)
+				}
+			}
+		}
+		// write inactive snapshot into the disk (joonha)
 		if snapBase_inactive != (common.Hash{}) {
 			log.Info("Writing snapshot state to disk", "root", snapBase_inactive)
 			if err := triedb.Commit(snapBase_inactive, true, nil); err != nil {
@@ -861,7 +916,7 @@ func (bc *BlockChain) Stop() {
 	// Ensure all live cached entries be saved into disk, so that we can skip
 	// cache warmup when node restarts.
 	if bc.cacheConfig.TrieCleanJournal != "" {
-		triedb := bc.stateCache.TrieDB()
+		triedb := bc.stateCache_inactive.TrieDB()
 		triedb.SaveCache(bc.cacheConfig.TrieCleanJournal)
 	}
 
@@ -1237,10 +1292,10 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	// }
 
 	// Commit all cached state changes into underlying memory database.
-	root, err := state.Commit(bc.chainConfig.IsEIP158(block.Number())) // here, statedb.go > Commit() being executed (joonha)
+	root, root_inactive, err := state.Commit(bc.chainConfig.IsEIP158(block.Number())) // here, statedb.go > Commit() being executed (joonha)
 
 	// fmt.Println("(before) block.Hash(): ", block.Hash())
-	block.SetRoot(root) // set block root to trie root (joonha)
+	block.SetRoot(root, root_inactive) // set block root to trie root (joonha)
 	// fmt.Println("(after) block.Hash(): ", block.Hash())
 
 	/*
@@ -1274,7 +1329,8 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 
 	// If we're running an archive node, always flush
 	if bc.cacheConfig.TrieDirtyDisabled {
-		return triedb.Commit(root, false, nil)
+		// return triedb.Commit(root, false, nil)
+		triedb.Commit(root, false, nil) // do not return here because inactive trie should also be flushed below (joonha)
 	} else {
 		// Full but not archive node, do proper garbage collection
 		triedb.Reference(root, common.Hash{}) // metadata reference to keep trie alive
@@ -1307,6 +1363,60 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 					}
 					// Flush an entire trie and restart the counters
 					triedb.Commit(header.Root, true, nil)
+					lastWrite = chosen
+					bc.gcproc = 0
+				}
+			}
+			// Garbage collect anything below our required write retention
+			for !bc.triegc.Empty() {
+				root, number := bc.triegc.Pop()
+				if uint64(-number) > chosen {
+					bc.triegc.Push(root, number)
+					break
+				}
+				triedb.Dereference(root.(common.Hash))
+			}
+		}
+	}
+
+	// flush inactive state trie into disk (joonha)
+	triedb = bc.stateCache_inactive.TrieDB()
+
+	// If we're running an archive node, always flush
+	if bc.cacheConfig.TrieDirtyDisabled {
+		return triedb.Commit(root_inactive, false, nil)
+	} else {
+		// Full but not archive node, do proper garbage collection
+		triedb.Reference(root_inactive, common.Hash{}) // metadata reference to keep trie alive
+		bc.triegc.Push(root_inactive, -int64(block.NumberU64()))
+
+		if current := block.NumberU64(); current > TriesInMemory {
+			// If we exceeded our memory allowance, flush matured singleton nodes to disk
+			var (
+				nodes, imgs = triedb.Size()
+				limit       = common.StorageSize(bc.cacheConfig.TrieDirtyLimit) * 1024 * 1024
+			)
+			if nodes > limit || imgs > 4*1024*1024 {
+				triedb.Cap(limit - ethdb.IdealBatchSize)
+			}
+			// Find the next state trie we need to commit
+			chosen := current - TriesInMemory
+
+			// If we exceeded out time allowance, flush an entire trie to disk
+			if bc.gcproc > bc.cacheConfig.TrieTimeLimit {
+				// If the header is missing (canonical chain behind), we're reorging a low
+				// diff sidechain. Suspend committing until this operation is completed.
+				header := bc.GetHeaderByNumber(chosen)
+				if header == nil {
+					log.Warn("Reorg in progress, trie commit postponed", "number", chosen)
+				} else {
+					// If we're exceeding limits but haven't reached a large enough memory gap,
+					// warn the user that the system is becoming unstable.
+					if chosen < lastWrite+TriesInMemory && bc.gcproc >= 2*bc.cacheConfig.TrieTimeLimit {
+						log.Info("State in memory for too long, committing", "time", bc.gcproc, "allowance", bc.cacheConfig.TrieTimeLimit, "optimum", float64(chosen-lastWrite)/TriesInMemory)
+					}
+					// Flush an entire trie and restart the counters
+					triedb.Commit(header.Root_inactive, true, nil)
 					lastWrite = chosen
 					bc.gcproc = 0
 				}
@@ -1381,13 +1491,29 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
 	}
 
+	// print inactive trie (joonha)
+	if block.Header().Number.Int64()%common.InspectEpoch == 0 {
+		// print state trie (jmlee)
+		fmt.Println("$$$ print inactive state trie at block", bc.CurrentBlock().Header().Number)
+		ldb := trie.NewDatabase(bc.db)
+		if bc.CurrentBlock().Root_inactive() != common.HexToHash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421") {
+			stateTrie, _ := trie.NewSecure(bc.CurrentBlock().Root_inactive(), ldb)
+			// stateTrie.Print()
+			if stateTrie == nil {
+				fmt.Println("stateTrie is nil")
+			} else {
+				stateTrie.Print()
+			}
+		}
+	}
+
 	// print database inspect result (jmlee)
 	// fmt.Println("\nblock inserted -> blocknumber:", block.Header().Number.Int64())
 	// fmt.Println("InactiveBoundaryKey:", common.InactiveBoundaryKey)
 	// fmt.Println("common.CheckpointKeys:", common.CheckpointKeys)
 	if block.Header().Number.Int64()%common.InspectEpoch == 0 {
 		// print state trie (jmlee)
-		fmt.Println("$$$ print state trie at block", bc.CurrentBlock().Header().Number)
+		fmt.Println("$$$ print active state trie at block", bc.CurrentBlock().Header().Number)
 		ldb := trie.NewDatabase(bc.db)
 		stateTrie, _ := trie.NewSecure(bc.CurrentBlock().Root(), ldb)
 		// stateTrie.Print()
@@ -1397,6 +1523,9 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 			stateTrie.Print()
 		}
 	}
+
+	fmt.Println("\n>>> inactive trie root: ", bc.CurrentBlock().Root_inactive())
+	fmt.Println(">>> active trie root: ", bc.CurrentBlock().Root())
 
 	/* [Ethane]
 	* set flags for the next block
@@ -1705,7 +1834,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 			parent = bc.GetHeader(block.ParentHash(), block.NumberU64()-1)
 		}
 		// statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps) // --> original code
-		statedb, err := state.New_inactiveSnapshot(parent.Root, bc.stateCache, bc.snaps, bc.snaps_inactive) // New state with inactive snapshot (joonha)
+		statedb, err := state.New_Ethane(parent.Root, parent.Root_inactive, bc.stateCache, bc.stateCache_inactive, bc.snaps, bc.snaps_inactive) // New Ethane state (joonha)
 
 		if err != nil {
 			return it.index, err
@@ -1721,7 +1850,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		if !bc.cacheConfig.TrieCleanNoPrefetch {
 			if followup, err := it.peek(); followup != nil && err == nil {
 				// throwaway, _ := state.New(parent.Root, bc.stateCache, bc.snaps) // --> original code
-				throwaway, _ := state.New_inactiveSnapshot(parent.Root, bc.stateCache, bc.snaps, bc.snaps_inactive) // New state with inactive snapshot (joonha)
+				throwaway, _ := state.New_Ethane(parent.Root, parent.Root_inactive, bc.stateCache, bc.stateCache_inactive, bc.snaps, bc.snaps_inactive) // New Ethane state (joonha)
 
 				go func(start time.Time, followup *types.Block, throwaway *state.StateDB, interrupt *uint32) {
 					bc.prefetcher.Prefetch(followup, throwaway, bc.vmConfig, &followupInterrupt)

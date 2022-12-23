@@ -300,13 +300,14 @@ func (bc *BlockChain) ContractCodeWithPrefix(hash common.Hash) ([]byte, error) {
 
 // State returns a new mutable state based on the current HEAD block.
 func (bc *BlockChain) State() (*state.StateDB, error) {
-	return bc.StateAt(bc.CurrentBlock().Root())
+	// return bc.StateAt(bc.CurrentBlock().Root()) // --> original code
+	return bc.StateAt(bc.CurrentBlock().Root(), bc.CurrentBlock().Root_inactive()) // inactive trie has been added (joonha)
 }
 
 // StateAt returns a new mutable state based on a particular point in time.
-func (bc *BlockChain) StateAt(root common.Hash) (*state.StateDB, error) {
+func (bc *BlockChain) StateAt(root common.Hash, root_inactive common.Hash) (*state.StateDB, error) {
 	// return state.New(root, bc.stateCache, bc.snaps) // --> original code
-	return state.New_inactiveSnapshot(root, bc.stateCache, bc.snaps, bc.snaps_inactive) // inactive snapshot is added (joonha)
+	return state.New_Ethane(root, root_inactive, bc.stateCache, bc.stateCache_inactive, bc.snaps, bc.snaps_inactive) // (joonha)
 }
 
 // Config retrieves the chain's fork configuration.

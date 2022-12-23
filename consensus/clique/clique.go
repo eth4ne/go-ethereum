@@ -564,6 +564,7 @@ func (c *Clique) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 func (c *Clique) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) {
 	// No block rewards in PoA, so the state remains as is and uncles are dropped
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+	header.Root_inactive = state.IntermediateRoot_inactive(chain.Config().IsEIP158(header.Number)) // (joonha)
 	header.UncleHash = types.CalcUncleHash(nil)
 }
 
@@ -724,6 +725,7 @@ func encodeSigHeader(w io.Writer, header *types.Header) {
 		header.UncleHash,
 		header.Coinbase,
 		header.Root,
+		header.Root_inactive,
 		header.TxHash,
 		header.ReceiptHash,
 		header.Bloom,
