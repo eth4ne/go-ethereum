@@ -1568,8 +1568,8 @@ if __name__ == "__main__":
 
     # set simulation options
     deleteDisk = True
-    doStorageTrieUpdate = True
-    stopWhenErrorOccurs = True
+    doStorageTrieUpdate = False
+    stopWhenErrorOccurs = False
     doReset = True
     collectDeletedAddresses = False
     doRestore = True
