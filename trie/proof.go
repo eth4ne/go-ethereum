@@ -322,11 +322,13 @@ func getAccountsAndKeysFromMerkleProof(nodeHash common.Hash, origNode node, tKey
 
 			i := 0
 			for i < 16 {
-				if common.BytesToHash(nn.(hashNode)) == common.BytesToHash((n.Children[i]).(hashNode)) {
-					// key append
-					selectedByte := common.HexToHash("0x" + indices[i])
-					tKey = append(tKey, selectedByte[len(selectedByte)-1])
-					break
+				if n.Children[i] != nil {
+					if common.BytesToHash(nn.(hashNode)) == common.BytesToHash((n.Children[i]).(hashNode)) {
+						// key append
+						selectedByte := common.HexToHash("0x" + indices[i])
+						tKey = append(tKey, selectedByte[len(selectedByte)-1])
+						break
+					}
 				}
 				i++
 			}
