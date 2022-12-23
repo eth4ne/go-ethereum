@@ -1578,8 +1578,8 @@ if __name__ == "__main__":
     # set simulation params
     startBlockNum = 0
     endBlockNum = 100000
-    deleteEpoch = 10000
-    inactivateEpoch = 10000
+    deleteEpoch = 1
+    inactivateEpoch = 1
     inactivateCriterion = 10000
     trieInspectIntervals = range(0, endBlockNum+1, 1000000)
     fromLevel = 0 # how many parent nodes to omit in Merkle proofs
