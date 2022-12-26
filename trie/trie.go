@@ -604,6 +604,18 @@ func (t *Trie) Print() {
 	fmt.Println(t.root.toString("", t.db, 0))
 }
 
+// Print_storageTrie print storage trie node details in human readable form (joonha)
+func (t *Trie) Print_storageTrie() {
+	if t == nil {
+		return
+	}
+	if t.root != nil {
+		fmt.Println(t.root.toString_storageTrie("", t.db))
+	} else {
+		// fmt.Println("trie's root is nil")
+	}
+}
+
 // get last key among leaf nodes (i.e., right-most key value) (jmlee)
 func (t *Trie) GetLastKey() *big.Int {
 	lastKey := t.getLastKey(t.root, nil)
