@@ -240,7 +240,7 @@ func New_Ethane(root common.Hash, root_inactive common.Hash, db Database, db_ina
 		AlreadyRestoredDirty: make(map[common.Hash]common.Empty),
 	}
 
-	// active snapstho
+	// active snapsthot
 	if sdb.snaps != nil && common.UsingActiveSnapshot {
 		if sdb.snap = sdb.snaps.Snapshot(root); sdb.snap != nil {
 			sdb.snapDestructs = make(map[common.Hash]struct{})
@@ -379,6 +379,15 @@ func (s *StateDB) GetNonce(addr common.Address) uint64 {
 	}
 
 	return 0
+}
+
+// GetRoot returns the storage root associated with this object, if any (joonha)
+func (s *StateDB) GetRoot(addr common.Address) common.Hash {
+	stateObject := s.getStateObject(addr)
+	if stateObject != nil {
+		return stateObject.data.Root
+	}
+	return common.Int64ToHash(0)
 }
 
 // TxIndex returns the current transaction index set by Prepare.
@@ -521,8 +530,8 @@ func (s *StateDB) GetProof(addr common.Address) ([][]byte, error) {
 	}
 
 	// Remove redundant nodes
-	fmt.Println("\n\nmps ===>")
-	fmt.Println(mps, "\n===> end of mps\n\n")
+	// fmt.Println("\n\nmps ===>")
+	// fmt.Println(mps, "\n===> end of mps\n\n")
 	var mps_no_redundancy [][]byte
 	m := make(map[string]int)
 	// dummy := []byte{'@'}
@@ -541,8 +550,8 @@ func (s *StateDB) GetProof(addr common.Address) ([][]byte, error) {
 			mps_no_redundancy = append(mps_no_redundancy, dummy)
 		}
 	}
-	fmt.Println("\n\nmps_no_redundancy ===>")
-	fmt.Println(mps_no_redundancy, "\n===> end of mps_no_redundancy\n\n")
+	// fmt.Println("\n\nmps_no_redundancy ===>")
+	// fmt.Println(mps_no_redundancy, "\n===> end of mps_no_redundancy\n\n")
 
 	// return nil, errors.New("Let's stop here and watch the MPs")
 
@@ -1384,6 +1393,12 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, common.Hash, err
 				return common.Hash{}, common.Hash{}, err
 			}
 			storageCommitted += committed
+			// // printing storage trie (joonha)
+			// fmt.Println("\nPrint_storageTrie starts")
+			// fmt.Println("( account addr: ", obj.address, ")")
+			// fmt.Println("( account addrHash: ", obj.addrHash, ")")
+			// obj.Print_storageTrie()
+			// fmt.Println("Print_storageTrie ends\n")
 		}
 	}
 
@@ -1545,32 +1560,25 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, common.Hash, err
 	// update inactive storage snapshot (joonha)
 	if s.snap_inactive != nil {
 		if common.UsingInactiveStorageSnapshot || common.UsingInactiveAccountSnapshot {
-			// s.snap_inactive = s.snaps_inactive.Snapshot(root)
-			if s.snap_inactive != nil {
+			// // code for debugging
+			// for k, v := range s.snapAccounts_inactive {
+			// 	fmt.Println("s.snapAccounts_inactive -> k:", k, "/ v:", v)
+			// }
+			// for k, v := range s.snapStorage_inactive {
+			// 	for kk, vv := range v {
+			// 		fmt.Println("s.snapStorage_inactive[", k, "] -> kk:", kk, "/ vv:", vv)
+			// 	}
+			// }
 
-				// // code for debugging
-				// for k, v := range s.snapAccounts_inactive {
-				// 	fmt.Println("s.snapAccounts_inactive -> k:", k, "/ v:", v)
-				// }
-				// for k, v := range s.snapStorage_inactive {
-				// 	for kk, vv := range v {
-				// 		fmt.Println("s.snapStorage_inactive[", k, "] -> kk:", kk, "/ vv:", vv)
-				// 	}
-				// }
-
-				if parent_inactive := s.snap_inactive.Root(); parent_inactive != root_inactive {
-					// here, snapAccounts_inactive might be nil (joonha) // --> modified to using inactive account snapshot (joonha)
-					if err := s.snaps_inactive.Update(root_inactive, parent_inactive, s.snapDestructs_inactive, s.snapAccounts_inactive, s.snapStorage_inactive); err != nil {
-						log.Warn("Failed to update snapshot tree", "from", parent_inactive, "to", root_inactive, "err", err)
-					}
-					if err := s.snaps_inactive.Cap(root_inactive, 128); err != nil {
-						log.Warn("Failed to cap snapshot tree", "root_inactive", root_inactive, "layers", 128, "err", err)
-					}
+			if parent_inactive := s.snap_inactive.Root(); parent_inactive != root_inactive {
+				// here, snapAccounts_inactive might be nil (joonha) // --> modified to using inactive account snapshot (joonha)
+				if err := s.snaps_inactive.Update(root_inactive, parent_inactive, s.snapDestructs_inactive, s.snapAccounts_inactive, s.snapStorage_inactive); err != nil {
+					log.Warn("Failed to update snapshot tree", "from", parent_inactive, "to", root_inactive, "err", err)
 				}
-			} else {
-				// fmt.Println("s.snap_inactive is nil")
+				if err := s.snaps_inactive.Cap(root_inactive, 128); err != nil {
+					log.Warn("Failed to cap snapshot tree", "root_inactive", root_inactive, "layers", 128, "err", err)
+				}
 			}
-
 			s.snap_inactive, s.snapDestructs_inactive, s.snapAccounts_inactive, s.snapStorage_inactive = nil, nil, nil, nil
 		}
 	}
@@ -1867,7 +1875,7 @@ func (s *StateDB) RebuildStorageTrieFromSnapshot(snapRoot common.Hash, addr comm
 	 */
 
 	// retrieve storage slots from snapshot
-	slotKeyList := s.snaps_inactive.StorageList_ethane(snapRoot, accountHash)
+	slotKeyList := s.snaps_inactive.StorageList_ethane(snapRoot, accountHash) // snapRoot is inactive trie's root
 	// fmt.Println("RESTORING STORAGE LIST: ", slotKeyList)
 
 	// rebuild storage trie

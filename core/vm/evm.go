@@ -252,7 +252,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 
 		if limit == 0 {
 			// Error: no proof in tx data
-			log.Info("Restore Error: no proof in tx data")
+			log.Error("❌  Restore Error: no proof in tx data")
 			return nil, gas, ErrInvalidProof
 		}
 
@@ -300,18 +300,16 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 
 			blockRoot_inactive = blockHeader.Root_inactive // inactive state trie root
 
-			fmt.Println("\n>>> blockHeader.Root_inactive: ", blockHeader.Root_inactive)
-
 			// verify Merkle proof
 			_, merkleErr := trie.VerifyProof_restore(blockHeader.Root_inactive, merkleProof_1)
 			// optimized above proving function to compare only the top node of the merkleProof and the blockRoot.
 			// (because the inactiveKey was made from the merkleProof, so no need to check its existence.)
 			if merkleErr != nil {
 				// bad merkle proof
-				log.Info("Restore Error: bad merkle proof")
+				log.Error("❌  Restore Error: bad merkle proof")
 				return nil, gas, ErrInvalidProof
 			} else {
-				log.Info("Merkle Proof is valid")
+				log.Info("✔️  Verify Merkle Proofs for Restoration ... Success")
 			}
 
 			// retrieve target accounts and keys from the merkle proof
@@ -360,7 +358,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		if len(accounts) == 0 {
 			// This case might exist when all the accounts are already restored.
 			// It is natural so do not emit error and just jump to outOfRestoration.
-			log.Info("Restore Error: no accounts to restore")
+			log.Info("❌  Restore Error: no accounts to restore")
 
 			// // (debugging) export log to file
 			// f1, err := os.Create("joonha_log.txt")
@@ -416,18 +414,18 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 			evm.StateDB.RebuildStorageTrieFromSnapshot(blockRoot_inactive, inactiveAddr, targetKeys[0])
 
 			// TODO (joonha) move this verifying into RebuildStorageTrieFromSnapshot (before updateTrie)
-			// // compare rebuilt storage trie's root to the retrieved account's root // cannot debug now so comment-out. Activate later after debugging.
-			// origRoot := accounts[0].Root
-			// newRoot := evm.StateDB.GetRoot(inactiveAddr)
-			// if origRoot == newRoot {
-			// 	log.Info("Storage trie is successfully rebuilt")
-			// } else {
-			// 	// storage trie is different from the original
-			// 	log.Info("storage trie is different from the original")
-			// }
+			// compare rebuilt storage trie's root to the retrieved account's root // cannot debug now so comment-out. Activate later after debugging.
+			origRoot := accounts[0].Root
+			newRoot := evm.StateDB.GetRoot(inactiveAddr)
+			if origRoot == newRoot {
+				log.Info("✔️  Storage Trie Rebuilding ... Success")
+			} else {
+				// storage trie is different from the original
+				log.Error("❌  Restore Error: Rebuilt storage trie is different from the original")
+			}
 
 		} else {
-			log.Info("Snapshot option is OFF... Please rebuild the storage trie in another way.")
+			log.Warn("⚠️  Snapshot is OFF ... Please rebuild the storage trie in another way")
 		}
 
 		// Remove inactive account from AddrToKey_inactive map

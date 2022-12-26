@@ -235,6 +235,11 @@ func (t *SecureTrie) Print() {
 	t.trie.Print()
 }
 
+// Print_storageTrie print storage trie node details in human readable form (joonha)
+func (t *SecureTrie) Print_storageTrie() {
+	t.trie.Print_storageTrie()
+}
+
 // get last key among leaf nodes (i.e., right-most key value) (jmlee)
 func (t *SecureTrie) GetLastKey() *big.Int {
 	return t.trie.GetLastKey()

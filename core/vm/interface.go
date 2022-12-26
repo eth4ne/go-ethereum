@@ -85,6 +85,7 @@ type StateDB interface {
 	RebuildStorageTrieFromSnapshot(common.Hash, common.Address, common.Hash)
 	SetCode_Restore(common.Address, []byte)
 	SetStorageRoot(common.Address, common.Hash)
+	GetRoot(common.Address) common.Hash
 }
 
 // CallContext provides a basic interface for the EVM calling conventions. The EVM

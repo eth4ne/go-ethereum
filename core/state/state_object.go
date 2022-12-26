@@ -348,8 +348,8 @@ func (s *stateObject) finalise(prefetch bool) {
 
 // updateTrie writes cached storage modifications into the object's storage trie.
 // It will return nil if the trie has not been loaded and no changes have been made
-// Updating storage trie occurs only at the active trie, so snapshot key is hash(addr) not a counter (joonha)
-// Rebuilding storage trie doesn't occur here, but at updateTrie_hashedKey() because the key is already hashed (joonha)
+// Updating storage trie occurs only at the active trie, so snapshot key is hash of address not a counter (joonha)
+// Rebuilding storage trie does not call this function but call updateTrie_hashedKey() because the key is already hashed (joonha)
 func (s *stateObject) updateTrie(db Database) Trie {
 	// Make sure all dirty slots are finalized into the pending storage area
 	s.finalise(false)               // Don't prefetch anymore, pull directly if need be
@@ -668,4 +668,15 @@ func (s *stateObject) Nonce() uint64 {
 // interface. Interfaces are awesome.
 func (s *stateObject) Value() *big.Int {
 	panic("Value on stateObject should never be called")
+}
+
+// Print_storageTrie prints storage trie (joonha)
+func (s *stateObject) Print_storageTrie() {
+	// fmt.Println("state_object > Print Storage > 1")
+	if s.trie == nil {
+		// fmt.Println("the storage trie is nil")
+		return
+	} else {
+		s.trie.Print_storageTrie()
+	}
 }
