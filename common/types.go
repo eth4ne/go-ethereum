@@ -89,6 +89,7 @@ var (
 
 	DoInactivateLeafNode    bool                    // flag to determine whether to delete leaf nodes or not
 	InactivateLeafNodeEpoch = int64(3)              // block epoch to inactivate inactive leaf nodes (from temp area to inactive trie)
+	InactivateCriterion     = int64(1)              // inactive accounts were touched more before than this block timestamp (min: 1) (const)
 	InactiveBoundaryKey     = int64(0)              // inactive accounts have keys smaller than this key
 	CheckpointKeys          = make(map[int64]int64) // initial NextKeys of blocks (CheckpointKeys[blockNumber] = initialNextKeyOfTheBlock)
 	FirstKeyToCheck         int64
