@@ -46,8 +46,8 @@ const (
 
 /*
 * [Ethane]
-* Below three definitions are for executing VerifyProof_ProofList(),
-* VerifyProof_restore(), and GetAccountsAndKeysFromMerkleProof()
+* Below three definitions are for executing VerifyProof_restore(),
+* and GetAccountsAndKeysFromMerkleProof()
  */
 type ProofList [][]byte
 

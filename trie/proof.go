@@ -131,19 +131,34 @@ func VerifyProof(rootHash common.Hash, key []byte, proofDb ethdb.KeyValueReader)
 	}
 }
 
-// optimized above proving function to compare only the top node of the merkleProof and the blockRoot (joonha)
-func VerifyProof_restore(rootHash common.Hash, proofDb common.ProofList) (value []byte, err error) {
+// VerifyProof checks merkle proofs. The given proof must contain the value for
+// key in a trie with the given root hash. VerifyProof returns an error if the
+// proof contains invalid trie nodes or the wrong value.
+func VerifyProof_restore(rootHash common.Hash, key []byte, proofDb common.ProofList) (value []byte, err error, croppedProofDb common.ProofList) {
+	key = keybytesToHex(key)
 	wantHash := rootHash
-
-	buf, _ := proofDb.Get(wantHash[:])
-	if buf == nil {
-		return nil, fmt.Errorf("proof node (hash %064x) missing", wantHash)
+	for i := 0; ; i++ {
+		buf, _ := proofDb.Get(wantHash[:])
+		if buf == nil {
+			return nil, fmt.Errorf("proof node %d (hash %064x) missing", i, wantHash), nil
+		}
+		n, err := decodeNode(wantHash[:], buf)
+		if err != nil {
+			return nil, fmt.Errorf("bad proof node %d: %v", i, err), nil
+		}
+		keyrest, cld := get(n, key, true)
+		switch cld := cld.(type) {
+		case nil:
+			log.Error("❌  Restore Error: VerifyProof_restore - The trie doesn't contain the key.")
+			// The trie doesn't contain the key.
+			return nil, nil, nil
+		case hashNode:
+			key = keyrest
+			copy(wantHash[:], cld)
+		case valueNode:
+			return cld, nil, proofDb
+		}
 	}
-	_, err = decodeNode(wantHash[:], buf)
-	if err != nil {
-		return nil, fmt.Errorf("bad proof node: %v", err)
-	}
-	return nil, err
 }
 
 /*
@@ -174,11 +189,20 @@ func GetAccountsAndKeysFromMerkleProof(rootHash common.Hash, proofDb common.Proo
 				}
 			}
 			targetNode, tKey := getAccountsAndKeysFromMerkleProof(rootHash, nil, nil, proofDb[start_idx:i])
+			// temp_idx := start_idx
 			start_idx = i
 
 			// convert to a key format (hash)
 			tKey_i := tKey.Int64()                                          // big.Int -> int64
 			retrievedKey := common.HexToHash(strconv.FormatInt(tKey_i, 16)) // int64 -> hex -> hash
+
+			// // verify Merkle proofs
+			// if value, merkleErr := VerifyProof_restore(rootHash, retrievedKey[:], proofDb[temp_idx:]); merkleErr != nil || value == nil {
+			// 	log.Error("❌  Restore Error: bad merkle proof")
+			// 	return nil, nil
+			// } else {
+			// 	log.Info("✔️  Verify Merkle Proof for Restoration ... Success", "key", retrievedKey)
+			// }
 
 			// check if this is already restored
 			common.MapMutex.Lock()
@@ -206,6 +230,14 @@ func GetAccountsAndKeysFromMerkleProof(rootHash common.Hash, proofDb common.Proo
 	// convert to a key format (hash)
 	tKey_i := tKey.Int64()                                          // big.Int -> int64
 	retrievedKey := common.HexToHash(strconv.FormatInt(tKey_i, 16)) // int64 -> hex -> hash
+
+	// // verify Merkle proofs for the last account
+	// if value, merkleErr := VerifyProof_restore(rootHash, retrievedKey[:], proofDb[start_idx:]); merkleErr != nil || value == nil {
+	// 	log.Error("❌  Restore Error: bad merkle proof")
+	// 	return nil, nil
+	// } else {
+	// 	log.Info("✔️  Verify Merkle Proof for Restoration ... Success", "key", retrievedKey)
+	// }
 
 	// check if already restored
 	common.MapMutex.Lock()

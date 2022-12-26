@@ -295,22 +295,14 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 
 			// get a merkle proof from tx data
 			merkleProof, blockHeader := parseProof(data, int64(checkpointBlock), &cnt, limit)
-			merkleProof_1 := merkleProof // for getKey
+			// merkleProof_1 := merkleProof // for getKey
+
+			// merkleProof_1 := make([][]byte, len(merkleProof))
+			// copy(merkleProof_1, merkleProof)
+
 			// log.Info("### merkleProof", "merk leProof", merkleProof)
 
 			blockRoot_inactive = blockHeader.Root_inactive // inactive state trie root
-
-			// verify Merkle proof
-			_, merkleErr := trie.VerifyProof_restore(blockHeader.Root_inactive, merkleProof_1)
-			// optimized above proving function to compare only the top node of the merkleProof and the blockRoot.
-			// (because the inactiveKey was made from the merkleProof, so no need to check its existence.)
-			if merkleErr != nil {
-				// bad merkle proof
-				log.Error("❌  Restore Error: bad merkle proof")
-				return nil, gas, ErrInvalidProof
-			} else {
-				log.Info("✔️  Verify Merkle Proofs for Restoration ... Success")
-			}
 
 			// retrieve target accounts and keys from the merkle proof
 			// GetAccountsAndKeysFromMerkleProof will return final restoring target excluding the already restored nodes.
@@ -319,6 +311,18 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 			log.Info("targetAccounts", "targetAccounts", targetAccounts)
 			log.Info("targetKeys", "targetKeys", targetKeys)
 			log.Info("len(targetKeys)", "len(targetKeys)", len(targetKeys))
+
+			// verify Merkle proof
+			for i, key := range targetKeys {
+				if value, merkleErr, croppedProofDb := trie.VerifyProof_restore(blockHeader.Root_inactive, key[:], merkleProof); merkleErr != nil || value == nil {
+					// bad merkle proof
+					log.Error("❌  Restore Error: bad merkle proof")
+					return nil, gas, ErrInvalidProof
+				} else {
+					merkleProof = croppedProofDb
+					log.Info("✔️  Verify Merkle Proof for Restoration ... Success", "index", i)
+				}
+			}
 
 			// update alreadyRestored list
 			for i := 0; i < len(targetKeys); i++ {
