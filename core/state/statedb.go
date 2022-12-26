@@ -251,7 +251,7 @@ func New_Ethane(root common.Hash, root_inactive common.Hash, db Database, db_ina
 	// inactive snapshot
 	if sdb.snaps_inactive != nil {
 		if common.UsingInactiveStorageSnapshot || common.UsingInactiveAccountSnapshot {
-			sdb.snap_inactive = sdb.snaps_inactive.Snapshot(root)
+			sdb.snap_inactive = sdb.snaps_inactive.Snapshot(root_inactive)
 			sdb.snapDestructs_inactive = make(map[common.Hash]struct{})
 			sdb.snapAccounts_inactive = make(map[common.Hash][]byte)
 			sdb.snapStorage_inactive = make(map[common.Hash]map[common.Hash][]byte)
