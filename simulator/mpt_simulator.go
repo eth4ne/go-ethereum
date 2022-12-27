@@ -432,7 +432,8 @@ func flushTrieNodes() {
 	common.NewStorageNodeStat.Reset()
 
 	// flush state trie nodes
-	if common.NextBlockNum % common.FlushInterval == 0 {
+	if common.NextBlockNum % common.FlushInterval == 0 || (common.SimulationMode == 2 && (common.NextBlockNum+1) % common.InactivateCriterion == 0) {
+		// fmt.Println("flush at block", common.NextBlockNum)
 		common.FlushStorageTries = false
 		normTrie.Commit(nil)
 		normTrie.TrieDB().Commit(normTrie.Hash(), false, nil)
@@ -947,7 +948,7 @@ func restoreAccountForEthanos(restoreAddr common.Address) {
 		checkpointRoot := common.Blocks[checkpointBlockNum].Root
 		checkpointTrie, err := trie.New(checkpointRoot, trie.NewDatabase(diskdb))
 		if err != nil {
-			fmt.Println("restoreAccountForEthanos() error:", err)
+			fmt.Println("restoreAccountForEthanos() error 1:", err)
 			os.Exit(1)
 		}
 
@@ -1029,7 +1030,7 @@ func restoreAccountForEthanos(restoreAddr common.Address) {
 		checkpointRoot := common.Blocks[checkpointBlockNum].Root
 		checkpointTrie, err := trie.New(checkpointRoot, trie.NewDatabase(diskdb))
 		if err != nil {
-			fmt.Println("restoreAccountForEthanos() error:", err)
+			fmt.Println("restoreAccountForEthanos() error 2:", err)
 			os.Exit(1)
 		}
 
@@ -1060,7 +1061,7 @@ func restoreAccountForEthanos(restoreAddr common.Address) {
 				checkpointRoot := common.Blocks[checkpointBlockNum].Root
 				checkpointTrie, err := trie.New(checkpointRoot, trie.NewDatabase(diskdb))
 				if err != nil {
-					fmt.Println("restoreAccountForEthanos() error:", err)
+					fmt.Println("restoreAccountForEthanos() error 3:", err)
 					os.Exit(1)
 				}
 
