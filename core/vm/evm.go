@@ -297,8 +297,9 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 			merkleProof, blockHeader := parseProof(data, int64(checkpointBlock), &cnt, limit)
 			// merkleProof_1 := merkleProof // for getKey
 
-			// merkleProof_1 := make([][]byte, len(merkleProof))
-			// copy(merkleProof_1, merkleProof)
+			// // Copy values of MPs
+			// merkleProof_no_redundancy := make([][]byte, len(merkleProof))
+			// copy(merkleProof_no_redundancy, merkleProof)
 
 			// log.Info("### merkleProof", "merk leProof", merkleProof)
 
@@ -306,23 +307,63 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 
 			// retrieve target accounts and keys from the merkle proof
 			// GetAccountsAndKeysFromMerkleProof will return final restoring target excluding the already restored nodes.
-			targetAccounts, targetKeys = trie.GetAccountsAndKeysFromMerkleProof(blockHeader.Root_inactive, merkleProof)
+			// targetAccounts, targetKeys = trie.GetAccountsAndKeysFromMerkleProof(blockHeader.Root_inactive, merkleProof)
+			trie.GetAccountsAndKeysFromMerkleProof(blockHeader.Root_inactive, merkleProof)
+
+			// log.Info("targetAccounts", "targetAccounts", targetAccounts)
+			// log.Info("targetKeys", "targetKeys", targetKeys)
+			// log.Info("len(targetKeys)", "len(targetKeys)", len(targetKeys))
+
+			// // verify Merkle proof --> this is done when retrieving keys from MPs
+			// for i, key := range targetKeys {
+			// 	if value, merkleErr, croppedProofDb := trie.VerifyProof_restore(blockHeader.Root_inactive, key[:], merkleProof); merkleErr != nil || value == nil {
+			// 		// bad merkle proof
+			// 		log.Error("❌  Restore Error: bad merkle proof", "err-occuring index", i)
+			// 		return nil, gas, ErrInvalidProof
+			// 	} else {
+			// 		merkleProof = croppedProofDb
+			// 		log.Info("✔️  Verify Merkle Proof for Restoration ... Success", "index", i)
+			// 	}
+			// }
+
+			// // verify Merkle proof --> this is done when retrieving keys from MPs
+			// for i, key := range targetKeys {
+			// 	retrievedAccount, merkleErr, croppedProofDb, retrievedKey := trie.VerifyProof_GetAccountsAndKeys(blockHeader.Root_inactive, key[:], merkleProof)
+			// 	if merkleErr != nil || retrievedAccount == nil {
+			// 		// bad merkle proof
+			// 		log.Error("❌  Restore Error: bad merkle proof", "err-occuring index", i)
+			// 		return nil, gas, ErrInvalidProof
+			// 	} else {
+			// 		merkleProof = croppedProofDb
+			// 		targetKeys = append(targetKeys, retrievedKey)
+			// 		targetAccounts = append(targetAccounts, retrievedAccount)
+			// 		log.Info("✔️  Verify Merkle Proof for Restoration ... Success", "retrievedKey", retrievedKey)
+			// 	}
+			// }
+
+			// TODO (joonha) remove GetAccountsAndKeysFromMerkleProof and restore merkleProofs' redundancy
+
+			for i := 0; ; i++ {
+				// fmt.Println("\nmerkleProof: ", merkleProof)
+				retrievedAccount, merkleErr, croppedProofDb, retrievedKey := trie.VerifyProof_GetAccountsAndKeys(blockHeader.Root_inactive, merkleProof)
+				if merkleErr != nil || retrievedAccount == nil {
+					// bad merkle proof
+					log.Error("❌  Restore Error: bad merkle proof", "err-occuring index", i)
+					return nil, gas, ErrInvalidProof
+				} else {
+					merkleProof = croppedProofDb
+					targetKeys = append(targetKeys, retrievedKey)
+					targetAccounts = append(targetAccounts, retrievedAccount)
+					log.Info("✔️  Verify Merkle Proof for Restoration ... Success", "retrievedKey", retrievedKey)
+					if len(croppedProofDb) == 0 {
+						break
+					}
+				}
+			}
 
 			log.Info("targetAccounts", "targetAccounts", targetAccounts)
 			log.Info("targetKeys", "targetKeys", targetKeys)
 			log.Info("len(targetKeys)", "len(targetKeys)", len(targetKeys))
-
-			// verify Merkle proof
-			for i, key := range targetKeys {
-				if value, merkleErr, croppedProofDb := trie.VerifyProof_restore(blockHeader.Root_inactive, key[:], merkleProof); merkleErr != nil || value == nil {
-					// bad merkle proof
-					log.Error("❌  Restore Error: bad merkle proof")
-					return nil, gas, ErrInvalidProof
-				} else {
-					merkleProof = croppedProofDb
-					log.Info("✔️  Verify Merkle Proof for Restoration ... Success", "index", i)
-				}
-			}
 
 			// update alreadyRestored list
 			for i := 0; i < len(targetKeys); i++ {

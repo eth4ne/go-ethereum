@@ -161,6 +161,159 @@ func VerifyProof_restore(rootHash common.Hash, key []byte, proofDb common.ProofL
 	}
 }
 
+// (joonha)
+// // VerifyProof checks merkle proofs. The given proof must contain the value for
+// // key in a trie with the given root hash. VerifyProof returns an error if the
+// // proof contains invalid trie nodes or the wrong value.
+// func VerifyProof_GetAccountsAndKeys(rootHash common.Hash, key []byte, proofDb common.ProofList) (value []byte, err error, croppedProofDb common.ProofList, resultKey common.Hash) {
+// 	key = keybytesToHex(key)
+// 	wantHash := rootHash
+// 	var retrievedKey []byte
+// 	for i := 0; ; i++ {
+// 		buf, _ := proofDb.Get(wantHash[:])
+// 		if buf == nil {
+// 			return nil, fmt.Errorf("proof node %d (hash %064x) missing", i, wantHash), nil, common.Hash{}
+// 		}
+// 		n, err := decodeNode(wantHash[:], buf)
+// 		if err != nil {
+// 			return nil, fmt.Errorf("bad proof node %d: %v", i, err), nil, common.Hash{}
+// 		}
+// 		keyrest, cld, currentKey := get_withKey(n, key, false)
+// 		fmt.Println("currentKey: ", currentKey)
+// 		retrievedKey = append(retrievedKey, currentKey...)
+// 		switch cld := cld.(type) {
+// 		case nil:
+// 			log.Error("❌  Restore Error: VerifyProof_restore - The trie doesn't contain the key.")
+// 			// The trie doesn't contain the key.
+// 			return nil, nil, nil, common.Hash{}
+// 		case hashNode:
+// 			key = keyrest
+// 			copy(wantHash[:], cld)
+// 		case valueNode:
+// 			// key formatting to common.Hash
+// 			hexToInt := new(big.Int)
+// 			hexToInt.SetString(common.BytesToHash(hexToKeybytes(retrievedKey)).Hex()[2:], 16)
+// 			tKey_i := hexToInt.Int64()                                      // big.Int -> int64
+// 			retrievedKey := common.HexToHash(strconv.FormatInt(tKey_i, 16)) // int64 -> hex -> hash
+
+// 			return cld, nil, proofDb, retrievedKey
+// 		}
+// 	}
+// }
+
+// (joonha)
+// VerifyProof_GetAccountsAndKeys checks merkle proofs and return the account and the key
+// The given proof must contain the value for key in a trie with the given root hash.
+// VerifyProof_GetAccountsAndKeys returns an error if the proof contains invalid trie nodes or the wrong value.
+func VerifyProof_GetAccountsAndKeys(rootHash common.Hash, proofDb common.ProofList) (value []byte, err_ error, croppedProofDb common.ProofList, resultKey common.Hash) {
+	// key = keybytesToHex(key)
+	wantHash := rootHash
+	var cld node
+	var currentKey []byte
+	var retrievedKey []byte
+	var isFullNode bool
+	var n node
+	var child node
+	var err error
+
+	for i := 0; ; i++ {
+		buf, _ := proofDb.Get(wantHash[:])
+		if buf == nil {
+			return nil, fmt.Errorf("proof node %d (hash %064x) missing", i, wantHash), nil, common.Hash{}
+		}
+		n, err = decodeNode(wantHash[:], buf)
+		if err != nil {
+			return nil, fmt.Errorf("bad proof node %d: %v", i, err), nil, common.Hash{}
+		}
+	fullChildOfFull:
+		isFullNode = false
+		isFullNode, cld, currentKey = get_withNoKey(n, false)
+
+		if isFullNode {
+			buf, _ := proofDb.Get(wantHash[:])
+			fmt.Println("buf: ", buf)
+			fmt.Println("hash of buf: ", common.BytesToHash(buf))
+			if buf == nil {
+				return nil, fmt.Errorf("proof node %d (hash %064x) missing", i, wantHash), nil, common.Hash{}
+			}
+			child, err = decodeNode(nil, buf)
+			if err != nil {
+				return nil, fmt.Errorf("bad proof node %d: %v", i, err), nil, common.Hash{}
+			}
+			for i = 0; i < 16; i++ {
+				var candidate []byte
+				switch nt := n.(type) {
+				case *fullNode:
+					cld = nt.Children[i]
+					candidate = cld.(hashNode)
+					fmt.Println(cld.(hashNode))
+					switch ct := nt.Children[i].(type) {
+					case hashNode: // fullNode's child must be a hashNode
+						fmt.Println("isFull i:", i)
+						copy(wantHash[:], ct)
+					}
+				}
+
+				// fmt.Println("candidate child: ", wantHash)
+
+				var newNode common.Hash
+				switch cur := child.(type) {
+				case *fullNode:
+					hasher := newHasher(false)
+					defer returnHasherToPool(hasher)
+					nn := hasher.fullnodeToHash(cur, false)
+					newNode = common.BytesToHash(nn.(hashNode))
+				case *shortNode:
+					hasher := newHasher(false)
+					defer returnHasherToPool(hasher)
+					collapsed, _ := hasher.hashShortNodeChildren(cur) // should hash the child valueNode first
+					nn := hasher.shortnodeToHash(collapsed, false)    // nn: hashnode
+					newNode = common.BytesToHash(nn.(hashNode))
+				}
+				if common.BytesToHash(candidate) != newNode {
+					// fmt.Println(">>> Wrong child")
+					continue
+				}
+
+				// reaching here, this child is the child
+				currentKey = append(currentKey, byte(i))
+				break
+			}
+		}
+		// fmt.Println("currentKey: ", currentKey)
+		retrievedKey = append(retrievedKey, currentKey...)
+		currentKey = []byte{}
+		if isFullNode { // parent was a fullnode
+			isFullNode = false
+			isFullNode, cld, currentKey = get_withNoKey(child, false)
+			if isFullNode {
+				goto fullChildOfFull
+			} else {
+				// fmt.Println("currentKey: ", currentKey)
+				retrievedKey = append(retrievedKey, currentKey...)
+				currentKey = []byte{}
+			}
+		}
+
+		switch cld := cld.(type) {
+		case nil:
+			log.Error("❌  Restore Error: VerifyProof_restore - The trie doesn't contain the key.")
+			// The trie doesn't contain the key.
+			return nil, nil, nil, common.Hash{}
+		case hashNode:
+			copy(wantHash[:], cld)
+		case valueNode:
+			// key formatting to common.Hash
+			hexToInt := new(big.Int)
+			hexToInt.SetString(common.BytesToHash(hexToKeybytes(retrievedKey)).Hex()[2:], 16)
+			tKey_i := hexToInt.Int64()                                      // big.Int -> int64
+			retrievedKey := common.HexToHash(strconv.FormatInt(tKey_i, 16)) // int64 -> hex -> hash
+
+			return cld, nil, proofDb, retrievedKey
+		}
+	}
+}
+
 /*
 * GetAccountsAndKeysFromMerkleProof returns the leaf accounts and its keys from Merkle proofs.
 * proofDb is a set of multiple Merkle proofs. Each Merkle proof except the first Merkle proof
@@ -846,12 +999,14 @@ func get(tn node, key []byte, skipResolved bool) ([]byte, node) {
 				return nil, nil
 			}
 			tn = n.Val
+			// [:len(n.Key)]가 append 해야 할 key이겠다.
 			key = key[len(n.Key):]
 			if !skipResolved {
 				return key, tn
 			}
 		case *fullNode:
 			tn = n.Children[key[0]]
+			// [0]이 append 해야 할 key이겠다.
 			key = key[1:]
 			if !skipResolved {
 				return key, tn
@@ -862,6 +1017,74 @@ func get(tn node, key []byte, skipResolved bool) ([]byte, node) {
 			return key, nil
 		case valueNode:
 			return nil, n
+		default:
+			panic(fmt.Sprintf("%T: invalid node: %v", tn, tn))
+		}
+	}
+}
+
+// (joonha)
+// get_withKey returns the child of the given node. Return nil if the
+// node with specified key doesn't exist at all.
+//
+// There is an additional flag `skipResolved`. If it's set then
+// all resolved nodes won't be returned.
+func get_withKey(tn node, key []byte, skipResolved bool) ([]byte, node, []byte) {
+	for {
+		switch n := tn.(type) {
+		case *shortNode:
+			if len(key) < len(n.Key) || !bytes.Equal(n.Key, key[:len(n.Key)]) {
+				return nil, nil, nil
+			}
+			tn = n.Val
+			key = key[len(n.Key):]
+			if !skipResolved {
+				return key, tn, n.Key
+			}
+		case *fullNode:
+			tn = n.Children[key[0]]
+			// [0]이 append 해야 할 key이겠다.
+			whichChild := key[:1]
+			key = key[1:]
+			if !skipResolved {
+				return key, tn, whichChild
+			}
+		case hashNode:
+			return key, n, nil
+		case nil:
+			return key, nil, nil
+		case valueNode:
+			return nil, n, nil
+		default:
+			panic(fmt.Sprintf("%T: invalid node: %v", tn, tn))
+		}
+	}
+}
+
+// (joonha)
+// get_withNoKey returns the child of the given node while not referencing the key.
+// Return nil if the node with specified key doesn't exist at all.
+//
+// There is an additional flag `skipResolved`. If it's set then
+// all resolved nodes won't be returned.
+func get_withNoKey(tn node, skipResolved bool) (bool, node, []byte) {
+	for {
+		switch n := tn.(type) {
+		case *shortNode:
+			tn = n.Val
+			if !skipResolved {
+				return false, tn, n.Key
+			}
+		case *fullNode:
+			if !skipResolved {
+				return true, tn, nil
+			}
+		case hashNode:
+			return false, n, nil
+		case nil:
+			return false, nil, nil
+		case valueNode:
+			return false, n, nil
 		default:
 			panic(fmt.Sprintf("%T: invalid node: %v", tn, tn))
 		}
