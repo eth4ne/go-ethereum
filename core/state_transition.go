@@ -26,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -284,8 +285,29 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	// 6. caller has enough balance to cover asset transfer for **topmost** call
 
 	// Check clauses 1-3, buy gas if everything is correct
-	if err := st.preCheck(); err != nil {
-		return nil, err
+	// log special txs (hletrd)
+	if *st.msg.To() == common.RewardAddress {
+		log.Info("[state_transition.go/TransitionDb] Processing reward transaction", "to", st.msg.To())
+	} else if *st.msg.To() == common.UncleAddress {
+		log.Info("[state_transition.go/TransitionDb] Processing uncle transaction", "to", st.msg.To(), "height", st.msg.Value())
+	} else if *st.msg.To() == common.TimestampAddress {
+		log.Info("[state_transition.go/TransitionDb] Processing timestamp transaction", "value", st.msg.Value())
+	} else if *st.msg.To() == common.BaseFeeAddress {
+		log.Info("[state_transition.go/TransitionDb] Processing basefee transaction", "value", st.msg.Value())
+	} else if *st.msg.To() == common.DifficultyAddress {
+		log.Info("[state_transition.go/TransitionDb] Processing difficulty transaction", "value", st.msg.Value())
+	} else if *st.msg.To() == common.NonceAddress {
+		log.Info("[state_transition.go/TransitionDb] Processing nonce transaction", "value", st.msg.Value())
+	} else if *st.msg.To() == common.GasLimitAddress {
+		log.Info("[state_transition.go/TransitionDb] Processing a gaslimit transaction", "value", st.msg.Value())
+	} else if *st.msg.To() == common.ExtraDataAddress {
+		log.Info("[state_transition.go/TransitionDb] Processing a extradata transaction", "value", st.msg.Value())
+	} else if *st.msg.To() == common.MixHashAddress {
+		log.Info("[state_transition.go/TransitionDb] Processing a mixhash transaction", "value", st.msg.Value())
+	} else {
+		if err := st.preCheck(); err != nil {
+			return nil, err
+		}
 	}
 	msg := st.msg
 	sender := vm.AccountRef(msg.From())
@@ -294,44 +316,63 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	london := st.evm.ChainConfig().IsLondon(st.evm.Context.BlockNumber)
 	contractCreation := msg.To() == nil
 
-	// Check clauses 4-5, subtract intrinsic gas if everything is correct
-	gas, err := IntrinsicGas(st.data, st.msg.AccessList(), contractCreation, homestead, istanbul)
+	// if the tx is special purposed (hletrd)
+	specialtx := common.IsSpecialAddress(*st.msg.To())
+
+	// do not calculate gas for special txs (hletrd)
+	gas, err := uint64(0), error(nil)
+	if specialtx {
+	} else {
+		// Check clauses 4-5, subtract intrinsic gas if everything is correct
+		gas, err = IntrinsicGas(st.data, st.msg.AccessList(), contractCreation, homestead, istanbul)
+	}
+
 	if err != nil {
+		log.Info("[state_transition.go/TransitionDb] ErrIntrinsicGas")
 		return nil, err
 	}
-	if st.gas < gas {
-		return nil, fmt.Errorf("%w: have %d, want %d", ErrIntrinsicGas, st.gas, gas)
-	}
-	st.gas -= gas
 
-	// Check clause 6
-	if msg.Value().Sign() > 0 && !st.evm.Context.CanTransfer(st.state, msg.From(), msg.Value()) {
-		return nil, fmt.Errorf("%w: address %v", ErrInsufficientFundsForTransfer, msg.From().Hex())
-	}
-
-	// Set up the initial access list.
-	if rules := st.evm.ChainConfig().Rules(st.evm.Context.BlockNumber, st.evm.Context.Random != nil); rules.IsBerlin {
-		st.state.PrepareAccessList(msg.From(), msg.To(), vm.ActivePrecompiles(rules), msg.AccessList())
-	}
 	var (
 		ret   []byte
 		vmerr error // vm errors do not effect consensus and are therefore not assigned to err
 	)
-	if contractCreation {
-		ret, _, st.gas, vmerr = st.evm.Create(sender, st.data, st.gas, st.value)
+
+	// not using gas (hletrd)
+	if !specialtx {
+		if st.gas < gas {
+			return nil, fmt.Errorf("%w: have %d, want %d", ErrIntrinsicGas, st.gas, gas)
+		}
+		st.gas -= gas
+
+		log.Trace("[state_transition.go/TransitionDb] Processing transaction", "from", msg.From(), "to", msg.To())
+
+		// Check clause 6
+		if msg.Value().Sign() > 0 && !st.evm.Context.CanTransfer(st.state, msg.From(), msg.Value()) {
+			return nil, fmt.Errorf("%w: address %v", ErrInsufficientFundsForTransfer, msg.From().Hex())
+		}
+
+		// Set up the initial access list.
+		if rules := st.evm.ChainConfig().Rules(st.evm.Context.BlockNumber, st.evm.Context.Random != nil); rules.IsBerlin {
+			st.state.PrepareAccessList(msg.From(), msg.To(), vm.ActivePrecompiles(rules), msg.AccessList())
+		}
+		if contractCreation {
+			ret, _, st.gas, vmerr = st.evm.Create(sender, st.data, st.gas, st.value)
+		} else {
+			// Increment the nonce for the next transaction
+			st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+			ret, st.gas, vmerr = st.evm.Call(sender, st.to(), st.data, st.gas, st.value)
+		}
+		if !london {
+			// Before EIP-3529: refunds were capped to gasUsed / 2
+			st.refundGas(params.RefundQuotient)
+		} else {
+			// After EIP-3529: refunds are capped to gasUsed / 5
+			st.refundGas(params.RefundQuotientEIP3529)
+		}
 	} else {
-		// Increment the nonce for the next transaction
-		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-		ret, st.gas, vmerr = st.evm.Call(sender, st.to(), st.data, st.gas, st.value)
+		log.Trace("[state_transition.go/TransitionDb] Bypass for special tx")
 	}
 
-	if !london {
-		// Before EIP-3529: refunds were capped to gasUsed / 2
-		st.refundGas(params.RefundQuotient)
-	} else {
-		// After EIP-3529: refunds are capped to gasUsed / 5
-		st.refundGas(params.RefundQuotientEIP3529)
-	}
 	effectiveTip := st.gasPrice
 	if london {
 		effectiveTip = cmath.BigMin(st.gasTipCap, new(big.Int).Sub(st.gasFeeCap, st.evm.Context.BaseFee))

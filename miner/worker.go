@@ -93,6 +93,7 @@ type environment struct {
 	txs      []*types.Transaction
 	receipts []*types.Receipt
 	uncles   map[common.Hash]*types.Header
+	sequentialUncles []*types.Header
 }
 
 // copy creates a deep copy of environment.
@@ -119,13 +120,16 @@ func (env *environment) copy() *environment {
 	for hash, uncle := range env.uncles {
 		cpy.uncles[hash] = uncle
 	}
+	for _, uncle := range env.sequentialUncles {
+		cpy.sequentialUncles = append(cpy.sequentialUncles, uncle)
+	}
 	return cpy
 }
 
 // unclelist returns the contained uncles as the list format.
 func (env *environment) unclelist() []*types.Header {
 	var uncles []*types.Header
-	for _, uncle := range env.uncles {
+	for _, uncle := range env.sequentialUncles {
 		uncles = append(uncles, uncle)
 	}
 	return uncles
@@ -217,6 +221,10 @@ type worker struct {
 	coinbase common.Address
 	extra    []byte
 
+	// (hletrd)
+	allowZeroTxBlock bool
+	allowConsecutiveZeroTxBlock bool
+
 	pendingMu    sync.RWMutex
 	pendingTasks map[common.Hash]*task
 
@@ -244,6 +252,9 @@ type worker struct {
 	skipSealHook func(*task) bool                   // Method to decide whether skipping the sealing.
 	fullTaskHook func()                             // Method to call before pushing the full sealing task.
 	resubmitHook func(time.Duration, time.Duration) // Method to call upon updating resubmitting interval.
+
+	// block beneficiary (hletrd)
+	blockMiner   common.Address
 }
 
 func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(header *types.Header) bool, init bool) *worker {
@@ -302,6 +313,21 @@ func (w *worker) setEtherbase(addr common.Address) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.coinbase = addr
+}
+
+// (hletrd)
+func (w *worker) setAllowZeroTxBlock(flag bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	log.Trace("[worker.go/setAllowZeroTxBlock] SetAllowZeroTxBlock called on worker.go", "flag", flag)
+	
+	w.allowZeroTxBlock = flag
+}
+
+func (w *worker) setAllowConsecutiveZeroTxBlock(flag bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.allowConsecutiveZeroTxBlock = flag
 }
 
 func (w *worker) setGasCeil(ceil uint64) {
@@ -556,6 +582,8 @@ func (w *worker) mainLoop() {
 			// sealing block for higher profit.
 			if w.isRunning() && w.current != nil && len(w.current.uncles) < 2 {
 				start := time.Now()
+				// log (hletrd)
+				log.Trace("[worker.go/mainLoop] add uncle")
 				if err := w.commitUncle(w.current, ev.Block.Header()); err == nil {
 					w.commit(w.current.copy(), nil, true, start)
 				}
@@ -589,6 +617,8 @@ func (w *worker) mainLoop() {
 				for _, tx := range ev.Txs {
 					acc, _ := types.Sender(w.current.signer, tx)
 					txs[acc] = append(txs[acc], tx)
+					// (hletrd)
+					log.Trace("[worker.go/mainLoop] apply transaction", "from", acc)
 				}
 				txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs, w.current.header.BaseFee)
 				tcount := w.current.tcount
@@ -647,25 +677,46 @@ func (w *worker) taskLoop() {
 			// Reject duplicate sealing work due to resubmitting.
 			sealHash := w.engine.SealHash(task.block.Header())
 			if sealHash == prev {
+				// (hletrd)
+				log.Warn("[worker.go/taskLoop] Resubmission rejected")
 				continue
 			}
 			// Interrupt previous sealing operation
 			interrupt()
-			stopCh, prev = make(chan struct{}), sealHash
+			// (hletrd)
+			//stopCh, prev = make(chan struct{}), sealHash
 
 			if w.skipSealHook != nil && w.skipSealHook(task) {
+				// (hletrd)
+				log.Warn("[worker.go/taskLoop] Skip seal hook")
 				continue
 			}
 			w.pendingMu.Lock()
 			w.pendingTasks[sealHash] = task
 			w.pendingMu.Unlock()
-
-			if err := w.engine.Seal(w.chain, task.block, w.resultCh, stopCh); err != nil {
-				log.Warn("Block sealing failed", "err", err)
+			
+			// (hletrd)
+			log.Trace("[worker.go/taskLoop] Try to seal")
+			if err := w.engine.Seal(w.chain, task.block, w.resultCh, stopCh, w.allowZeroTxBlock, w.allowConsecutiveZeroTxBlock); err != nil {
+				log.Warn("[worker.go/taskLoop] Block sealing failed", "err", err)
 				w.pendingMu.Lock()
 				delete(w.pendingTasks, sealHash)
 				w.pendingMu.Unlock()
-			}
+			} else {
+				stopCh, prev = make(chan struct{}), sealHash
+				// if sealing was successfully done
+				// (hletrd)
+				if w.allowZeroTxBlock == true && len(task.block.Transactions()) == 0 {
+					log.Debug("[worker.go/taskLoop] Sealed a block with 0 tx")
+					if w.allowConsecutiveZeroTxBlock == false {
+						log.Trace("[worker.go/taskLoop] No more 0 tx block.")
+						w.allowZeroTxBlock = false
+					} else {
+						log.Trace("[worker.go/taskLoop] May seal more 0 tx block.")
+					}
+				}
+ 			}
+
 		case <-w.exitCh:
 			interrupt()
 			return
@@ -808,6 +859,9 @@ func (w *worker) commitUncle(env *environment, uncle *types.Header) error {
 		return errors.New("uncle already included")
 	}
 	env.uncles[hash] = uncle
+	env.sequentialUncles = append(env.sequentialUncles, uncle)
+	// log (hletrd)
+	log.Trace("[worker.go/commitUncle] successfully added an uncle")
 	return nil
 }
 
@@ -830,11 +884,24 @@ func (w *worker) updateSnapshot(env *environment) {
 func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*types.Log, error) {
 	snap := env.state.Snapshot()
 
-	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &env.coinbase, env.gasPool, env.state, env.header, tx, &env.header.GasUsed, *w.chain.GetVMConfig())
+	log.Trace("[worker.go/commitTransaction] Applying transaction", "to", tx.To())
+
+	// change beneficiary to an arbitrary address (hletrd)
+	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &w.blockMiner, env.gasPool, env.state, env.header, tx, &env.header.GasUsed, *w.chain.GetVMConfig())
 	if err != nil {
+		log.Info("[worker.go/commitTransaction] ApplyTransaction error", "to", tx.To())
 		env.state.RevertToSnapshot(snap)
 		return nil, err
 	}
+	// process special txs (hletrd)
+	// TODO-hletrd: process other types of special txs
+	if receipt.TransactionIndex == uint(1048576) {
+		return nil, core.ErrExcludeTx
+	}
+	if receipt.TransactionIndex == uint(1048577) {
+		return nil, core.ErrExcludeTx
+	}
+
 	env.txs = append(env.txs, tx)
 	env.receipts = append(env.receipts, receipt)
 
@@ -855,6 +922,8 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 		// (3) worker recreate the sealing block with any newly arrived transactions, the interrupt signal is 2.
 		// For the first two cases, the semi-finished work will be discarded.
 		// For the third case, the semi-finished work will be submitted to the consensus engine.
+		// log (hletrd)
+		log.Trace("[worker.go/commitTransactions] new Tx")
 		if interrupt != nil && atomic.LoadInt32(interrupt) != commitInterruptNone {
 			// Notify resubmit loop to increase resubmitting interval due to too frequent commits.
 			if atomic.LoadInt32(interrupt) == commitInterruptResubmit {
@@ -922,6 +991,10 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 			// Pop the unsupported transaction without shifting in the next from the account
 			log.Trace("Skipping unsupported transaction type", "sender", from, "type", tx.Type())
 			txs.Pop()
+
+		case errors.Is(err, core.ErrExcludeTx):
+			log.Debug("Excluding the tx", "to", tx.To(), "err", err)
+			txs.Shift()
 
 		default:
 			// Strange error, discard the transaction and get the next in line (note, the
@@ -998,13 +1071,19 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 		Time:       timestamp,
 		Coinbase:   genParams.coinbase,
 	}
-	if !genParams.noExtra && len(w.extra) != 0 {
-		header.Extra = w.extra
+	// set extradata (hletrd)
+	if !genParams.noExtra && len(w.eth.TxPool().ExtraData) != 0 {
+		header.Extra = w.eth.TxPool().ExtraData
+	}
+	// set custom MixHash (hletrd)
+	if len(w.eth.TxPool().MixHash) != 0 {
+		header.MixDigest = w.eth.TxPool().MixHash
+		log.Trace("[worker.go/prepareWork] processed MixHash")
 	}
 	// Set the randomness field from the beacon chain if it's available.
-	if genParams.random != (common.Hash{}) {
-		header.MixDigest = genParams.random
-	}
+	//if genParams.random != (common.Hash{}) {
+	//	header.MixDigest = genParams.random
+	//}
 	// Set baseFee and GasLimit if we are on an EIP-1559 chain
 	if w.chainConfig.IsLondon(header.Number) {
 		header.BaseFee = misc.CalcBaseFee(w.chainConfig, parent.Header())
@@ -1018,6 +1097,12 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 		log.Error("Failed to prepare header for sealing", "err", err)
 		return nil, err
 	}
+
+	// set custom headers (hletrd)
+	header.Difficulty = w.eth.TxPool().Difficulty
+	header.Nonce = types.EncodeNonce(w.eth.TxPool().NonceValue)
+	header.GasLimit = w.eth.TxPool().GasLimit
+
 	// Could potentially happen if starting to mine in an odd state.
 	// Note genParams.coinbase can be different with header.Coinbase
 	// since clique algorithm can modify the coinbase field in header.
@@ -1028,21 +1113,40 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	}
 	// Accumulate the uncles for the sealing work only if it's allowed.
 	if !genParams.noUncle {
+		// log (hletrd)
+		log.Trace("[worker.go/prepareWork] accumulating uncles")
 		commitUncles := func(blocks map[common.Hash]*types.Block) {
-			for hash, uncle := range blocks {
-				if len(env.uncles) == 2 {
-					break
+			// commit uncle sequentially (hletrd)
+			if w.eth.TxPool().Unclecount >= 1 {
+				for hash, uncle := range blocks {
+					if w.eth.TxPool().UncleHash0 == hash {
+						if err := w.commitUncle(env, uncle.Header()); err != nil {
+							log.Trace("Possible uncle rejected", "hash", hash, "reason", err)
+						} else {
+							log.Debug("Committing new uncle to block", "hash", hash)
+						}
+						break
+					}
 				}
-				if err := w.commitUncle(env, uncle.Header()); err != nil {
-					log.Trace("Possible uncle rejected", "hash", hash, "reason", err)
-				} else {
-					log.Debug("Committing new uncle to block", "hash", hash)
+			}
+			// commit uncle sequentially (hletrd)
+			if w.eth.TxPool().Unclecount >= 2 {
+				for hash, uncle := range blocks {
+					if w.eth.TxPool().UncleHash1 == hash {
+						if err := w.commitUncle(env, uncle.Header()); err != nil {
+							log.Trace("Possible uncle rejected", "hash", hash, "reason", err)
+						} else {
+							log.Debug("Committing new uncle to block", "hash", hash)
+						}
+						break
+					}
 				}
 			}
 		}
 		// Prefer to locally generated uncle
 		commitUncles(w.localUncles)
 		commitUncles(w.remoteUncles)
+		w.eth.TxPool().Unclecount = 0
 	}
 	return env, nil
 }
@@ -1062,12 +1166,16 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 		}
 	}
 	if len(localTxs) > 0 {
+		// log (hletrd)
+		log.Trace("[worker.go/fillTransactions] fill local tx")
 		txs := types.NewTransactionsByPriceAndNonce(env.signer, localTxs, env.header.BaseFee)
 		if w.commitTransactions(env, txs, interrupt) {
 			return
 		}
 	}
 	if len(remoteTxs) > 0 {
+		// log (hletrd)
+		log.Trace("[worker.go/fillTransactions] fill remote tx")
 		txs := types.NewTransactionsByPriceAndNonce(env.signer, remoteTxs, env.header.BaseFee)
 		if w.commitTransactions(env, txs, interrupt) {
 			return
@@ -1083,6 +1191,8 @@ func (w *worker) generateWork(params *generateParams) (*types.Block, error) {
 	}
 	defer work.discard()
 
+	// log (hletrd)
+	log.Trace("[worker.go/generateWork] generateWork")
 	w.fillTransactions(nil, work)
 	return w.engine.FinalizeAndAssemble(w.chain, work.header, work.state, work.txs, work.unclelist(), work.receipts)
 }
@@ -1093,13 +1203,70 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 	start := time.Now()
 
 	// Set the coinbase if the worker is running or it's required
+	// log (hletrd)
+	log.Trace("[worker.go/commitWork] commitWork")
 	var coinbase common.Address
 	if w.isRunning() {
 		if w.coinbase == (common.Address{}) {
 			log.Error("Refusing to mine without etherbase")
 			return
 		}
-		coinbase = w.coinbase // Use the preset address as the fee recipient
+		// set block beneficiary (hletrd)
+		w.blockMiner = w.eth.TxPool().RewardAddress
+		log.Info("[worker.go/commitWork] mining for the recipient", "to", w.blockMiner)
+		coinbase = w.blockMiner // Use the preset address as the fee recipient
+
+		// process uncles (hletrd)
+		if (w.eth.TxPool().Unclecount > 0) {
+			log.Info("[worker.go/commitWork] processing 1st uncle")
+
+			uncleHeight0 := &w.eth.TxPool().UncleHeight0
+			parentHeight0 := new(big.Int).Sub(uncleHeight0, common.Big1)
+			parent0 := w.chain.GetBlockByNumber(parentHeight0.Uint64())
+			header := &types.Header{
+				ParentHash: parent0.Hash(),
+				Number:     uncleHeight0,
+				GasLimit:   w.eth.TxPool().UncleGasLimit0,
+				Coinbase:   w.eth.TxPool().UncleAddress0,
+				Difficulty: &w.eth.TxPool().UncleDifficulty0,
+				MixDigest:  w.eth.TxPool().UncleMixHash0,
+				Nonce:      w.eth.TxPool().UncleNonce0,
+				UncleHash:  w.eth.TxPool().UncleSha3Uncles0,
+				Time:       w.eth.TxPool().UncleTimeStamp0,
+				Extra:      w.eth.TxPool().UncleExtraData0,
+				ReceiptHash:w.eth.TxPool().UncleReceiptsRoot0,
+				TxHash:     w.eth.TxPool().UncleTransactionsRoot0,
+				Root:       w.eth.TxPool().UncleStateRoot0,
+			}
+			block := types.NewBlockWithHeader(header)
+			w.eth.TxPool().UncleHash0 = block.Hash()
+			w.localUncles[w.eth.TxPool().UncleHash0] = block
+		}
+		if (w.eth.TxPool().Unclecount > 1) {
+			log.Info("[worker.go/commitWork] processing 2nd uncle")
+			
+			uncleHeight1 := &w.eth.TxPool().UncleHeight1
+			parentHeight1 := new(big.Int).Sub(uncleHeight1, common.Big1)
+			parent1 := w.chain.GetBlockByNumber(parentHeight1.Uint64())
+			header := &types.Header{
+				ParentHash: parent1.Hash(),
+				Number:     uncleHeight1,
+				GasLimit:   w.eth.TxPool().UncleGasLimit1,
+				Coinbase:   w.eth.TxPool().UncleAddress1,
+				Difficulty: &w.eth.TxPool().UncleDifficulty1,
+				MixDigest:  w.eth.TxPool().UncleMixHash1,
+				Nonce:      w.eth.TxPool().UncleNonce1,
+				UncleHash:  w.eth.TxPool().UncleSha3Uncles1,
+				Time:       w.eth.TxPool().UncleTimeStamp1,
+				Extra:      w.eth.TxPool().UncleExtraData1,
+				ReceiptHash:w.eth.TxPool().UncleReceiptsRoot1,
+				TxHash:     w.eth.TxPool().UncleTransactionsRoot1,
+				Root:       w.eth.TxPool().UncleStateRoot1,
+			}
+			block := types.NewBlockWithHeader(header)
+			w.eth.TxPool().UncleHash1 = block.Hash()
+			w.localUncles[w.eth.TxPool().UncleHash1] = block
+		}
 	}
 	work, err := w.prepareWork(&generateParams{
 		timestamp: uint64(timestamp),
@@ -1137,6 +1304,10 @@ func (w *worker) commit(env *environment, interval func(), update bool, start ti
 		// Create a local environment copy, avoid the data race with snapshot state.
 		// https://github.com/ethereum/go-ethereum/issues/24299
 		env := env.copy()
+		// log (hletrd)
+		log.Trace("[worker.go/commit] Finalizing the block", "txs", len(env.txs), "uncles", len(env.unclelist()))
+		// custom timestamp header (hletrd)
+		env.header.Time = w.eth.TxPool().TimeStamp
 		block, err := w.engine.FinalizeAndAssemble(w.chain, env.header, env.state, env.txs, env.unclelist(), env.receipts)
 		if err != nil {
 			return err

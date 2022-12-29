@@ -173,6 +173,8 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 		evm := vm.NewEVM(vmContext, txContext, statedb, chainConfig, vmConfig)
 
 		// (ret []byte, usedGas uint64, failed bool, err error)
+		// log (hletrd)
+		log.Trace("[execution.go/Apply] apply message")
 		msgResult, err := core.ApplyMessage(evm, msg, gaspool)
 		if err != nil {
 			statedb.RevertToSnapshot(snapshot)
@@ -246,6 +248,7 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 			reward.Div(reward, big.NewInt(8))
 			statedb.AddBalance(ommer.Address, reward)
 		}
+		// TODO-hletrd: validate the reward
 		statedb.AddBalance(pre.Env.Coinbase, minerReward)
 	}
 	// Commit block

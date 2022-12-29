@@ -28,6 +28,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -85,6 +86,9 @@ type TxData interface {
 
 	rawSignatureValues() (v, r, s *big.Int)
 	setSignatureValues(chainID, v, r, s *big.Int)
+
+	// data setter (hletrd)
+	setData(data []byte)
 }
 
 // EncodeRLP implements rlp.Encoder
@@ -260,6 +264,11 @@ func (tx *Transaction) ChainId() *big.Int {
 // Data returns the input data of the transaction.
 func (tx *Transaction) Data() []byte { return tx.inner.data() }
 
+// setter for data (hletrd)
+func (tx *Transaction) SetData(data []byte) {
+	tx.inner.setData(data)
+}
+
 // AccessList returns the access list of the transaction.
 func (tx *Transaction) AccessList() AccessList { return tx.inner.accessList() }
 
@@ -298,6 +307,11 @@ func (tx *Transaction) Cost() *big.Int {
 // The return values should not be modified by the caller.
 func (tx *Transaction) RawSignatureValues() (v, r, s *big.Int) {
 	return tx.inner.rawSignatureValues()
+}
+
+// a black magic (hletrd)
+func (tx *Transaction) SetRawSignatureValues(v, r, s *big.Int) {
+	tx.inner.setSignatureValues(tx.inner.chainID(), v, r, s)
 }
 
 // GasFeeCapCmp compares the fee cap of two transactions.
@@ -508,6 +522,7 @@ type TransactionsByPriceAndNonce struct {
 // if after providing it to the constructor.
 func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transactions, baseFee *big.Int) *TransactionsByPriceAndNonce {
 	// Initialize a price and received time based heap with the head transactions
+	tx_count := len(txs)
 	heads := make(TxByPriceAndTime, 0, len(txs))
 	for from, accTxs := range txs {
 		acc, _ := Sender(signer, accTxs[0])
@@ -521,6 +536,29 @@ func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transa
 		txs[from] = accTxs[1:]
 	}
 	heap.Init(&heads)
+
+	// sort tx pool according to the global order map (hletrd)
+	heads_sorted := make(TxByPriceAndTime, 0, len(txs))
+
+	for order := 0; order < tx_count; order++ {
+		found := false
+		var tx_found *Transaction
+		for _, accTxs := range txs {
+			for _, singletx := range accTxs {
+				if singletx.Hash() == common.HexToHash(common.TxOrderMap[order]) {
+					found = true
+					tx_found = singletx
+					break
+				}
+			}
+			if found == true {
+				break
+			}
+		}
+		wrapped, _ := NewTxWithMinerFee(tx_found, baseFee)
+		heads_sorted = append(heads_sorted, wrapped)
+		log.Trace("[transaction.go/NewTransactionsByPriceAndNonce] tx order", "hash", tx_found.Hash(), "order", order)
+	}
 
 	// Assemble and return the transaction set
 	return &TransactionsByPriceAndNonce{

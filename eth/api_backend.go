@@ -359,3 +359,23 @@ func (b *EthAPIBackend) StateAtBlock(ctx context.Context, block *types.Block, re
 func (b *EthAPIBackend) StateAtTransaction(ctx context.Context, block *types.Block, txIndex int, reexec uint64) (core.Message, vm.BlockContext, *state.StateDB, error) {
 	return b.eth.stateAtTransaction(block, txIndex, reexec)
 }
+
+// optional zero tx mining (hletrd)
+func (b *EthAPIBackend) SetAllowZeroTxBlock(flag bool) {
+	b.eth.setAllowZeroTxBlock(flag)
+}
+
+// optional zero tx mining (hletrd)
+func (b *EthAPIBackend) GetAllowZeroTxBlock() bool {
+	return b.eth.getAllowZeroTxBlock()
+}
+
+// optional zero tx mining (hletrd)
+func (b *EthAPIBackend) SetAllowConsecutiveZeroTxBlock(flag bool) {
+	b.eth.setAllowConsecutiveZeroTxBlock(flag)
+}
+
+// optional zero tx mining (hletrd)
+func (b *EthAPIBackend) GetAllowConsecutiveZeroTxBlock() bool {
+	return b.eth.getAllowConsecutiveZeroTxBlock()
+}

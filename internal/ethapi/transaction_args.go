@@ -130,7 +130,15 @@ func (args *TransactionArgs) setDefaults(ctx context.Context, b Backend) error {
 		args.Value = new(hexutil.Big)
 	}
 	if args.Nonce == nil {
-		nonce, err := b.GetPoolNonce(ctx, args.from())
+		// delegatedFrom (hletrd)
+		// only for general txs, which the length of the data ge 24
+		var nonce uint64
+		var err error
+		if len(args.data()) >= 24 {
+			nonce, err = b.GetPoolNonce(ctx, common.BytesToAddress(args.data()[4:24]))
+		} else {
+			nonce, err = b.GetPoolNonce(ctx, args.from())
+		}
 		if err != nil {
 			return err
 		}
@@ -139,10 +147,12 @@ func (args *TransactionArgs) setDefaults(ctx context.Context, b Backend) error {
 	if args.Data != nil && args.Input != nil && !bytes.Equal(*args.Data, *args.Input) {
 		return errors.New(`both "data" and "input" are set and not equal. Please use "input" to pass transaction call data`)
 	}
-	if args.To == nil && len(args.data()) == 0 {
-		return errors.New(`contract creation without any data provided`)
-	}
+	// allow empty contract (hletrd)
+	//if args.To == nil && len(args.data()) == 0 {
+	//	return errors.New(`contract creation without any data provided`)
+	//}
 	// Estimate the gas usage if necessary.
+	// TODO-hletrd: check if delegated from is required here
 	if args.Gas == nil {
 		// These fields are immutable during the estimation, safe to
 		// pass the pointer directly.
@@ -181,7 +191,9 @@ func (args *TransactionArgs) ToMessage(globalGasCap uint64, baseFee *big.Int) (t
 		return types.Message{}, errors.New("both gasPrice and (maxFeePerGas or maxPriorityFeePerGas) specified")
 	}
 	// Set sender address or use zero address if none specified.
+	// (hletrd)
 	addr := args.from()
+	//addr := args.delegatedFrom()
 
 	// Set default gas & gas price if none were set
 	gas := globalGasCap
@@ -264,6 +276,7 @@ func (args *TransactionArgs) toTransaction() *types.Transaction {
 			Data:       args.data(),
 			AccessList: al,
 		}
+		log.Trace("[transaction_args.go] Received a dynamicfee tx")
 	case args.AccessList != nil:
 		data = &types.AccessListTx{
 			To:         args.To,
@@ -275,6 +288,7 @@ func (args *TransactionArgs) toTransaction() *types.Transaction {
 			Data:       args.data(),
 			AccessList: *args.AccessList,
 		}
+		log.Trace("[transaction_args.go] Received a accesslist tx")
 	default:
 		data = &types.LegacyTx{
 			To:       args.To,
@@ -284,6 +298,7 @@ func (args *TransactionArgs) toTransaction() *types.Transaction {
 			Value:    (*big.Int)(args.Value),
 			Data:     args.data(),
 		}
+		log.Trace("[transaction_args.go] Received a legacy tx")
 	}
 	return types.NewTx(data)
 }

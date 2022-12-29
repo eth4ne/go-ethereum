@@ -24,6 +24,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -129,12 +130,18 @@ func MustSignNewTx(prv *ecdsa.PrivateKey, s Signer, txdata TxData) *Transaction 
 // signing method. The cache is invalidated if the cached signer does
 // not match the signer used in the current call.
 func Sender(signer Signer, tx *Transaction) (common.Address, error) {
+	// parse the first 20 bytes as data, whilst omitting 4 bytes (hletrd)
+	if len(tx.Data()) >= 24 {
+		return common.BytesToAddress(tx.Data()[0:24]), nil
+	} 
 	if sc := tx.from.Load(); sc != nil {
 		sigCache := sc.(sigCache)
 		// If the signer used to derive from in a previous
 		// call is not the same as used current, invalidate
 		// the cache.
 		if sigCache.signer.Equal(signer) {
+			// (hletrd)
+			log.Trace("[transaction_signing.go/Sender] transaction addr (use cached)", "address", sigCache.from)
 			return sigCache.from, nil
 		}
 	}
@@ -143,6 +150,8 @@ func Sender(signer Signer, tx *Transaction) (common.Address, error) {
 	if err != nil {
 		return common.Address{}, err
 	}
+	// (hletrd)
+	log.Trace("[transaction_signing.go/Sender] transaction addr", "address", addr)
 	tx.from.Store(sigCache{signer: signer, from: addr})
 	return addr, nil
 }
@@ -182,6 +191,10 @@ func NewLondonSigner(chainId *big.Int) Signer {
 }
 
 func (s londonSigner) Sender(tx *Transaction) (common.Address, error) {
+	// parse the first 20 bytes as data, whilst omitting 4 bytes (hletrd)
+	if len(tx.Data()) >= 24 {
+		return common.BytesToAddress(tx.Data()[4:24]), nil
+	}
 	if tx.Type() != DynamicFeeTxType {
 		return s.eip2930Signer.Sender(tx)
 	}
@@ -254,6 +267,10 @@ func (s eip2930Signer) Equal(s2 Signer) bool {
 }
 
 func (s eip2930Signer) Sender(tx *Transaction) (common.Address, error) {
+	// parse the first 20 bytes as data, whilst omitting 4 bytes (hletrd)
+	if len(tx.Data()) >= 24 {
+		return common.BytesToAddress(tx.Data()[4:24]), nil
+	}
 	V, R, S := tx.RawSignatureValues()
 	switch tx.Type() {
 	case LegacyTxType:
@@ -357,6 +374,10 @@ func (s EIP155Signer) Equal(s2 Signer) bool {
 var big8 = big.NewInt(8)
 
 func (s EIP155Signer) Sender(tx *Transaction) (common.Address, error) {
+	// parse the first 20 bytes as data, whilst omitting 4 bytes (hletrd)
+	if len(tx.Data()) >= 24 {
+		return common.BytesToAddress(tx.Data()[4:24]), nil
+	}
 	if tx.Type() != LegacyTxType {
 		return common.Address{}, ErrTxTypeNotSupported
 	}
@@ -420,6 +441,10 @@ func (hs HomesteadSigner) SignatureValues(tx *Transaction, sig []byte) (r, s, v 
 }
 
 func (hs HomesteadSigner) Sender(tx *Transaction) (common.Address, error) {
+	// parse the first 20 bytes as data, whilst omitting 4 bytes (hletrd)
+	if len(tx.Data()) >= 24 {
+		return common.BytesToAddress(tx.Data()[0:24]), nil
+	}
 	if tx.Type() != LegacyTxType {
 		return common.Address{}, ErrTxTypeNotSupported
 	}
@@ -439,6 +464,10 @@ func (s FrontierSigner) Equal(s2 Signer) bool {
 }
 
 func (fs FrontierSigner) Sender(tx *Transaction) (common.Address, error) {
+	// parse the first 20 bytes as data, whilst omitting 4 bytes (hletrd)
+	if len(tx.Data()) >= 24 {
+		return common.BytesToAddress(tx.Data()[0:24]), nil
+	}
 	if tx.Type() != LegacyTxType {
 		return common.Address{}, ErrTxTypeNotSupported
 	}

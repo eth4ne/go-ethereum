@@ -27,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -97,6 +98,9 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	txContext := NewEVMTxContext(msg)
 	evm.Reset(txContext, statedb)
 
+	// log (hletrd)
+	log.Trace("[state_processor.go/applyTransaction] Apply message")
+
 	// Apply the transaction to the current state (included in the env).
 	result, err := ApplyMessage(evm, msg, gp)
 	if err != nil {
@@ -134,6 +138,37 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	receipt.BlockHash = blockHash
 	receipt.BlockNumber = blockNumber
 	receipt.TransactionIndex = uint(statedb.TxIndex())
+
+	// special tx (hletrd)
+	if *msg.To() == common.RewardAddress {
+		log.Info("[state_processor.go/applyTransaction] Processing a reward transaction", "to", msg.To())
+		receipt.TransactionIndex = uint(1048576)
+	} else if *msg.To() == common.UncleAddress {
+		log.Info("[state_processor.go/applyTransaction] Processing an uncle transaction", "to", msg.To())
+		receipt.TransactionIndex = uint(1048577)
+	} else if *msg.To() == common.TimestampAddress {
+		log.Info("[state_processor.go/applyTransaction] Processing a timestamp transaction", "value", msg.Value())
+		receipt.TransactionIndex = uint(1048578)
+	} else if *msg.To() == common.BaseFeeAddress {
+		log.Info("[state_processor.go/applyTransaction] Processing a basefee transaction", "value", msg.Value())
+		receipt.TransactionIndex = uint(1048579)
+	} else if *msg.To() == common.DifficultyAddress {
+		log.Info("[state_processor.go/applyTransaction] Processing a difficulty transaction", "value", msg.Value())
+		receipt.TransactionIndex = uint(1048580)
+	} else if *msg.To() == common.NonceAddress {
+		log.Info("[state_processor.go/applyTransaction] Processing a nonce transaction", "value", msg.Data())
+		receipt.TransactionIndex = uint(1048581)
+	} else if *msg.To() == common.GasLimitAddress {
+		log.Info("[state_processor.go/applyTransaction] Processing a gaslimit transaction", "value", msg.Data())
+		receipt.TransactionIndex = uint(1048580)
+	} else if *msg.To() == common.ExtraDataAddress {
+		log.Info("[state_processor.go/applyTransaction] Processing a extradata transaction", "value", msg.Data())
+		receipt.TransactionIndex = uint(1048579)
+	} else if *msg.To() == common.MixHashAddress {
+		log.Info("[state_processor.go/applyTransaction] Processing a mixhash transaction", "value", msg.Data())
+		receipt.TransactionIndex = uint(1048578)
+	}
+
 	return receipt, err
 }
 

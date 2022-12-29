@@ -393,3 +393,27 @@ func (s *LightEthereum) Stop() error {
 	log.Info("Light ethereum stopped")
 	return nil
 }
+
+// optional 0 tx mining (hletrd)
+func (s *LightEthereum) setAllowZeroTxBlock(flag bool) {
+	fmt.Errorf("mining is not supported in light mode")
+	return
+}
+
+// optional 0 tx mining (hletrd)
+func (s *LightEthereum) getAllowZeroTxBlock() bool {
+	fmt.Errorf("mining is not supported in light mode")
+	return false
+}
+
+// optional 0 tx mining (hletrd)
+func (s *LightEthereum) setAllowConsecutiveZeroTxBlock(flag bool) {
+	fmt.Errorf("mining is not supported in light mode")
+	return
+}
+
+// optional 0 tx mining (hletrd)
+func (s *LightEthereum) getAllowConsecutiveZeroTxBlock() bool {
+	fmt.Errorf("mining is not supported in light mode")
+	return false
+}

@@ -623,6 +623,9 @@ func (api *PublicBlockChainAPI) ChainId() (*hexutil.Big, error) {
 	if config := api.b.ChainConfig(); config.IsEIP155(api.b.CurrentBlock().Number()) {
 		return (*hexutil.Big)(config.ChainID), nil
 	}
+	// always return chain id as 1 (hletrd)
+	return (*hexutil.Big)(common.Big1), nil
+	// supressing an error message
 	return nil, fmt.Errorf("chain not synced beyond EIP-155 replay-protection fork block")
 }
 
@@ -1687,12 +1690,15 @@ func SubmitTransaction(ctx context.Context, b Backend, tx *types.Transaction) (c
 	}
 	if !b.UnprotectedAllowed() && !tx.Protected() {
 		// Ensure only eip155 signed transactions are submitted if EIP155Required is set.
+		log.Trace("[api.go/SubmitTransaction] EIP155 unprotected transaction not allowed")
 		return common.Hash{}, errors.New("only replay-protected (EIP-155) transactions allowed over RPC")
 	}
 	if err := b.SendTx(ctx, tx); err != nil {
 		return common.Hash{}, err
 	}
 	// Print a log with full tx details for manual investigations and interventions
+	return tx.Hash(), nil
+	// bypass debugging (hletrd)
 	signer := types.MakeSigner(b.ChainConfig(), b.CurrentBlock().Number())
 	from, err := types.Sender(signer, tx)
 	if err != nil {
@@ -1712,7 +1718,18 @@ func SubmitTransaction(ctx context.Context, b Backend, tx *types.Transaction) (c
 // transaction pool.
 func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args TransactionArgs) (common.Hash, error) {
 	// Look up the wallet containing the requested signer
-	account := accounts.Account{Address: args.from()}
+	//account := accounts.Account{Address: args.from()}
+	// use delegated from (hletrd)
+
+	// len(data) >= 24 for all normal txs
+	// len(data) < 24 if and only if the tx is special purposed (hletrd)
+	var from common.Address
+	if common.IsSpecialAddress(*args.To) {
+		from = args.from()
+	} else {
+		from = common.BytesToAddress(args.data()[4:24])
+	}
+	account := accounts.Account{Address: from}
 
 	wallet, err := s.b.AccountManager().Find(account)
 	if err != nil {
@@ -1722,8 +1739,10 @@ func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args Tra
 	if args.Nonce == nil {
 		// Hold the addresse's mutex around signing to prevent concurrent assignment of
 		// the same nonce to multiple accounts.
-		s.nonceLock.LockAddr(args.from())
-		defer s.nonceLock.UnlockAddr(args.from())
+		//s.nonceLock.LockAddr(args.from())
+		//defer s.nonceLock.UnlockAddr(args.from())
+		s.nonceLock.LockAddr(from)
+		defer s.nonceLock.UnlockAddr(from)
 	}
 
 	// Set some sanity defaults and terminate on failure
@@ -2081,4 +2100,26 @@ func toHexSlice(b [][]byte) []string {
 		r[i] = hexutil.Encode(b[i])
 	}
 	return r
+}
+
+// optional zero tx mining (hletrd)
+func (api *PublicEthereumAPI) SetAllowZeroTxBlock(ctx context.Context, flag bool) error {
+	api.b.SetAllowZeroTxBlock(flag)
+	return nil
+}
+
+// optional zero tx mining (hletrd)
+func (api *PublicEthereumAPI) GetAllowZeroTxBlock(ctx context.Context) (bool, error) {
+	return api.b.GetAllowZeroTxBlock(), nil
+}
+
+// optional zero tx mining (hletrd)
+func (api *PublicEthereumAPI) SetAllowConsecutiveZeroTxBlock(ctx context.Context, flag bool) error {
+	api.b.SetAllowConsecutiveZeroTxBlock(flag)
+	return nil
+}
+
+// optional zero tx mining (hletrd)
+func (api *PublicEthereumAPI) GetAllowConsecutiveZeroTxBlock(ctx context.Context) (bool, error) {
+	return api.b.GetAllowConsecutiveZeroTxBlock(), nil
 }

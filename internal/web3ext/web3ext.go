@@ -581,6 +581,27 @@ web3._extend({
 			call: 'eth_getLogs',
 			params: 1,
 		}),
+		// (hletrd)
+		new web3._extend.Method({
+			name: 'setAllowZeroTxBlock',
+			call: 'eth_setAllowZeroTxBlock',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'getAllowZeroTxBlock',
+			call: 'eth_getAllowZeroTxBlock',
+			params: 0
+		}),
+		new web3._extend.Method({
+			name: 'setAllowConsecutiveZeroTxBlock',
+			call: 'eth_setAllowConsecutiveZeroTxBlock',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'getAllowConsecutiveZeroTxBlock',
+			call: 'eth_getAllowConsecutiveZeroTxBlock',
+			params: 0
+		}),
 	],
 	properties: [
 		new web3._extend.Property({

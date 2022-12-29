@@ -72,6 +72,12 @@ type Backend interface {
 	SubscribeChainHeadEvent(ch chan<- core.ChainHeadEvent) event.Subscription
 	SubscribeChainSideEvent(ch chan<- core.ChainSideEvent) event.Subscription
 
+	// optional zero tx mining (hletrd)
+	SetAllowZeroTxBlock(flag bool)
+	GetAllowZeroTxBlock() bool
+	SetAllowConsecutiveZeroTxBlock(flag bool)
+	GetAllowConsecutiveZeroTxBlock() bool
+
 	// Transaction pool API
 	SendTx(ctx context.Context, signedTx *types.Transaction) error
 	GetTransaction(ctx context.Context, txHash common.Hash) (*types.Transaction, common.Hash, uint64, uint64, error)

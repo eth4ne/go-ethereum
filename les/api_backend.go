@@ -331,3 +331,23 @@ func (b *LesApiBackend) StateAtBlock(ctx context.Context, block *types.Block, re
 func (b *LesApiBackend) StateAtTransaction(ctx context.Context, block *types.Block, txIndex int, reexec uint64) (core.Message, vm.BlockContext, *state.StateDB, error) {
 	return b.eth.stateAtTransaction(ctx, block, txIndex, reexec)
 }
+
+// optional 0 tx mining (hletrd)
+func (b *LesApiBackend) SetAllowZeroTxBlock(flag bool) {
+	b.eth.setAllowZeroTxBlock(flag)
+}
+
+// optional 0 tx mining (hletrd)
+func (b *LesApiBackend) GetAllowZeroTxBlock() bool {
+	return b.eth.getAllowZeroTxBlock()
+}
+
+// optional 0 tx mining (hletrd)
+func (b *LesApiBackend) SetAllowConsecutiveZeroTxBlock(flag bool) {
+	b.eth.setAllowConsecutiveZeroTxBlock(flag)
+}
+
+// optional 0 tx mining (hletrd)
+func (b *LesApiBackend) GetAllowConsecutiveZeroTxBlock() bool {
+	return b.eth.getAllowConsecutiveZeroTxBlock()
+}

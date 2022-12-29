@@ -294,9 +294,10 @@ func (beacon *Beacon) FinalizeAndAssemble(chain consensus.ChainHeaderReader, hea
 //
 // Note, the method returns immediately and will send the result async. More
 // than one result may also be returned depending on the consensus algorithm.
-func (beacon *Beacon) Seal(chain consensus.ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
+// optional zero tx mining (hletrd)
+func (beacon *Beacon) Seal(chain consensus.ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}, allowZeroTxBlock bool, allowConsecutiveZeroTxBlock bool) error {
 	if !beacon.IsPoSHeader(block.Header()) {
-		return beacon.ethone.Seal(chain, block, results, stop)
+		return beacon.ethone.Seal(chain, block, results, stop, allowZeroTxBlock, allowConsecutiveZeroTxBlock)
 	}
 	// The seal verification is done by the external consensus engine,
 	// return directly without pushing any block back. In another word

@@ -424,6 +424,10 @@ type Config struct {
 	DatasetsLockMmap bool
 	PowMode          Mode
 
+	// optional zero tx mining (hletrd)
+	AllowZeroTxBlock bool
+	AllowConsecutiveZeroTxBlock bool
+
 	// When set, notifications sent by the remote sealer will
 	// be block header JSON objects instead of work package arrays.
 	NotifyFull bool
@@ -472,6 +476,11 @@ func New(config Config, notify []string, noverify bool) *Ethash {
 	if config.DatasetDir != "" && config.DatasetsOnDisk > 0 {
 		config.Log.Info("Disk storage enabled for ethash DAGs", "dir", config.DatasetDir, "count", config.DatasetsOnDisk)
 	}
+
+	// Set up initial values (hletrd)
+	config.AllowZeroTxBlock = true
+	config.AllowConsecutiveZeroTxBlock = false
+
 	ethash := &Ethash{
 		config:   config,
 		caches:   newlru("cache", config.CachesInMem, newCache),

@@ -34,6 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 const (
@@ -44,11 +45,28 @@ const (
 var (
 	errNoMiningWork      = errors.New("no mining work available yet")
 	errInvalidSealResult = errors.New("invalid or stale proof-of-work solution")
+	// (hletrd)
+	errZeroTx            = errors.New("Tried sealing without any transaction in the block")
 )
 
 // Seal implements consensus.Engine, attempting to find a nonce that satisfies
 // the block's difficulty requirements.
-func (ethash *Ethash) Seal(chain consensus.ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
+func (ethash *Ethash) Seal(chain consensus.ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}, allowZeroTxBlock bool, allowConsecutiveZeroTxBlock bool) error {
+	// do not seal with 0 tx (jmlee)
+	// nope, seal with 0 tx (hletrd)
+
+	log.Trace("[sealer.go/Seal] Seal() called", "allowZeroTxBlock", allowZeroTxBlock)
+
+	if len(block.Transactions()) == 0 {
+		// log.Info("Sealing paused, waiting for transactions")
+		if allowZeroTxBlock == false {
+			log.Trace("[sealer.go/Seal] Sealing paused (zero tx sealing requested but not enabled)")
+			return errZeroTx
+		} else if allowZeroTxBlock == true {
+			log.Info("[sealer.go/Seal] Sealing a block with 0 tx")
+		}
+	}
+
 	// If we're running a fake PoW, simply return a 0 nonce immediately
 	if ethash.config.PowMode == ModeFake || ethash.config.PowMode == ModeFullFake {
 		header := block.Header()
@@ -62,7 +80,8 @@ func (ethash *Ethash) Seal(chain consensus.ChainHeaderReader, block *types.Block
 	}
 	// If we're running a shared PoW, delegate sealing to it
 	if ethash.shared != nil {
-		return ethash.shared.Seal(chain, block, results, stop)
+		// (hletrd)
+		return ethash.shared.Seal(chain, block, results, stop, allowZeroTxBlock, allowConsecutiveZeroTxBlock)
 	}
 	// Create a runner and the multiple search threads it directs
 	abort := make(chan struct{})
@@ -117,7 +136,8 @@ func (ethash *Ethash) Seal(chain consensus.ChainHeaderReader, block *types.Block
 		case <-ethash.update:
 			// Thread count was changed on user request, restart
 			close(abort)
-			if err := ethash.Seal(chain, block, results, stop); err != nil {
+			// (hletrd)
+			if err := ethash.Seal(chain, block, results, stop, allowZeroTxBlock, allowConsecutiveZeroTxBlock); err != nil {
 				ethash.config.Log.Error("Failed to restart sealing after update", "err", err)
 			}
 		}
@@ -141,7 +161,8 @@ func (ethash *Ethash) mine(block *types.Block, id int, seed uint64, abort chan s
 	// Start generating random nonces until we abort or find a good one
 	var (
 		attempts  = int64(0)
-		nonce     = seed
+		// set custom nonce (hletrd)
+		nonce     = block.Nonce()
 		powBuffer = new(big.Int)
 	)
 	logger := ethash.config.Log.New("miner", id)
@@ -163,12 +184,15 @@ search:
 				attempts = 0
 			}
 			// Compute the PoW value of this nonce
-			digest, result := hashimotoFull(dataset.dataset, hash, nonce)
-			if powBuffer.SetBytes(result).Cmp(target) <= 0 {
+			_, result := hashimotoFull(dataset.dataset, hash, nonce)
+			// TODO-hletrd: set custom hash
+			// do not calculate nonce (hletrd)
+			if true || powBuffer.SetBytes(result).Cmp(target) <= 0 {
 				// Correct nonce found, create a new header with it
-				header = types.CopyHeader(header)
-				header.Nonce = types.EncodeNonce(nonce)
-				header.MixDigest = common.BytesToHash(digest)
+				//header = types.CopyHeader(header)
+				// do not calculate nonce (hletrd)
+				//header.Nonce = types.EncodeNonce(nonce)
+				//header.MixDigest = common.BytesToHash(digest)
 
 				// Seal and return a block (if still needed)
 				select {
