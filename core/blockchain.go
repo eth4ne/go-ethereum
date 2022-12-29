@@ -1308,6 +1308,47 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	} else {
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
 	}
+
+	//jhkim: after write block, flush text files of txSubstates
+	var epoch = 1000
+
+	if common.GlobalBlockNumber%epoch == 0 && common.GlobalBlockNumber != 0 {
+		PrintTxSubstate(common.GlobalBlockNumber, epoch, *bc.chainConfig)
+		fmt.Println("Done! /blockNumber", common.GlobalBlockNumber)
+
+		// free memory and reset TxDetail, TxReadList, TxWriteList, Miner&Uncles list, and Txlist
+		common.TxDetail = make(map[common.Hash]*common.TxInformation)
+		common.TxReadList = make(map[common.Hash]map[common.Address]struct{})
+
+		for k, v := range common.TxWriteList {
+			for _, vv := range v {
+				vv.Storage = nil
+			}
+			delete(common.TxWriteList, k)
+		}
+		common.TxWriteList = make(map[common.Hash]map[common.Address]*common.SubstateAccount)
+		common.BlockMinerList = make(map[int]common.SimpleAccount)
+
+		for k := range common.BlockUncleList {
+			delete(common.BlockUncleList, k)
+		}
+		common.BlockUncleList = make(map[int][]common.SimpleAccount)
+
+		for k := range common.BlockTxList {
+			delete(common.BlockTxList, k)
+		}
+		common.BlockTxList = make(map[int][]common.Hash)
+		common.HardFork = make(map[common.Address]*common.SubstateAccount)
+	}
+
+	// jhkim: inspect leveldb for every 1 million blocks
+	// if common.GlobalBlockNumber != 0 && common.GlobalBlockNumber%1000000 == 0 {
+	// 	rawdb.MyInspectDatabase(bc.db, nil, nil)
+	// 	// os.Exit(0)
+	// }
+	if common.GlobalBlockNumber == 2000001 {
+		panic(0)
+	}
 	return status, nil
 }
 

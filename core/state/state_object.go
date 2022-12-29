@@ -338,6 +338,27 @@ func (s *stateObject) updateTrie(db Database) Trie {
 			s.setError(tr.TryUpdate(key[:], v))
 			s.db.StorageUpdated += 1
 		}
+		// jhkim: write storage trie changes
+		if common.GlobalBlockNumber > 0 && common.GlobalTxHash != common.HexToHash("0x0") {
+			if common.TxWriteList[common.GlobalTxHash][s.Address()] == nil {
+
+				// fmt.Println("update Storage key-value without default txwritelist object")
+				// fmt.Println("block#", common.GlobalBlockNumber, "txhash", common.GlobalTxHash, s.Address())
+				common.TxWriteList[common.GlobalTxHash][s.Address()] = common.NewSubstateAccount(s.data.Nonce, s.data.Balance, s.code, s.db.GetStorageTrieHash(s.Address()))
+
+				// common.TxWriteList[common.GlobalTxHash][s.Address()].StorageRoot = s.db.GetStorageTrieHash(s.Address())
+			}
+			common.TxWriteList[common.GlobalTxHash][s.Address()].Code = s.db.GetCode(s.Address())
+			common.TxWriteList[common.GlobalTxHash][s.Address()].CodeHash = s.db.GetCodeHash(s.Address())
+			common.TxWriteList[common.GlobalTxHash][s.Address()].StorageRoot = s.db.GetStorageTrieHash(s.Address())
+			// fmt.Println("updateTrie: block#", common.GlobalBlockNumber, "txhash", common.GlobalTxHash)
+
+			// fmt.Println("  add slot/address:", s.Address(), "storageroot", s.db.GetStorageTrieHash(s.Address()))
+			// fmt.Println("  key:", key, "val:", value)
+			common.TxWriteList[common.GlobalTxHash][s.Address()].Storage[key] = value
+			common.PrettyTxWritePrint(common.GlobalTxHash, s.Address())
+		}
+
 		// If state snapshotting is active, cache the data til commit
 		if s.db.snap != nil {
 			if storage == nil {

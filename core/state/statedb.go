@@ -362,6 +362,19 @@ func (s *StateDB) StorageTrie(addr common.Address) Trie {
 	return cpy.getTrie(s.db)
 }
 
+// jhkim: GetStorageTrieHash returns storageroot of address
+func (s *StateDB) GetStorageTrieHash(addr common.Address) common.Hash {
+	stateObject := s.getStateObject(addr)
+	if stateObject == nil {
+		// return nil
+		return common.EmptyRoot
+		// return common.HexToHash("0x0")
+	}
+	cpy := stateObject.deepCopy(s)
+	// cpy.updateTrie(s.db)
+	return cpy.getTrie(s.db).Hash()
+}
+
 func (s *StateDB) HasSuicided(addr common.Address) bool {
 	stateObject := s.getStateObject(addr)
 	if stateObject != nil {
@@ -471,6 +484,45 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 	if s.snap != nil {
 		s.snapAccounts[obj.addrHash] = snapshot.SlimAccountRLP(obj.data.Nonce, obj.data.Balance, obj.data.Root, obj.data.CodeHash)
 	}
+	// jhkim
+	if common.GlobalBlockNumber > 0 && common.GlobalTxHash != common.HexToHash("0x0") {
+		addr = obj.Address()
+		substateacc := common.TxWriteList[common.GlobalTxHash][addr]
+		if substateacc == nil {
+			substateacc = common.NewSubstateAccount(obj.data.Nonce, obj.data.Balance, obj.code, s.GetStorageTrieHash(addr))
+		} else {
+			if substateacc.Balance != obj.data.Balance {
+				substateacc.Balance = obj.data.Balance
+			}
+			if substateacc.Nonce != obj.data.Nonce {
+				substateacc.Nonce = obj.data.Nonce
+			}
+		}
+		substateacc.CodeHash = s.GetCodeHash(addr)
+		substateacc.Code = s.GetCode(addr)
+		substateacc.StorageRoot = s.GetStorageTrieHash(addr)
+
+		common.TxWriteList[common.GlobalTxHash][addr] = substateacc
+		// common.TxWriteList[common.GlobalTxHash][addr].CodeHash = s.GetCodeHash(addr)
+		// common.TxWriteList[common.GlobalTxHash][addr].StorageRoot = s.GetStorageTrieHash(addr)
+
+		// jhkim
+		// if len(common.TxWriteList[common.GlobalTxHash][addr].Storage) != 0 {
+		// 	fmt.Println()
+		// 	fmt.Println("updateStateobject: block#", common.GlobalBlockNumber, "txhash", common.GlobalTxHash)
+		// 	fmt.Println("  update stateobj/address:", addr, "storageroot", s.GetStorageTrieHash(addr))
+
+		// 	if addr == common.HexToAddress("0x61C5E2A298f40DBB2adEE3b27C584AdAD6833BaC") {
+		// 		// fmt.Println("  Storage:", common.TxWriteList[common.GlobalTxHash][addr].Storage)
+		// 		for k, v := range common.TxWriteList[common.GlobalTxHash][addr].Storage {
+		// 			fmt.Println("    slot:", k, "val:", v)
+		// 		}
+		// 	}
+		// 	fmt.Println()
+		// 	fmt.Println()
+		// }
+		common.PrettyTxWritePrint(common.GlobalTxHash, addr)
+	}
 }
 
 // deleteStateObject removes the given object from the state trie.
@@ -501,6 +553,13 @@ func (s *StateDB) getStateObject(addr common.Address) *stateObject {
 // flag set. This is needed by the state journal to revert to the correct s-
 // destructed object instead of wiping all knowledge about the state object.
 func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
+	// jhkim: write TxReadList
+	if common.GlobalBlockNumber > 0 && common.GlobalTxHash != common.HexToHash("0x0") {
+		if _, exist := common.TxReadList[common.GlobalTxHash][addr]; !exist {
+			common.TxReadList[common.GlobalTxHash][addr] = struct{}{}
+			// common.TxReadList[common.GlobalTxHash][addr] = common.SubstateAccount // if you want to archive reading slots
+		}
+	}
 	// Prefer live objects if any is available
 	if obj := s.stateObjects[addr]; obj != nil {
 		return obj
@@ -589,6 +648,14 @@ func (s *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) 
 		s.journal.append(resetObjectChange{prev: prev, prevdestruct: prevdestruct})
 	}
 	s.setStateObject(newobj)
+
+	if common.GlobalBlockNumber > 0 && common.GlobalTxHash != common.HexToHash("0x0") {
+
+		// fmt.Println("createobject", addr)
+
+		common.TxWriteList[common.GlobalTxHash][addr] = common.NewSubstateAccount(newobj.data.Nonce, newobj.data.Balance, newobj.code, s.GetStorageTrieHash(addr))
+	}
+
 	if prev != nil && !prev.deleted {
 		return newobj, prev
 	}
@@ -601,8 +668,8 @@ func (s *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) 
 // CreateAccount is called during the EVM CREATE operation. The situation might arise that
 // a contract does the following:
 //
-//   1. sends funds to sha(account ++ (nonce + 1))
-//   2. tx_create(sha(account ++ nonce)) (note that this gets the address of 1)
+//  1. sends funds to sha(account ++ (nonce + 1))
+//  2. tx_create(sha(account ++ nonce)) (note that this gets the address of 1)
 //
 // Carrying over the balance ensures that Ether doesn't disappear.
 func (s *StateDB) CreateAccount(addr common.Address) {
@@ -797,6 +864,14 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 				s.snapDestructs[obj.addrHash] = struct{}{} // We need to maintain account deletions explicitly (will remain set indefinitely)
 				delete(s.snapAccounts, obj.addrHash)       // Clear out any previously updated account data (may be recreated via a ressurrect)
 				delete(s.snapStorage, obj.addrHash)        // Clear out any previously updated storage data (may be recreated via a ressurrect)
+
+				if common.GlobalTxHash != common.HexToHash("0x0") {
+
+					// fmt.Println("deleteobject", common.GlobalBlockNumber, common.GlobalTxHash, obj.Address())
+
+					delete(common.TxWriteList[common.GlobalTxHash], obj.Address())
+
+				}
 			}
 		} else {
 			obj.finalise(true) // Prefetch slots in the background
@@ -814,6 +889,16 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 	}
 	// Invalidate journal because reverting across transactions is not allowed.
 	s.clearJournalAndRefund()
+}
+
+// jhkim
+func containAddress(acclist []common.SimpleAccount, addr common.Address) bool {
+	for _, v := range acclist {
+		if v.Addr == addr {
+			return true
+		}
+	}
+	return false
 }
 
 // IntermediateRoot computes the current root hash of the state trie.
@@ -866,6 +951,14 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 		}
 		usedAddrs = append(usedAddrs, common.CopyBytes(addr[:])) // Copy needed for closure
 	}
+	if common.GlobalBlockNumber > 0 && common.GlobalTxHash != common.HexToHash("0x0") {
+		for addr := range common.TxWriteList[common.GlobalTxHash] {
+			if _, exist := s.stateObjectsPending[addr]; !exist {
+				delete(common.TxWriteList[common.GlobalTxHash], addr)
+			}
+		}
+	}
+
 	if prefetcher != nil {
 		prefetcher.used(s.originalRoot, usedAddrs)
 	}
@@ -897,6 +990,7 @@ func (s *StateDB) clearJournalAndRefund() {
 
 // Commit writes the state to the underlying in-memory trie database.
 func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
+	// fmt.Println("statedb.go Commit/ blocknumber:", common.GlobalBlockNumber)
 	if s.dbErr != nil {
 		return common.Hash{}, fmt.Errorf("commit aborted due to earlier error: %v", s.dbErr)
 	}

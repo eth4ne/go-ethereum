@@ -19,6 +19,7 @@ package core
 import (
 	"fmt"
 	"math/big"
+	"os"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -72,8 +73,53 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	}
 	blockContext := NewEVMBlockContext(header, p.bc, nil)
 	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, p.config, cfg)
+
+	// jhkim: nil map check
+	if common.TxReadList == nil {
+		common.TxReadList = make(map[common.Hash]map[common.Address]struct{})
+		common.TxWriteList = make(map[common.Hash]map[common.Address]*common.SubstateAccount)
+		common.BlockMinerList = make(map[int]common.SimpleAccount)
+		common.BlockUncleList = make(map[int][]common.SimpleAccount)
+		common.BlockTxList = make(map[int][]common.Hash)
+		common.HardFork = make(map[common.Address]*common.SubstateAccount)
+
+	}
+
+	// jhkim: Init common.Global varables for ethane before transactions processing
+	common.GlobalBlockNumber = int(block.Number().Int64()) //jhkim
+	blocknumber := common.GlobalBlockNumber
+	if common.BlockTxList[blocknumber] == nil {
+		common.BlockTxList[blocknumber] = make([]common.Hash, 0)
+	}
+
+	// jhkim: write block miner & uncles
+	minerStorageRoot := statedb.GetStorageTrieHash(block.Coinbase())
+	if minerStorageRoot != common.EmptyRoot {
+		fmt.Println("Block", common.GlobalBlockNumber, "'s miner", block.Coinbase(), " has not empty storage root/ storageroot:", minerStorageRoot)
+		// os.Exit(0)
+	}
+
+	uncles := block.Uncles()
+	if len(uncles) != 0 {
+		common.BlockUncleList[blocknumber] = []common.SimpleAccount{}
+		for _, uncle := range uncles {
+			uncleStorageRoot := statedb.GetStorageTrieHash(uncle.Coinbase)
+			if uncleStorageRoot != common.EmptyRoot {
+				fmt.Println("Block", common.GlobalBlockNumber, "'s uncle", uncle.Coinbase, "has not empty storage root/ storageroot:", uncleStorageRoot)
+				// os.Exit(0)
+			}
+		}
+
+	}
+
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
+
+		common.TxReadList[tx.Hash()] = map[common.Address]struct{}{}
+		common.TxWriteList[tx.Hash()] = map[common.Address]*common.SubstateAccount{}
+		common.BlockTxList[blocknumber] = append(common.BlockTxList[blocknumber], tx.Hash())
+		common.GlobalTxHash = tx.Hash()
+
 		msg, err := tx.AsMessage(types.MakeSigner(p.config, header.Number), header.BaseFee)
 		if err != nil {
 			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
@@ -85,9 +131,35 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		}
 		receipts = append(receipts, receipt)
 		allLogs = append(allLogs, receipt.Logs...)
+
+		//jhkim: reset global variables after process each transaction
+		common.GlobalTxTo = common.Address{}
+		common.GlobalTxFrom = common.Address{}
+		common.GlobalTxHash = common.HexToHash("0x0")
+
 	}
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles())
+
+	common.BlockMinerList[blocknumber] = common.SimpleAccount{
+		Addr:        block.Coinbase(),
+		Balance:     statedb.GetBalance(block.Coinbase()),
+		Nonce:       statedb.GetNonce(block.Coinbase()),
+		Codehash:    statedb.GetCodeHash(block.Coinbase()),
+		StorageRoot: minerStorageRoot, // jhkim: should be emptyhash
+	}
+
+	for _, uncle := range uncles {
+		uncleStorageRoot := statedb.GetStorageTrieHash(block.Coinbase())
+		tmp := common.SimpleAccount{
+			Addr:        uncle.Coinbase,
+			Balance:     statedb.GetBalance(uncle.Coinbase),
+			Nonce:       statedb.GetNonce(uncle.Coinbase),
+			Codehash:    statedb.GetCodeHash(uncle.Coinbase),
+			StorageRoot: uncleStorageRoot, // jhkim: should be emptyhash
+		}
+		common.BlockUncleList[blocknumber] = append(common.BlockUncleList[blocknumber], tmp)
+	}
 
 	return receipts, allLogs, *usedGas, nil
 }
@@ -96,6 +168,14 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	// Create a new context to be used in the EVM environment.
 	txContext := NewEVMTxContext(msg)
 	evm.Reset(txContext, statedb)
+
+	// jhkim: write TxDetail befor applymessage for test
+	if _, ok := common.TxDetail[tx.Hash()]; !ok {
+		WriteTxDetail(tx, msg, blockNumber, statedb)
+	} else {
+		fmt.Println("Error: Tx already exist!/ blocknumber", common.GlobalBlockNumber, " txHash:", tx.Hash())
+		os.Exit(0)
+	}
 
 	// Apply the transaction to the current state (included in the env).
 	result, err := ApplyMessage(evm, msg, gp)
@@ -117,6 +197,51 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	receipt := &types.Receipt{Type: tx.Type(), PostState: root, CumulativeGasUsed: *usedGas}
 	if result.Failed() {
 		receipt.Status = types.ReceiptStatusFailed
+
+		// jhkim: ErrCodeStoreOutofGas is error message for only after Homestead.
+		// So before Homestead(1150000), txDetail should not mark this tx as failed
+		if !config.IsHomestead(blockNumber) && result.Err == vm.ErrCodeStoreOutOfGas {
+			// jhkim: Do nothing
+		} else {
+
+			//jhkim: classify fail type (ex. transfer fail, contractcall fail, contract deploy fail)
+			t := common.TxDetail[tx.Hash()].Types
+			if t == 1 {
+				common.TxDetail[tx.Hash()].Types = 41 // transfer fail
+			} else if t == 2 {
+				common.TxDetail[tx.Hash()].Types = 42 // contract deploy fail
+			} else if t == 3 {
+				common.TxDetail[tx.Hash()].Types = 43 // contract call fail
+			} else {
+				common.TxDetail[tx.Hash()].Types = 4 // ???? wrong tx?
+			}
+
+			// jhkim: Every failed transaction should have only 2 write list. miner and sender
+			// We have 2 corner cases to conider. First miner is sender, and second miner is receiver
+			// If miner is sender and this tx failed, writelist has only 1 item, miner
+			// If miner is receiver and this tx failed, writelist has 2 items, miner and sender <- same as default
+			// ** some dumb miners accept 0 fee transactions like 0x98970bfb525897505fa0c6b32ea306554761138319d34e01b19691f438557a09,
+			// so "Every failed transaction should have only 2 write list. miner and sender" is wrong
+
+			// tmp := common.SubstateAlloc{}
+			// tmp := map[common.Address]*common.SubstateAccount{}
+
+			// tmp[common.GlobalBlockMiner] = common.TxWriteList[tx.Hash()][common.GlobalBlockMiner]
+			// tmp[msg.From()] = common.TxWriteList[tx.Hash()][msg.From()]
+			// common.TxWriteList[tx.Hash()] = tmp
+			// fmt.Println("Failed txwritelist after ", tx.Hash(),common.TxWriteList[tx.Hash()])
+
+		}
+
+		// jhkim: Debugging
+		// if result.Err == vm.ErrCodeStoreOutOfGas {
+		// 	fmt.Println("  Failed tx/ErrCodeStoreOutOfGas/block#:", common.GlobalBlockNumber, " txhash:", tx.Hash())
+		// } else if result.Err == vm.ErrOutOfGas {
+		// 	fmt.Println("  Failed tx/ErrOutOfGas/block#:", common.GlobalBlockNumber, " txhash:", tx.Hash())
+		// } else {
+		// 	fmt.Println("  Failed tx/ELSE/block#:", common.GlobalBlockNumber, " txhash:", tx.Hash(), result.Err)
+		// }
+
 	} else {
 		receipt.Status = types.ReceiptStatusSuccessful
 	}
@@ -126,6 +251,18 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	// If the transaction created a contract, store the creation address in the receipt.
 	if msg.To() == nil {
 		receipt.ContractAddress = crypto.CreateAddress(evm.TxContext.Origin, tx.Nonce())
+		common.TxDetail[tx.Hash()].DeployedContractAddress = receipt.ContractAddress
+		if receipt.Status == types.ReceiptStatusSuccessful { //jhkim
+			if common.TxWriteList[tx.Hash()][receipt.ContractAddress] == nil {
+				common.TxWriteList[tx.Hash()][receipt.ContractAddress] = common.NewSubstateAccount(0, common.Big0, common.Hex2Bytes("0x0"), statedb.GetStorageTrieHash(receipt.ContractAddress))
+				// fmt.Println("applyTransaction msg.To() == nil")
+				common.PrettyTxWritePrint(tx.Hash(), receipt.ContractAddress)
+				if statedb.GetCode(receipt.ContractAddress) != nil {
+					common.TxWriteList[tx.Hash()][receipt.ContractAddress].Code = statedb.GetCode(receipt.ContractAddress)
+				}
+			}
+
+		}
 	}
 
 	// Set the receipt logs and create the bloom filter.
@@ -150,4 +287,46 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 	blockContext := NewEVMBlockContext(header, bc, author)
 	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, config, cfg)
 	return applyTransaction(msg, config, bc, author, gp, statedb, header.Number, header.Hash(), tx, usedGas, vmenv)
+}
+
+// jhkim: all transactions processed during syncing and mining are recorded
+func WriteTxDetail(tx *types.Transaction, msg types.Message, number *big.Int, statedb *state.StateDB) {
+	// common.GlobalMutex.Lock()
+	// defer common.GlobalMutex.Unlock()
+	// fmt.Println("WriteTxDetail", common.GlobalBlockNumber, tx.Hash())
+	txInform := common.TxInformation{}
+	// txInform.ContractAddress_SlotHash = map[common.Address]*[]common.Hash{}
+	// txInform.BlockNumber = (*number).Int64()
+	// txInform.Internal = []common.Address{}
+	// txInform.InternalCA = []common.Address{}
+	txInform.DeployedContractAddress = common.Address{}
+	txInform.InternalDeployedAddress = make([]common.Address, 0)
+	txInform.DeletedAddress = make([]common.Address, 0)
+	// txInform.AccountBalance = map[common.Address]uint64{}
+
+	if tx.To() == nil {
+		txInform.Types = 2 // contract creation
+
+	} else {
+		code := statedb.GetCode(*msg.To())
+
+		if code == nil {
+			txInform.Types = 1 // Transfer
+		} else {
+			txInform.Types = 3 // contract call
+		}
+	}
+
+	// preimage of address hash
+	txInform.From = msg.From()
+	common.GlobalTxFrom = msg.From()
+	if tx.To() != nil {
+		txInform.To = *tx.To()
+		common.GlobalTxTo = *tx.To()
+	} else { // if contract creation tx
+		txInform.To = common.HexToAddress("")
+		common.GlobalTxTo = common.HexToAddress("")
+	}
+	common.TxDetail[tx.Hash()] = &txInform
+
 }

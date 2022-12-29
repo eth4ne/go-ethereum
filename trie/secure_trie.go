@@ -98,6 +98,9 @@ func (t *SecureTrie) TryUpdateAccount(key []byte, acc *types.StateAccount) error
 	if err := t.trie.TryUpdate(hk, data); err != nil {
 		return err
 	}
+	if common.GlobalBlockNumber == 1155900 {
+		fmt.Println("  TryUpdateAccount", common.Bytes2Hex(key), "trieroot:", t.trie.Hash())
+	}
 	t.getSecKeyCache()[string(hk)] = common.CopyBytes(key)
 	return nil
 }
