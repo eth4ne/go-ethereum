@@ -305,60 +305,16 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 
 			blockRoot_inactive = blockHeader.Root_inactive // inactive state trie root
 
-			// retrieve target accounts and keys from the merkle proof
-			// GetAccountsAndKeysFromMerkleProof will return final restoring target excluding the already restored nodes.
-			// targetAccounts, targetKeys = trie.GetAccountsAndKeysFromMerkleProof(blockHeader.Root_inactive, merkleProof)
-			trie.GetAccountsAndKeysFromMerkleProof(blockHeader.Root_inactive, merkleProof)
-
-			// log.Info("targetAccounts", "targetAccounts", targetAccounts)
-			// log.Info("targetKeys", "targetKeys", targetKeys)
-			// log.Info("len(targetKeys)", "len(targetKeys)", len(targetKeys))
-
-			// // verify Merkle proof --> this is done when retrieving keys from MPs
-			// for i, key := range targetKeys {
-			// 	if value, merkleErr, croppedProofDb := trie.VerifyProof_restore(blockHeader.Root_inactive, key[:], merkleProof); merkleErr != nil || value == nil {
-			// 		// bad merkle proof
-			// 		log.Error("❌  Restore Error: bad merkle proof", "err-occuring index", i)
-			// 		return nil, gas, ErrInvalidProof
-			// 	} else {
-			// 		merkleProof = croppedProofDb
-			// 		log.Info("✔️  Verify Merkle Proof for Restoration ... Success", "index", i)
-			// 	}
-			// }
-
-			// // verify Merkle proof --> this is done when retrieving keys from MPs
-			// for i, key := range targetKeys {
-			// 	retrievedAccount, merkleErr, croppedProofDb, retrievedKey := trie.VerifyProof_GetAccountsAndKeys(blockHeader.Root_inactive, key[:], merkleProof)
-			// 	if merkleErr != nil || retrievedAccount == nil {
-			// 		// bad merkle proof
-			// 		log.Error("❌  Restore Error: bad merkle proof", "err-occuring index", i)
-			// 		return nil, gas, ErrInvalidProof
-			// 	} else {
-			// 		merkleProof = croppedProofDb
-			// 		targetKeys = append(targetKeys, retrievedKey)
-			// 		targetAccounts = append(targetAccounts, retrievedAccount)
-			// 		log.Info("✔️  Verify Merkle Proof for Restoration ... Success", "retrievedKey", retrievedKey)
-			// 	}
-			// }
-
-			// TODO (joonha) remove GetAccountsAndKeysFromMerkleProof and restore merkleProofs' redundancy
-
-			for i := 0; ; i++ {
-				// fmt.Println("\nmerkleProof: ", merkleProof)
-				retrievedAccount, merkleErr, croppedProofDb, retrievedKey := trie.VerifyProof_GetAccountsAndKeys(blockHeader.Root_inactive, merkleProof)
-				if merkleErr != nil || retrievedAccount == nil {
-					// bad merkle proof
-					log.Error("❌  Restore Error: bad merkle proof", "err-occuring index", i)
-					return nil, gas, ErrInvalidProof
-				} else {
-					merkleProof = croppedProofDb
-					targetKeys = append(targetKeys, retrievedKey)
-					targetAccounts = append(targetAccounts, retrievedAccount)
-					log.Info("✔️  Verify Merkle Proof for Restoration ... Success", "retrievedKey", retrievedKey)
-					if len(croppedProofDb) == 0 {
-						break
-					}
-				}
+			// etrieve target accounts and keys from the merkle proof
+			// verifying the proof is also done simultaneously
+			var merkleErr error
+			targetAccounts, merkleErr, targetKeys = trie.VerifyProof_GetAccountsAndKeys(blockHeader.Root_inactive, merkleProof)
+			if merkleErr != nil {
+				// bad merkle proof
+				log.Error("❌  Restore Error: bad merkle proof")
+				return nil, gas, ErrInvalidProof
+			} else {
+				log.Info("✔️  Verify Merkle Proof for Restoration ... Success")
 			}
 
 			log.Info("targetAccounts", "targetAccounts", targetAccounts)

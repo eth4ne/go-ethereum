@@ -545,9 +545,14 @@ func (s *StateDB) GetProof(addr common.Address) ([][]byte, error) {
 			mps_no_redundancy = append(mps_no_redundancy, node)
 		} else if ok {
 			// redundant
-			dummy := []byte{'@'}
-			dummy = append(dummy, byte(m[string(node[:])])) // dummy: @ + index of the ref node
-			mps_no_redundancy = append(mps_no_redundancy, dummy)
+			// you can choose between to append a pointer or just to skip
+
+			// // append a pointer
+			// dummy := []byte{'@'}
+			// dummy = append(dummy, byte(m[string(node[:])])) // dummy: @ + index of the ref node
+			// mps_no_redundancy = append(mps_no_redundancy, dummy)
+
+			// skip appending
 		}
 	}
 	// fmt.Println("\n\nmps_no_redundancy ===>")
