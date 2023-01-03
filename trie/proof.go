@@ -257,13 +257,23 @@ func VerifyProof_GetAccountsAndKeys(rootHash common.Hash, proofDb common.ProofLi
 				copy(wantHash[:], cld)
 			case valueNode:
 				wantHash = miss
-				retrievedAccounts[accIndex] = cld
 
 				// key formatting to common.Hash
 				hexToInt := new(big.Int)
 				hexToInt.SetString(common.BytesToHash(hexToKeybytes(retrievedKeys[accIndex])).Hex()[2:], 16)
-				tKey_i := hexToInt.Int64()                                                                     // big.Int -> int64
+				tKey_i := hexToInt.Int64() // big.Int -> int64
+				retrievedKey := common.HexToHash(strconv.FormatInt(tKey_i, 16))
+
+				// check if this is already restored
+				common.MapMutex.Lock()
+				_, doExist := common.AlreadyRestored[retrievedKey]
+				common.MapMutex.Unlock()
+				if doExist { // already restored
+					continue
+				}
+
 				retrievedHashKeys = append(retrievedHashKeys, common.HexToHash(strconv.FormatInt(tKey_i, 16))) // int64 -> hex -> hash
+				retrievedAccounts[accIndex] = cld
 
 				accIndex++
 			}

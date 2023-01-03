@@ -334,7 +334,6 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 				acc := targetAccounts[i]
 				if acc == nil { // there is no account // --> this case might not exist
 					log.Info("### No account in the merkle proof")
-					accounts = append(accounts, nil) // necessary? (joonha)
 				} else { // there is the account
 					log.Info("### There is the account in the merkle proof")
 					curAcc = &state.Account{}
