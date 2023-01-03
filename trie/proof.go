@@ -195,6 +195,9 @@ func VerifyProof_GetAccountsAndKeys(rootHash common.Hash, proofDb common.ProofLi
 		var valid bool // default = false
 		if isParentFullNode || wantHash == miss {
 			for j := 0; ; j++ {
+				if j >= len(missingChildren) {
+					return nil, fmt.Errorf("invalid Merkle proof (1)"), nil
+				}
 				if missingChildren[j].childHash == nodeHash {
 					// valid
 					valid = true
@@ -205,7 +208,7 @@ func VerifyProof_GetAccountsAndKeys(rootHash common.Hash, proofDb common.ProofLi
 			}
 			if !valid {
 				// invalid
-				return nil, fmt.Errorf("invalid Merkle proof (1)"), nil
+				return nil, fmt.Errorf("invalid Merkle proof (2)"), nil
 			}
 		} else {
 			if wantHash == nodeHash {
