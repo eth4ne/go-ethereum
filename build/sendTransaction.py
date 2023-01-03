@@ -169,7 +169,7 @@ def intToAddr(num):
 
 def makeRestoreTx(web3, currentBlock, address, gasprice):
   print('Restore: {} at {}'.format(address, currentBlock))
-  latestCheckPoint = currentBlock - ((currentBlock+1) % epoch)
+  latestCheckPoint = currentBlock - currentBlock % epoch - 1
   latestCheckPoint = 0 if latestCheckPoint < 0 else latestCheckPoint
 
   rlpeds = list()
