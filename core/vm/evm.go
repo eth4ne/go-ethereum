@@ -429,14 +429,12 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		}
 
 		// Remove inactive account from AddrToKey_inactive map
-		evm.StateDB.RemoveRestoredKeyFromAddrToKey_inactive(inactiveAddr, targetKeys) // TODO(joonha) dirty로 처리하는 게 맞을 듯
+		evm.StateDB.RemoveRestoredKeyFromAddrToKey_inactive(inactiveAddr, targetKeys) // TODO(joonha) dirty로 처리하는 게 맞을 듯 -> 왜 그런가? dirty로 해야 하면 바꾸자!
 
 		// Remove inactive account from inactive Trie
 		for i := 0; i < len(targetKeys); i++ {
-			// keysToDelete = append(keysToDelete, common.BytesToHash(targetKeys[i][:]))
-			common.KeysToDelete_restore = append(common.KeysToDelete_restore, common.BytesToHash(targetKeys[i][:])) // --> delete later
+			evm.StateDB.UpdateKeysToDeleteDirty_restore(common.BytesToHash(targetKeys[i][:]))
 		}
-		// evm.StateDB.DeletePreviousLeafNodes(keysToDelete)
 
 		// restoration ends
 

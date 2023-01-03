@@ -110,6 +110,10 @@ var (
 	RestoreAddress       = HexToAddress("0x0123456789012345678901234567890123456789")
 	AlreadyRestored      = make(map[Hash]Empty) // check if it is already restored (for storage optimization, use empty struct as a value)
 	KeysToDelete_restore = make([]Hash, 0)      // previous leaf nodes' keys to delete after restoration
+
+	// this is not an option, but a flag
+	// for Ethane's light inactive trie delete (jmlee)
+	DeletingInactiveTrieFlag = false
 )
 
 // Marshal is a function that marshals the object into an io.Reader.

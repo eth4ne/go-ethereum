@@ -86,6 +86,7 @@ type StateDB interface {
 	SetCode_Restore(common.Address, []byte)
 	SetStorageRoot(common.Address, common.Hash)
 	GetRoot(common.Address) common.Hash
+	UpdateKeysToDeleteDirty_restore(common.Hash)
 }
 
 // CallContext provides a basic interface for the EVM calling conventions. The EVM

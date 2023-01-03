@@ -159,6 +159,12 @@ func (t *Trie) tryGet(origNode node, key []byte, pos int) (value []byte, newnode
 		}
 		return value, n, didResolve, err
 	case hashNode:
+		// for Ethane's light inactive trie delete (jmlee)
+		// zeroHashNode means there is no leaf node
+		if IsZeroHashNode(n) {
+			return nil, nil, false, nil
+		}
+
 		child, err := t.resolveHash(n, key[:pos])
 		if err != nil {
 			return nil, n, true, err
@@ -462,6 +468,24 @@ func (t *Trie) delete(n node, prefix, key []byte) (bool, node, error) {
 				// shortNode{..., shortNode{...}}.  Since the entry
 				// might not be loaded yet, resolve it just for this
 				// check.
+
+				// for Ethane's light inactive trie delete (jmlee)
+				if common.DeletingInactiveTrieFlag {
+					// if single child node is zeroHashNode, delete full node n as a whole
+					hn, ok := n.Children[pos].(hashNode)
+					if ok && IsZeroHashNode(hn) {
+						log.Info("in trie.delete(): single child is zeroHashNode, delete the full node")
+						return true, nil, nil
+					}
+					// else, mark deleted child node as a zeroHashNode
+					log.Info("in trie.delete(): leave zeroHashNode")
+					n = n.copy()
+					n.flags = t.newFlag()
+					n.Children[key[0]] = ZeroHashNode
+					return true, n, nil
+				}
+
+				// original code
 				cnode, err := t.resolve(n.Children[pos], prefix)
 				if err != nil {
 					return false, nil, err

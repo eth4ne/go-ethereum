@@ -17,6 +17,7 @@
 package trie
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"math/big"
@@ -253,6 +254,12 @@ func (n *shortNode) toString(ind string, db *Database, depth int) string {
 	return fmt.Sprintf("\n\t\tdepth(s): \t%d\n\t\tshortNode hash: %s \n\t\tkey:\t\t%x \n\t\t%v \n", depth, hash.Hex(), n.Key, n.Val.toString(ind+"  ", db, depth+1)) // cleaner printing (joonha)
 }
 func (n hashNode) toString(ind string, db *Database, depth int) string {
+	// for Ethane's light inactive trie delete (jmlee)
+	// print zero hash node
+	if IsZeroHashNode(n) {
+		return fmt.Sprintf("<%x> ", []byte(n))
+	}
+
 	// resolve hashNode (get node from db)
 	hash := common.BytesToHash([]byte(n))
 	if node := db.node(hash); node != nil {
@@ -326,4 +333,16 @@ func (n hashNode) toString_storageTrie(ind string, db *Database) string {
 func (n valueNode) toString_storageTrie(ind string, db *Database) string {
 	// fmt.Println("VALUENODE")
 	return fmt.Sprintf("\t\tn: ", []byte(n))
+}
+
+// to implement light inactive trie delete for Ethane (jmlee)
+var ZeroHashNode = make(hashNode, 32)
+
+// check whether this node is zero hash node or not
+func IsZeroHashNode(n []byte) bool {
+	if bytes.Compare(n, ZeroHashNode) == 0 {
+		return true
+	} else {
+		return false
+	}
 }

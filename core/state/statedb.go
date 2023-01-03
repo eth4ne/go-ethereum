@@ -144,11 +144,12 @@ type StateDB struct {
 	StorageDeleted int
 
 	// ethane
-	NextKey              int64                          // key of the first 'will be inserted' account
-	CheckpointKey        int64                          // save initial NextKey value to determine whether move leaf nodes or not
-	AddrToKeyDirty       map[common.Address]common.Hash // dirty cache for common.AddrToKey
-	KeysToDeleteDirty    []common.Hash                  // dirty cache for common.KeysToDelete
-	AlreadyRestoredDirty map[common.Hash]common.Empty   // dirty cache for already restored accounts
+	NextKey                   int64                          // key of the first 'will be inserted' account
+	CheckpointKey             int64                          // save initial NextKey value to determine whether move leaf nodes or not
+	AddrToKeyDirty            map[common.Address]common.Hash // dirty cache for common.AddrToKey
+	KeysToDeleteDirty         []common.Hash                  // dirty cache for common.KeysToDelete
+	AlreadyRestoredDirty      map[common.Hash]common.Empty   // dirty cache for already restored accounts
+	KeysToDeleteDirty_restore []common.Hash                  // dirty cache for common.KeysToDelete_restore
 }
 
 // New creates a new state from a given trie.
@@ -177,11 +178,12 @@ func New(root common.Hash, db Database, snaps *snapshot.Tree) (*StateDB, error) 
 		accessList:          newAccessList(),
 		hasher:              crypto.NewKeccakState(),
 		// ethane
-		NextKey:              nextKey.Int64(),
-		CheckpointKey:        nextKey.Int64(),
-		AddrToKeyDirty:       make(map[common.Address]common.Hash),
-		KeysToDeleteDirty:    make([]common.Hash, 0),
-		AlreadyRestoredDirty: make(map[common.Hash]common.Empty),
+		NextKey:                   nextKey.Int64(),
+		CheckpointKey:             nextKey.Int64(),
+		AddrToKeyDirty:            make(map[common.Address]common.Hash),
+		KeysToDeleteDirty:         make([]common.Hash, 0),
+		AlreadyRestoredDirty:      make(map[common.Hash]common.Empty),
+		KeysToDeleteDirty_restore: make([]common.Hash, 0),
 	}
 	if sdb.snaps != nil {
 		if sdb.snap = sdb.snaps.Snapshot(root); sdb.snap != nil {
@@ -233,11 +235,12 @@ func New_Ethane(root common.Hash, root_inactive common.Hash, db Database, db_ina
 		hasher:     crypto.NewKeccakState(),
 
 		// ethane
-		NextKey:              nextKey.Int64(),
-		CheckpointKey:        nextKey.Int64(),
-		AddrToKeyDirty:       make(map[common.Address]common.Hash),
-		KeysToDeleteDirty:    make([]common.Hash, 0),
-		AlreadyRestoredDirty: make(map[common.Hash]common.Empty),
+		NextKey:                   nextKey.Int64(),
+		CheckpointKey:             nextKey.Int64(),
+		AddrToKeyDirty:            make(map[common.Address]common.Hash),
+		KeysToDeleteDirty:         make([]common.Hash, 0),
+		AlreadyRestoredDirty:      make(map[common.Hash]common.Empty),
+		KeysToDeleteDirty_restore: make([]common.Hash, 0),
 	}
 
 	// active snapsthot
@@ -1067,11 +1070,12 @@ func (s *StateDB) Copy() *StateDB {
 		hasher:    crypto.NewKeccakState(),
 
 		// ethane
-		NextKey:              s.NextKey,
-		CheckpointKey:        s.CheckpointKey,
-		AddrToKeyDirty:       make(map[common.Address]common.Hash, len(s.AddrToKeyDirty)),
-		KeysToDeleteDirty:    make([]common.Hash, len(s.KeysToDeleteDirty)),
-		AlreadyRestoredDirty: make(map[common.Hash]common.Empty, len(s.AlreadyRestoredDirty)),
+		NextKey:                   s.NextKey,
+		CheckpointKey:             s.CheckpointKey,
+		AddrToKeyDirty:            make(map[common.Address]common.Hash, len(s.AddrToKeyDirty)),
+		KeysToDeleteDirty:         make([]common.Hash, len(s.KeysToDeleteDirty)),
+		AlreadyRestoredDirty:      make(map[common.Hash]common.Empty, len(s.AlreadyRestoredDirty)),
+		KeysToDeleteDirty_restore: make([]common.Hash, len(s.KeysToDeleteDirty_restore)),
 	}
 	// Copy the dirty states, logs, and preimages
 
@@ -1085,6 +1089,7 @@ func (s *StateDB) Copy() *StateDB {
 	}
 	// (joonha)
 	copy(state.KeysToDeleteDirty, s.KeysToDeleteDirty)
+	copy(state.KeysToDeleteDirty_restore, s.KeysToDeleteDirty_restore)
 
 	for addr := range s.journal.dirties {
 		// As documented [here](https://github.com/ethereum/go-ethereum/pull/16485#issuecomment-380438527),
@@ -1410,6 +1415,9 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, common.Hash, err
 	// apply dirties to common.KeysToDelete (jmlee)
 	common.KeysToDelete = append(common.KeysToDelete, s.KeysToDeleteDirty...)
 
+	// apply dirties to common.KeysToDelete_restore (joonha)
+	common.KeysToDelete_restore = append(common.KeysToDelete_restore, s.KeysToDeleteDirty_restore...)
+
 	// delete previous leaf nodes
 	if common.DoDeleteLeafNode { // delete Epoch
 		s.DeletePreviousLeafNodes(common.KeysToDelete)
@@ -1424,8 +1432,10 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, common.Hash, err
 		common.InactiveBoundaryKey += inactivatedAccountsNum
 
 		// delete common.KeysToDelete_restore (previous keys of inactive trie after restoration)
+		common.DeletingInactiveTrieFlag = true
 		s.DeletePreviousLeafNodes_inactive(common.KeysToDelete_restore)
 		common.KeysToDelete_restore = make([]common.Hash, 0)
+		common.DeletingInactiveTrieFlag = false
 
 		// reset AlreadyRestored list
 		common.MapMutex.Lock()
@@ -1845,6 +1855,11 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 func (s *StateDB) UpdateAlreadyRestoredDirty(inactiveKey common.Hash) {
 	s.AlreadyRestoredDirty[inactiveKey] = common.Empty{}
 	// fmt.Println("AlreadyRestoredDirty map length: ", len(s.AlreadyRestoredDirty))
+}
+
+// (joonha)
+func (s *StateDB) UpdateKeysToDeleteDirty_restore(key common.Hash) {
+	s.KeysToDeleteDirty_restore = append(s.KeysToDeleteDirty_restore, key)
 }
 
 // remove restored account from the list common.AddrToKey_inactive (joonha)
