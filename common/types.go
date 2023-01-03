@@ -54,10 +54,10 @@ type ProofList [][]byte
 func (n *ProofList) Has(key []byte) (bool, error) {
 	panic("not supported")
 }
-func (n *ProofList) Get(key []byte) ([]byte, error) {
+func (n *ProofList) Get() []byte {
 	x := (*n)[0]
 	*n = (*n)[1:]
-	return x, nil
+	return x
 }
 
 type Empty struct{}

@@ -305,8 +305,8 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 
 			blockRoot_inactive = blockHeader.Root_inactive // inactive state trie root
 
-			// etrieve target accounts and keys from the merkle proof
-			// verifying the proof is also done simultaneously
+			// retrieve target accounts and keys from the merkle proof
+			// verify the proofs simultaneously
 			var merkleErr error
 			targetAccounts, merkleErr, targetKeys = trie.VerifyProof_GetAccountsAndKeys(blockHeader.Root_inactive, merkleProof)
 			if merkleErr != nil {

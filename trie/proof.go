@@ -135,6 +135,17 @@ func VerifyProof(rootHash common.Hash, key []byte, proofDb ethdb.KeyValueReader)
 // VerifyProof_GetAccountsAndKeys verify the merkle proofs and return found accounts and their keys
 func VerifyProof_GetAccountsAndKeys(rootHash common.Hash, proofDb common.ProofList) (value [][]byte, err_ error, resultKeys []common.Hash) {
 
+	/*
+		prerequisite: Merkle Proofs are sorted
+		e.g.) if a trie looks like below, then the sequence of the MP is 'abcd'
+
+			a
+			|
+			b
+			|\
+			c d
+	*/
+
 	var nodeHash common.Hash
 	type child struct {
 		childHash common.Hash
@@ -143,9 +154,7 @@ func VerifyProof_GetAccountsAndKeys(rootHash common.Hash, proofDb common.ProofLi
 	var missingChildren []child
 	var isCurrentFullNode bool
 	var isParentFullNode bool
-	// var retrievedAccounts [][]byte
 	retrievedAccounts := make([][]byte, len(proofDb))
-	// var retrievedKeys [][]byte
 	retrievedKeys := make([][]byte, len(proofDb))
 	var retrievedHashKeys []common.Hash
 	var accIndex int
@@ -160,7 +169,7 @@ func VerifyProof_GetAccountsAndKeys(rootHash common.Hash, proofDb common.ProofLi
 			break
 		}
 
-		// get one node
+		// get one node by pop
 		buf := proofDb.Get()
 		if buf == nil {
 			return nil, fmt.Errorf("proof node %d missing", i), nil
@@ -236,7 +245,7 @@ func VerifyProof_GetAccountsAndKeys(rootHash common.Hash, proofDb common.ProofLi
 					case nil:
 						// fmt.Println("no child here")
 					default:
-						fmt.Println("ERR: fullnode's child is neither a hashnode nor nil")
+						log.Error("ERR: fullnode's child is neither a hashnode nor nil")
 					}
 					missingChildren = append(missingChildren, *newChild)
 				}
