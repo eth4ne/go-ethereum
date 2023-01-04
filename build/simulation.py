@@ -11,6 +11,7 @@ from web3.method import (
 from web3.types import (
   BlockNumber,
   RPCEndpoint,
+  HexStr
 )
 
 import pymysql.cursors
@@ -90,6 +91,11 @@ class Custom(module.Module):
     mungers=[default_root_munger],
   )
 
+  setBlockParameters: Method[Callable[[HexStr], None]] = Method(
+    RPCEndpoint("eth_setBlockParameters"),
+    mungers=[default_root_munger],
+  )
+
 class Worker(threading.Thread):
   def __init__(self, web3, tx):
     threading.Thread.__init__(self)
@@ -103,20 +109,29 @@ class Worker(threading.Thread):
       traceback.print_exc()
       print(self.tx)
 
+class ParameterWorker(threading.Thread):
+  def __init__(self, web3, parameters):
+    threading.Thread.__init__(self)
+    self.web3 = web3
+    self.parameters = parameters
+  
+  def run(self):
+    try:
+      self.web3.custom.setBlockParameters(self.parameters)
+    except:
+      traceback.print_exc()
+      print(self.parameters)
+
 delay = 0
 
-def adaptive_sleep_init(start_delay):
+def adaptive_sleep_init(start_delay=0.0001):
   global delay
   delay = start_delay
 
 def adaptive_sleep():
   global delay
-  if delay < 0.01:
-    delay += 0.001
-  elif delay < 0.1:
-    delay += 0.01
-  elif delay < 1:
-    delay += 0.1
+  if delay < 1:
+    delay *= 1.1
   else:
     delay *= 2
   time.sleep(delay)
@@ -157,66 +172,27 @@ def run(_from, _to):
 
   prevminer = '0x0000000000000000000000000000000000000000'
 
-  for i in range(_from, _to+1):
-    db.execute("SELECT * from `transactions` WHERE `blocknumber`=%s;", (i,))
-    result = db.fetchall()
-    txcount = len(result)
-    print('Block #{}: fetched {} txs'.format(i, txcount))
+  i = _from
+  while i <= _to:
     workers = []
-
-    order = 0
-
-    if str(i-restore_offset) in restoredata:
-      for j in restoredata[str(i-restore_offset)]:
-        tx = makeRestoreTx(web3, i-restore_offset - offset, j, 100, prevminer, order)
-        order += 1
-        worker = Worker(web3, tx)
-        worker.start()
-        workers.append(worker)
-
-      restorecount = len(restoredata[str(i-restore_offset)])
-      print('Block #{}: Restored {} accounts'.format(i, ))
-      txcount += restorecount
-
-    for j in result:
-      to = j['to']
-      if to != None:
-        to = to.hex()
-        to = Web3.toChecksumAddress(to)
-      else:
-        to = ''
-      tx = {
-        'from': coinbase,
-        'to': to,
-        'value': hex(int(j['value'])),
-        'gas': hex(int(j['gas'])),
-        'gasPrice': hex(int(j['gasprice'])),
-        'nonce': hex(int(j['nonce'])),
-        'data': '',
-      }
-
-      tx['data'] += j['v'].hex()
-      tx['data'] += j['r'].hex()
-      tx['data'] += j['s'].hex()
-      tx['data'] += '{:08x}'.format(j['transactionindex'] + order)
-      tx['data'] += j['from'].hex()
-      tx['data'] += '9669e84351a57aa8a3cfd02001acc246b982713a' #magic header
-
-      if execution_mode == MODE_ETHANE:
-        tx['data'] += j['input'].hex()
-      elif execution_mode == MODE_ETHANOS:
-        if to == None:
-          db.execute("SELECT * from `contracts` WHERE `creationtx`=%s;", (j['hash'],))
-          result = db.fetchall()
-          tx['to'] = result[0]['address'].hex()
-      worker = Worker(web3, tx)
-      worker.start()
-      workers.append(worker)
-      
-    totaltx += len(result)
 
     db.execute("SELECT * from `blocks` WHERE `number`=%s;", (i,))
     blocks = db.fetchone()
+    #print('Fetched headers of block #{}'.format(i))
+
+    blockparameter = '0x'
+    blockparameter += '{:016x}'.format(blocks['timestamp'])
+    blockparameter += '{:040x}'.format(blocks['difficulty'])
+    blockparameter += blocks['nonce'].hex()
+    blockparameter += '{:016x}'.format(blocks['gaslimit'])
+    blockparameter += blocks['mixhash'].hex()
+    blockparameter += blocks['miner'].hex()
+    blockparameter += blocks['extradata'].hex()
+
+    parameterworker = ParameterWorker(web3, blockparameter)
+    parameterworker.start()
+    workers.append(parameterworker)
+
     miner = blocks['miner'].hex()
     blockrewardtx = {
       'from': coinbase,
@@ -347,7 +323,64 @@ def run(_from, _to):
       worker.start()
       worker.join() #process uncle sequentially (for proper ordering)
       workers.append(worker)
-      print('Reward uncle miner {} of height {} on block #{}'.format(miner, j['uncleheight'], i))
+      #print('Reward uncle miner {} of height {} on block #{}'.format(miner, j['uncleheight'], i))
+
+
+    db.execute("SELECT * from `transactions` WHERE `blocknumber`=%s;", (i,))
+    result = db.fetchall()
+    txcount = len(result)
+    #print('Block #{}: fetched {} txs'.format(i, txcount))
+
+    order = 0
+
+    if str(i-restore_offset) in restoredata:
+      for j in restoredata[str(i-restore_offset)]:
+        tx = makeRestoreTx(web3, i-restore_offset - offset, j, 100, prevminer, order)
+        order += 1
+        worker = Worker(web3, tx)
+        worker.start()
+        workers.append(worker)
+
+      restorecount = len(restoredata[str(i-restore_offset)])
+      print('Block #{}: Restored {} accounts'.format(i, ))
+      txcount += restorecount
+
+    for j in result:
+      to = j['to']
+      if to != None:
+        to = to.hex()
+        to = Web3.toChecksumAddress(to)
+      else:
+        to = ''
+      tx = {
+        'from': coinbase,
+        'to': to,
+        'value': hex(int(j['value'])),
+        'gas': hex(int(j['gas'])),
+        'gasPrice': hex(int(j['gasprice'])),
+        'nonce': hex(int(j['nonce'])),
+        'data': '',
+      }
+
+      tx['data'] += j['v'].hex()
+      tx['data'] += j['r'].hex()
+      tx['data'] += j['s'].hex()
+      tx['data'] += '{:08x}'.format(j['transactionindex'] + order)
+      tx['data'] += j['from'].hex()
+      tx['data'] += '9669e84351a57aa8a3cfd02001acc246b982713a' #magic header
+
+      if execution_mode == MODE_ETHANE:
+        tx['data'] += j['input'].hex()
+      elif execution_mode == MODE_ETHANOS:
+        if to == None:
+          db.execute("SELECT * from `contracts` WHERE `creationtx`=%s;", (j['hash'],))
+          result = db.fetchall()
+          tx['to'] = result[0]['address'].hex()
+      worker = Worker(web3, tx)
+      worker.start()
+      workers.append(worker)
+      
+    totaltx += len(result)
     
     for j in workers:
       j.join()
