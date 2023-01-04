@@ -286,24 +286,29 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 
 	// Check clauses 1-3, buy gas if everything is correct
 	// log special txs (hletrd)
-	if *st.msg.To() == common.RewardAddress {
-		log.Info("[state_transition.go/TransitionDb] Processing reward transaction", "to", st.msg.To())
-	} else if *st.msg.To() == common.UncleAddress {
-		log.Info("[state_transition.go/TransitionDb] Processing uncle transaction", "to", st.msg.To(), "height", st.msg.Value())
-	} else if *st.msg.To() == common.TimestampAddress {
-		log.Info("[state_transition.go/TransitionDb] Processing timestamp transaction", "value", st.msg.Value())
-	} else if *st.msg.To() == common.BaseFeeAddress {
-		log.Info("[state_transition.go/TransitionDb] Processing basefee transaction", "value", st.msg.Value())
-	} else if *st.msg.To() == common.DifficultyAddress {
-		log.Info("[state_transition.go/TransitionDb] Processing difficulty transaction", "value", st.msg.Value())
-	} else if *st.msg.To() == common.NonceAddress {
-		log.Info("[state_transition.go/TransitionDb] Processing nonce transaction", "value", st.msg.Value())
-	} else if *st.msg.To() == common.GasLimitAddress {
-		log.Info("[state_transition.go/TransitionDb] Processing a gaslimit transaction", "value", st.msg.Value())
-	} else if *st.msg.To() == common.ExtraDataAddress {
-		log.Info("[state_transition.go/TransitionDb] Processing a extradata transaction", "value", st.msg.Value())
-	} else if *st.msg.To() == common.MixHashAddress {
-		log.Info("[state_transition.go/TransitionDb] Processing a mixhash transaction", "value", st.msg.Value())
+	// if the tx is special purposed (hletrd)
+	specialtx := common.IsSpecialAddress(st.msg.To())
+	
+	if specialtx {
+		if *st.msg.To() == common.RewardAddress {
+			log.Info("[state_transition.go/TransitionDb] Processing reward transaction", "to", st.msg.To())
+		} else if *st.msg.To() == common.UncleAddress {
+			log.Info("[state_transition.go/TransitionDb] Processing uncle transaction", "to", st.msg.To(), "height", st.msg.Value())
+		} else if *st.msg.To() == common.TimestampAddress {
+			log.Info("[state_transition.go/TransitionDb] Processing timestamp transaction", "value", st.msg.Value())
+		} else if *st.msg.To() == common.BaseFeeAddress {
+			log.Info("[state_transition.go/TransitionDb] Processing basefee transaction", "value", st.msg.Value())
+		} else if *st.msg.To() == common.DifficultyAddress {
+			log.Info("[state_transition.go/TransitionDb] Processing difficulty transaction", "value", st.msg.Value())
+		} else if *st.msg.To() == common.NonceAddress {
+			log.Info("[state_transition.go/TransitionDb] Processing nonce transaction", "value", st.msg.Value())
+		} else if *st.msg.To() == common.GasLimitAddress {
+			log.Info("[state_transition.go/TransitionDb] Processing a gaslimit transaction", "value", st.msg.Value())
+		} else if *st.msg.To() == common.ExtraDataAddress {
+			log.Info("[state_transition.go/TransitionDb] Processing a extradata transaction", "value", st.msg.Value())
+		} else if *st.msg.To() == common.MixHashAddress {
+			log.Info("[state_transition.go/TransitionDb] Processing a mixhash transaction", "value", st.msg.Value())
+		} 
 	} else {
 		if err := st.preCheck(); err != nil {
 			return nil, err
@@ -315,9 +320,6 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	istanbul := st.evm.ChainConfig().IsIstanbul(st.evm.Context.BlockNumber)
 	london := st.evm.ChainConfig().IsLondon(st.evm.Context.BlockNumber)
 	contractCreation := msg.To() == nil
-
-	// if the tx is special purposed (hletrd)
-	specialtx := common.IsSpecialAddress(*st.msg.To())
 
 	// do not calculate gas for special txs (hletrd)
 	gas, err := uint64(0), error(nil)
@@ -337,7 +339,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		vmerr error // vm errors do not effect consensus and are therefore not assigned to err
 	)
 
-	// not using gas (hletrd)
+	// not using gas for specialtx (hletrd)
 	if !specialtx {
 		if st.gas < gas {
 			return nil, fmt.Errorf("%w: have %d, want %d", ErrIntrinsicGas, st.gas, gas)
