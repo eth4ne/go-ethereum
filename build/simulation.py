@@ -118,7 +118,9 @@ def run(_from, _to):
     'custom': Custom,
   })
 
-  #web3.debug.setHead('0x0')
+  web3.geth.miner.stop()
+  web3.debug.setHead(hex(_from-1))
+  print('Rewinding head to {}'.format(_from-1))
 
   coinbase = web3.eth.coinbase
   web3.geth.personal.unlock_account(coinbase, password, 0)
