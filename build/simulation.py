@@ -440,17 +440,18 @@ def run(_from, _to):
       time.sleep(0.2)
       web3.debug.setHead(hex(i-1))
       time.sleep(0.2)
-      i = i - 1
+      #i = i
       continue
     if blocks['hash'] != block_made['hash']:
       print('Block #{}: hash mismatch'.format(i))
       print('Expected: {}'.format(blocks['hash'].hex()))
       print('Got: {}'.format(block_made['hash'].hex()))
       print('Rewinding head to {}'.format(i-1))
+      exit(1)
       time.sleep(0.2)
       web3.debug.setHead(hex(i-1))
       time.sleep(0.2)
-      i = i - 1
+      #i = i
       continue
       
     i = i + 1
