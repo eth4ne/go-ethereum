@@ -19,6 +19,7 @@ import threading
 import json
 import rlp
 import binascii
+import traceback
 
 db_host = 'localhost'
 db_user = 'ethereum'
@@ -99,6 +100,7 @@ class Worker(threading.Thread):
     try:
       self.web3.eth.send_transaction(self.tx)
     except:
+      traceback.print_exc()
       print(self.tx)
   
 
@@ -158,6 +160,7 @@ def run(_from, _to):
       to = j['to']
       if to != None:
         to = to.hex()
+      to = Web3.toChecksumAddress(to)
       tx = {
         'from': coinbase,
         'to': to,
