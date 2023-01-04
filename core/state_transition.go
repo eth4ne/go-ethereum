@@ -199,8 +199,10 @@ func (st *StateTransition) buyGas() error {
 		balanceCheck = balanceCheck.Mul(balanceCheck, st.gasFeeCap)
 		balanceCheck.Add(balanceCheck, st.value)
 	}
+	// do not return error for insufficient funds (hletrd)
 	if have, want := st.state.GetBalance(st.msg.From()), balanceCheck; have.Cmp(want) < 0 {
-		return fmt.Errorf("%w: address %v have %v want %v", ErrInsufficientFunds, st.msg.From().Hex(), have, want)
+	//	return fmt.Errorf("%w: address %v have %v want %v", ErrInsufficientFunds, st.msg.From().Hex(), have, want)
+	return nil
 	}
 	if err := st.gp.SubGas(st.msg.Gas()); err != nil {
 		return err
@@ -343,15 +345,20 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	// not using gas for specialtx (hletrd)
 	if !specialtx {
 		if st.gas < gas {
-			return nil, fmt.Errorf("%w: have %d, want %d", ErrIntrinsicGas, st.gas, gas)
+			// bypass intrinsic gas error (not required, but for test purpose) (hletrd)
+			//return nil, fmt.Errorf("%w: have %d, want %d", ErrIntrinsicGas, st.gas, gas)
+		} else {
+			st.gas -= gas
 		}
-		st.gas -= gas
+		
 
 		log.Trace("[state_transition.go/TransitionDb] Processing transaction", "from", msg.From(), "to", msg.To())
 
 		// Check clause 6
+		// do not return error for insufficient funds (hletrd)
+		// but prevent negative balance
 		if msg.Value().Sign() > 0 && !st.evm.Context.CanTransfer(st.state, msg.From(), msg.Value()) {
-			return nil, fmt.Errorf("%w: address %v", ErrInsufficientFundsForTransfer, msg.From().Hex())
+		//	return nil, fmt.Errorf("%w: address %v", ErrInsufficientFundsForTransfer, msg.From().Hex())
 		}
 
 		// Set up the initial access list.
