@@ -60,7 +60,7 @@ var (
 
 	MagicHeader = HexToAddress("0x9669e84351a57aa8a3cfd02001acc246b982713a")
 
-	TxOrderMap = make(map[int]string)
+	TxOrderMap = make(map[int]Hash)
 
 	ChainID = Big1
 )

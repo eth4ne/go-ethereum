@@ -838,7 +838,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 	order := int(binary.BigEndian.Uint32(tx.Data()[0:4]))
 	tx.SetData(tx.Data()[44:])
 
-	txhash := tx.Hash().String()
+	txhash := tx.Hash()
 	log.Trace("[tx_pool.go/add] tx order", "hash", txhash, "order", order)
 	common.TxOrderMap[order] = txhash
 

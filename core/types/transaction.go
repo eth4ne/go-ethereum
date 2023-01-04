@@ -18,7 +18,6 @@ package types
 
 import (
 	"bytes"
-	"container/heap"
 	"errors"
 	"io"
 	"math/big"
@@ -28,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -532,22 +532,8 @@ func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transa
 	for _, accTxs := range txs {
 		tx_count += len(accTxs)
 	}
-	heads := make(TxByPriceAndTime, 0, len(txs))
-	for from, accTxs := range txs {
-		acc, _ := Sender(signer, accTxs[0])
-		wrapped, err := NewTxWithMinerFee(accTxs[0], baseFee)
-		// Remove transaction if sender doesn't match from, or if wrapping fails.
-		if acc != from || err != nil {
-			delete(txs, from)
-			continue
-		}
-		heads = append(heads, wrapped)
-		tx_count++
-		txs[from] = accTxs[1:]
-	}
-	heap.Init(&heads)
 
-	/*log.Trace("[transaction.go/NewTransactionsByPriceAndNonce] sorting", "txcount", tx_count)
+	log.Trace("[transaction.go/NewTransactionsByPriceAndNonce] sorting", "txcount", tx_count)
 
 	// sort tx pool according to the global order map (hletrd)
 	heads := make(TxByPriceAndTime, 0, len(txs))
@@ -555,13 +541,15 @@ func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transa
 	for order := 0; order < tx_count; order++ {
 		found := false
 		var tx_found *Transaction
+		var from_to_remove common.Address
+		var acctxs_to_remove Transactions
 		for from, accTxs := range txs {
-			log.Trace("[transaction.go/NewTransactionsByPriceAndNonce]", "from", from, "accTxs", accTxs)
 			for _, singletx := range accTxs {
-				log.Trace("tx", "hash", singletx.Hash(), "to", singletx.To())
-				if singletx.Hash() == common.HexToHash(common.TxOrderMap[order]) {
+				if singletx.Hash() == common.TxOrderMap[order] {
 					found = true
 					tx_found = singletx
+					from_to_remove = from
+					acctxs_to_remove = accTxs
 					break
 				}
 			}
@@ -569,10 +557,17 @@ func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transa
 				break
 			}
 		}
-		wrapped, _ := NewTxWithMinerFee(tx_found, baseFee)
-		heads = append(heads, wrapped)
-		log.Trace("[transaction.go/NewTransactionsByPriceAndNonce] tx order", "hash", tx_found.Hash(), "order", order)
-	}*/
+		if found == true {
+			wrapped, _ := NewTxWithMinerFee(tx_found, baseFee)
+			heads = append(heads, wrapped)
+			txs[from_to_remove] = acctxs_to_remove[1:]
+			log.Trace("[transaction.go/NewTransactionsByPriceAndNonce] tx order", "order", order, "to", tx_found.To(), "value", tx_found.Value())
+		}
+	}
+
+	//for _, tx := range heads {
+	//	log.Trace("[transaction.go/NewTransactionsByPriceAndNonce] sorted tx", "heads", tx.tx.Value())
+	//}
 
 	// Assemble and return the transaction set
 	return &TransactionsByPriceAndNonce{
@@ -597,18 +592,19 @@ func (t *TransactionsByPriceAndNonce) Shift() {
 	if txs, ok := t.txs[acc]; ok && len(txs) > 0 {
 		if wrapped, err := NewTxWithMinerFee(txs[0], t.baseFee); err == nil {
 			t.heads[0], t.txs[acc] = wrapped, txs[1:]
-			heap.Fix(&t.heads, 0)
 			return
 		}
 	}
-	heap.Pop(&t.heads)
+	// just remove the first element (hletrd)
+	t.heads = t.heads[1:]
 }
 
 // Pop removes the best transaction, *not* replacing it with the next one from
 // the same account. This should be used when a transaction cannot be executed
 // and hence all subsequent ones should be discarded from the same account.
 func (t *TransactionsByPriceAndNonce) Pop() {
-	heap.Pop(&t.heads)
+	// simply pop the first element (hletrd)
+	t.heads = t.heads[1:]
 }
 
 // Message is a fully derived transaction and implements core.Message
