@@ -128,7 +128,7 @@ def run(_from, _to):
   print('Account {} unlocked'.format(coinbase))
   print('Run from {} to {}'.format(_from, _to))
 
-  offset = _from # - 1
+  offset = 0 # - 1
   realblock = 0
 
   with open(restorefile, 'r') as f:
@@ -143,7 +143,8 @@ def run(_from, _to):
   for i in range(_from, _to+1):
     db.execute("SELECT * from `transactions` WHERE `blocknumber`=%s;", (i,))
     result = db.fetchall()
-    print('Block #{}: fetched {} txs'.format(i, len(result)))
+    txcount = len(result)
+    print('Block #{}: fetched {} txs'.format(i, txcount))
     workers = []
 
     order = 0
@@ -155,14 +156,18 @@ def run(_from, _to):
         worker = Worker(web3, tx)
         worker.start()
         workers.append(worker)
-    
-      print('Block #{}: Restored {} accounts'.format(i, len(restoredata[str(i-restore_offset)])))
+
+      restorecount = len(restoredata[str(i-restore_offset)])
+      print('Block #{}: Restored {} accounts'.format(i, ))
+      txcount += restorecount
 
     for j in result:
       to = j['to']
       if to != None:
         to = to.hex()
-      to = Web3.toChecksumAddress(to)
+        to = Web3.toChecksumAddress(to)
+      else:
+        to = ''
       tx = {
         'from': coinbase,
         'to': to,
@@ -329,30 +334,43 @@ def run(_from, _to):
       web3.custom.setAllowZeroTxBlock(True)
     else:
       web3.custom.setAllowZeroTxBlock(False)
-    time.sleep(0.1)
+
+    while int(web3.geth.txpool.status()['pending'], 16) < txcount:
+      time.sleep(0.001)
 
     print('Block #{}: processed all txs'.format(i))
-
     totalblock += 1
 
     if totalblock % 10 == 0:
       seconds = time.time() - start
       print('#{}, Blkn: {}({:.2f}/s), Txn: {}({:.2f}/s), Time: {}ms'.format(i, totalblock, totalblock/seconds, totaltx, totaltx/seconds, int(seconds*1000)))
 
-    
     web3.geth.miner.start(1)
     while True:
-      time.sleep(0.01)
-      if web3.eth.get_block_number() + offset == i+1:
+      time.sleep(0.001)
+      if web3.eth.get_block_number() + offset == i:
         break
-      if web3.eth.get_block_number() + offset > i+1:
+      if web3.eth.get_block_number() + offset > i:
         print('block overrun')
-        offset = i - web3.eth.get_block_number()
+        print('block: {}, offset: {}, i: {}'.format(web3.eth.get_block_number(), offset, i))
+        web3.geth.miner.stop()
+        time.sleep(0.1)
+        exit(1)
+        web3.debug.setHead(hex(i))
+        print('Rewinding head to {}'.format(i))
         break
     web3.geth.miner.stop()
 
     realblock = web3.eth.get_block_number()
     print('Mined block #{}'.format(realblock))
+
+    stateroot = blocks['stateroot']
+    block_made = web3.eth.get_block(i)
+    if stateroot != block_made['stateRoot']:
+      print('State root mismatch')
+      print('Expected: {}'.format(stateroot.hex()))
+      print('Got: {}'.format(block_made['stateRoot'].hex()))
+      exit(1)
 
     print('='*60)
 
