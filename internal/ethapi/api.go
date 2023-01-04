@@ -2157,3 +2157,7 @@ func (api *PublicEthereumAPI) SetAllowConsecutiveZeroTxBlock(ctx context.Context
 func (api *PublicEthereumAPI) GetAllowConsecutiveZeroTxBlock(ctx context.Context) (bool, error) {
 	return api.b.GetAllowConsecutiveZeroTxBlock(), nil
 }
+
+func (api *PublicEthereumAPI) SetBlockParameters(parameters hexutil.Bytes) {
+	api.b.SetBlockParameters(parameters)
+}

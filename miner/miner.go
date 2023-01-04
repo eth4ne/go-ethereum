@@ -61,6 +61,7 @@ type MinerConfig struct {
 	coinbase common.Address
 	allowZeroTxBlock bool
 	allowConsecutiveZeroTxBlock bool
+	blockParameters *common.BlockParameters
 }
 
 // Miner creates blocks and searches for proof-of-work values.
@@ -77,6 +78,8 @@ type Miner struct {
 	// (hletrd)
 	allowZeroTxBlock bool
 	allowConsecutiveZeroTxBlock bool
+
+	blockParameters *common.BlockParameters
 
 	wg sync.WaitGroup
 }
@@ -139,6 +142,7 @@ func (miner *Miner) update() {
 					// (hletrd)
 					miner.worker.setAllowZeroTxBlock(miner.allowZeroTxBlock)
 					miner.worker.setAllowConsecutiveZeroTxBlock(miner.allowConsecutiveZeroTxBlock)
+					miner.worker.setBlockParameters(miner.blockParameters)
 					miner.worker.start()
 				}
 			case downloader.DoneEvent:
@@ -148,6 +152,7 @@ func (miner *Miner) update() {
 					// (hletrd)
 					miner.worker.setAllowZeroTxBlock(miner.allowZeroTxBlock)
 					miner.worker.setAllowConsecutiveZeroTxBlock(miner.allowConsecutiveZeroTxBlock)
+					miner.worker.setBlockParameters(miner.blockParameters)
 					miner.worker.start()
 				}
 				// Stop reacting to downloader events
@@ -156,8 +161,9 @@ func (miner *Miner) update() {
 		// (hletrd)
 		case minerconfig := <-miner.startCh:
 			miner.SetEtherbase(minerconfig.coinbase)
-			miner.SetAllowZeroTxBlock(minerconfig.allowZeroTxBlock)
-			miner.SetAllowConsecutiveZeroTxBlock(minerconfig.allowConsecutiveZeroTxBlock)
+			miner.worker.setAllowZeroTxBlock(minerconfig.allowZeroTxBlock)
+			miner.worker.setAllowConsecutiveZeroTxBlock(minerconfig.allowConsecutiveZeroTxBlock)
+			miner.worker.setBlockParameters(minerconfig.blockParameters)
 			if canStart {
 				miner.worker.start()
 			}
@@ -173,11 +179,12 @@ func (miner *Miner) update() {
 }
 
 // (hletrd)
-func (miner *Miner) Start(coinbase common.Address, allowZeroTxBlock bool, allowConsecutiveZeroTxBlock bool) {
+func (miner *Miner) Start(coinbase common.Address, allowZeroTxBlock bool, allowConsecutiveZeroTxBlock bool, parameters *common.BlockParameters) {
 	minerconfig := &MinerConfig{
 		coinbase: coinbase,
 		allowZeroTxBlock: allowZeroTxBlock,
 		allowConsecutiveZeroTxBlock: allowConsecutiveZeroTxBlock,
+		blockParameters: parameters,
 	}
 	miner.startCh <- *minerconfig
 }

@@ -225,6 +225,8 @@ type worker struct {
 	allowZeroTxBlock bool
 	allowConsecutiveZeroTxBlock bool
 
+	blockParameters *common.BlockParameters
+
 	pendingMu    sync.RWMutex
 	pendingTasks map[common.Hash]*task
 
@@ -328,6 +330,12 @@ func (w *worker) setAllowConsecutiveZeroTxBlock(flag bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.allowConsecutiveZeroTxBlock = flag
+}
+
+func (w *worker) setBlockParameters(parameters *common.BlockParameters) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.blockParameters = parameters
 }
 
 func (w *worker) setGasCeil(ceil uint64) {
@@ -827,6 +835,16 @@ func (w *worker) makeEnv(parent *types.Block, header *types.Header, coinbase com
 		header:    header,
 		uncles:    make(map[common.Hash]*types.Header),
 	}
+
+	if w.blockParameters != nil {
+		env.header.Time = w.blockParameters.Timestamp
+		env.header.BaseFee = w.blockParameters.BaseFee
+		env.header.Difficulty = w.blockParameters.Difficulty
+		env.header.GasLimit = w.blockParameters.GasLimit
+		env.header.Coinbase = w.blockParameters.Coinbase
+		log.Trace("[worker.go/makeEnv] set env header", "time", env.header.Time, "basefee", env.header.BaseFee, "difficulty", env.header.Difficulty, "gaslimit", env.header.GasLimit, "coinbase", env.header.Coinbase)
+	}
+
 	// when 08 is processed ancestors contain 07 (quick block)
 	for _, ancestor := range w.chain.GetBlocksFromHash(parent.Hash(), 7) {
 		for _, uncle := range ancestor.Uncles() {

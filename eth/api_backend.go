@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/bloombits"
@@ -378,4 +379,9 @@ func (b *EthAPIBackend) SetAllowConsecutiveZeroTxBlock(flag bool) {
 // optional zero tx mining (hletrd)
 func (b *EthAPIBackend) GetAllowConsecutiveZeroTxBlock() bool {
 	return b.eth.getAllowConsecutiveZeroTxBlock()
+}
+
+// block parameters (hletrd)
+func (b *EthAPIBackend) SetBlockParameters(parameters hexutil.Bytes) {
+	b.eth.setBlockParameters(parameters)
 }

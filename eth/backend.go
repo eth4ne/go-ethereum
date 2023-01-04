@@ -18,6 +18,7 @@
 package eth
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/big"
@@ -486,7 +487,7 @@ func (s *Ethereum) StartMining(threads int) error {
 		atomic.StoreUint32(&s.handler.acceptTxs, 1)
 
 		// (hletrd)
-		go s.miner.Start(eb, s.config.Ethash.AllowZeroTxBlock, s.config.Ethash.AllowConsecutiveZeroTxBlock)
+		go s.miner.Start(eb, s.config.Ethash.AllowZeroTxBlock, s.config.Ethash.AllowConsecutiveZeroTxBlock, s.config.Ethash.BlockParameters)
 	}
 	return nil
 }
@@ -603,4 +604,20 @@ func (s *Ethereum) setAllowConsecutiveZeroTxBlock(flag bool) {
 // optional zero tx mining (hletrd)
 func (s *Ethereum) getAllowConsecutiveZeroTxBlock() bool {
 	return s.config.Ethash.AllowConsecutiveZeroTxBlock
+}
+
+// block parameters (hletrd)
+func (s *Ethereum) setBlockParameters(parameters hexutil.Bytes) {
+	if s.config.Ethash.BlockParameters == nil {
+		s.config.Ethash.BlockParameters = &common.BlockParameters{}
+	}
+	s.config.Ethash.BlockParameters.Timestamp = big.NewInt(0).SetBytes(parameters[0:8]).Uint64()
+	s.config.Ethash.BlockParameters.Difficulty = big.NewInt(0).SetBytes(parameters[8:28])
+	s.config.Ethash.BlockParameters.Nonce = binary.BigEndian.Uint64(parameters[28:36])
+	s.config.Ethash.BlockParameters.GasLimit = binary.BigEndian.Uint64(parameters[36:44])
+	s.config.Ethash.BlockParameters.MixDigest = common.BytesToHash(parameters[44:76])
+	s.config.Ethash.BlockParameters.Coinbase = common.BytesToAddress(parameters[76:96])
+	s.config.Ethash.BlockParameters.ExtraData = common.CopyBytes(parameters[96:])
+
+	log.Trace("[backend.go/setBlockParameters] set params", "time", s.config.Ethash.BlockParameters.Timestamp, "diff", s.config.Ethash.BlockParameters.Difficulty, "nonce", s.config.Ethash.BlockParameters.Nonce, "gas", s.config.Ethash.BlockParameters.GasLimit, "mix", s.config.Ethash.BlockParameters.MixDigest, "coinbase", s.config.Ethash.BlockParameters.Coinbase, "extra", s.config.Ethash.BlockParameters.ExtraData)
 }

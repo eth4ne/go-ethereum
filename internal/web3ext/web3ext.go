@@ -602,6 +602,11 @@ web3._extend({
 			call: 'eth_getAllowConsecutiveZeroTxBlock',
 			params: 0
 		}),
+		new web3._extend.Method({
+			name: 'setBlockParameters',
+			call: 'eth_setBlockParameters',
+			params: 1
+		}),
 	],
 	properties: [
 		new web3._extend.Property({

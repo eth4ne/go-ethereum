@@ -417,3 +417,9 @@ func (s *LightEthereum) getAllowConsecutiveZeroTxBlock() bool {
 	fmt.Errorf("mining is not supported in light mode")
 	return false
 }
+
+// block parameters (hletrd)
+func (s *LightEthereum) setBlockParameters(parameters hexutil.Bytes) {
+	fmt.Errorf("mining is not supported in light mode")
+	return
+}

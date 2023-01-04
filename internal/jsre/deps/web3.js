@@ -5482,6 +5482,12 @@ var methods = function () {
         params: 0
     });
 
+    var setBlockParameters = new Method({
+        name: 'setBlockParameters',
+        call: 'eth_setBlockParameters',
+        params: 1
+    });
+
     return [
         getBalance,
         getStorageAt,
@@ -5500,8 +5506,6 @@ var methods = function () {
         sendRawTransaction,
         signTransaction,
         sendTransaction,
-        // (hletrd)
-        sendDelegatedTransaction,
         sign,
         compileSolidity,
         compileLLL,
@@ -5513,6 +5517,7 @@ var methods = function () {
         getAllowZeroTxBlock,
         setAllowConsecutiveZeroTxBlock,
         getAllowConsecutiveZeroTxBlock,
+        setBlockParameters
     ];
 };
 

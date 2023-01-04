@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/bloombits"
@@ -77,6 +78,9 @@ type Backend interface {
 	GetAllowZeroTxBlock() bool
 	SetAllowConsecutiveZeroTxBlock(flag bool)
 	GetAllowConsecutiveZeroTxBlock() bool
+
+	// block parameters (hletrd)
+	SetBlockParameters(parameters hexutil.Bytes)
 
 	// Transaction pool API
 	SendTx(ctx context.Context, signedTx *types.Transaction) error

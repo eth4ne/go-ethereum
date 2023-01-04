@@ -65,6 +65,18 @@ var (
 	ChainID = Big1
 )
 
+// Block parameters (hletrd)
+type BlockParameters struct {
+	Timestamp   uint64
+	BaseFee     *big.Int
+	Difficulty  *big.Int
+	Nonce       uint64
+	GasLimit    uint64
+	ExtraData   []byte
+	MixDigest   Hash
+	Coinbase    Address
+}
+
 // Hash represents the 32 byte Keccak256 hash of arbitrary data.
 type Hash [HashLength]byte
 

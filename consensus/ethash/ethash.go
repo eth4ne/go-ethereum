@@ -34,6 +34,7 @@ import (
 	"unsafe"
 
 	"github.com/edsrzf/mmap-go"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
@@ -427,6 +428,9 @@ type Config struct {
 	// optional zero tx mining (hletrd)
 	AllowZeroTxBlock bool
 	AllowConsecutiveZeroTxBlock bool
+
+	// block parameters (hletrd)
+	BlockParameters  *common.BlockParameters
 
 	// When set, notifications sent by the remote sealer will
 	// be block header JSON objects instead of work package arrays.
