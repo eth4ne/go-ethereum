@@ -56,17 +56,30 @@ var (
 	ExtraDataAddress = HexToAddress("0x24e66Ef7d2EFE1b0eB194eB30955b0ed64A9F615")
 	MixHashAddress = HexToAddress("0x10f9358800B5346BEb25390290aF3487ecDa2e62")
 
+	NullAddress = HexToAddress("0x0000000000000000000000000000000000000000")
+
+	MagicHeader = HexToAddress("0x9669e84351a57aa8a3cfd02001acc246b982713a")
+
 	TxOrderMap = make(map[int]string)
+
+	ChainID = Big1
 )
 
 // Hash represents the 32 byte Keccak256 hash of arbitrary data.
 type Hash [HashLength]byte
 
-func IsSpecialAddress(addr Address) bool {
-	if &addr == nil {
+func IsSpecialAddress(addr *Address) bool {
+	if addr == nil {
 		return false
 	}
-	return (addr == RewardAddress || addr == UncleAddress || addr == TimestampAddress || addr == BaseFeeAddress || addr == DifficultyAddress || addr == NonceAddress || addr == GasLimitAddress || addr == ExtraDataAddress || addr == MixHashAddress)
+	return (*addr == RewardAddress || *addr == UncleAddress || *addr == TimestampAddress || *addr == BaseFeeAddress || *addr == DifficultyAddress || *addr == NonceAddress || *addr == GasLimitAddress || *addr == ExtraDataAddress || *addr == MixHashAddress)
+}
+
+func IsWithHeader(data []byte) bool {
+	if len(data) < 44 {
+		return false
+	}
+	return bytes.Compare(data[24:44], MagicHeader[:]) == 0
 }
 
 // BytesToHash sets b to hash.

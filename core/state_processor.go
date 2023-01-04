@@ -140,33 +140,36 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	receipt.TransactionIndex = uint(statedb.TxIndex())
 
 	// special tx (hletrd)
-	if *msg.To() == common.RewardAddress {
-		log.Info("[state_processor.go/applyTransaction] Processing a reward transaction", "to", msg.To())
-		receipt.TransactionIndex = uint(1048576)
-	} else if *msg.To() == common.UncleAddress {
-		log.Info("[state_processor.go/applyTransaction] Processing an uncle transaction", "to", msg.To())
-		receipt.TransactionIndex = uint(1048577)
-	} else if *msg.To() == common.TimestampAddress {
-		log.Info("[state_processor.go/applyTransaction] Processing a timestamp transaction", "value", msg.Value())
-		receipt.TransactionIndex = uint(1048578)
-	} else if *msg.To() == common.BaseFeeAddress {
-		log.Info("[state_processor.go/applyTransaction] Processing a basefee transaction", "value", msg.Value())
-		receipt.TransactionIndex = uint(1048579)
-	} else if *msg.To() == common.DifficultyAddress {
-		log.Info("[state_processor.go/applyTransaction] Processing a difficulty transaction", "value", msg.Value())
-		receipt.TransactionIndex = uint(1048580)
-	} else if *msg.To() == common.NonceAddress {
-		log.Info("[state_processor.go/applyTransaction] Processing a nonce transaction", "value", msg.Data())
-		receipt.TransactionIndex = uint(1048581)
-	} else if *msg.To() == common.GasLimitAddress {
-		log.Info("[state_processor.go/applyTransaction] Processing a gaslimit transaction", "value", msg.Data())
-		receipt.TransactionIndex = uint(1048580)
-	} else if *msg.To() == common.ExtraDataAddress {
-		log.Info("[state_processor.go/applyTransaction] Processing a extradata transaction", "value", msg.Data())
-		receipt.TransactionIndex = uint(1048579)
-	} else if *msg.To() == common.MixHashAddress {
-		log.Info("[state_processor.go/applyTransaction] Processing a mixhash transaction", "value", msg.Data())
-		receipt.TransactionIndex = uint(1048578)
+	specialtx := common.IsSpecialAddress(msg.To())
+	if specialtx {
+		if *msg.To() == common.RewardAddress {
+			log.Info("[state_processor.go/applyTransaction] Processing a reward transaction", "to", msg.To())
+			receipt.TransactionIndex = uint(1048576)
+		} else if *msg.To() == common.UncleAddress {
+			log.Info("[state_processor.go/applyTransaction] Processing an uncle transaction", "to", msg.To())
+			receipt.TransactionIndex = uint(1048577)
+		} else if *msg.To() == common.TimestampAddress {
+			log.Info("[state_processor.go/applyTransaction] Processing a timestamp transaction", "value", msg.Value())
+			receipt.TransactionIndex = uint(1048578)
+		} else if *msg.To() == common.BaseFeeAddress {
+			log.Info("[state_processor.go/applyTransaction] Processing a basefee transaction", "value", msg.Value())
+			receipt.TransactionIndex = uint(1048579)
+		} else if *msg.To() == common.DifficultyAddress {
+			log.Info("[state_processor.go/applyTransaction] Processing a difficulty transaction", "value", msg.Value())
+			receipt.TransactionIndex = uint(1048580)
+		} else if *msg.To() == common.NonceAddress {
+			log.Info("[state_processor.go/applyTransaction] Processing a nonce transaction", "value", msg.Data())
+			receipt.TransactionIndex = uint(1048581)
+		} else if *msg.To() == common.GasLimitAddress {
+			log.Info("[state_processor.go/applyTransaction] Processing a gaslimit transaction", "value", msg.Data())
+			receipt.TransactionIndex = uint(1048580)
+		} else if *msg.To() == common.ExtraDataAddress {
+			log.Info("[state_processor.go/applyTransaction] Processing a extradata transaction", "value", msg.Data())
+			receipt.TransactionIndex = uint(1048579)
+		} else if *msg.To() == common.MixHashAddress {
+			log.Info("[state_processor.go/applyTransaction] Processing a mixhash transaction", "value", msg.Data())
+			receipt.TransactionIndex = uint(1048578)
+		}
 	}
 
 	return receipt, err

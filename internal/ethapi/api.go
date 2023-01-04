@@ -447,6 +447,7 @@ func (s *PrivateAccountAPI) signTransaction(ctx context.Context, args *Transacti
 	}
 	// Assemble the transaction and sign with the wallet
 	tx := args.toTransaction()
+	log.Trace("[api.go/signTransaction] sign transaction")
 
 	return wallet.SignTxWithPassphrase(account, passwd, tx, s.b.ChainConfig().ChainID)
 }
@@ -466,7 +467,7 @@ func (s *PrivateAccountAPI) SendTransaction(ctx context.Context, args Transactio
 		log.Warn("Failed transaction send attempt", "from", args.from(), "to", args.To, "value", args.Value.ToInt(), "err", err)
 		return common.Hash{}, err
 	}
-	return SubmitTransaction(ctx, s.b, signed)
+	return SubmitTransaction(ctx, s.b, signed, nil)
 }
 
 // SignTransaction will create a transaction from the given arguments and
@@ -624,7 +625,7 @@ func (api *PublicBlockChainAPI) ChainId() (*hexutil.Big, error) {
 		return (*hexutil.Big)(config.ChainID), nil
 	}
 	// always return chain id as 1 (hletrd)
-	return (*hexutil.Big)(common.Big1), nil
+	return (*hexutil.Big)(common.ChainID), nil
 	// supressing an error message
 	return nil, fmt.Errorf("chain not synced beyond EIP-155 replay-protection fork block")
 }
@@ -1682,34 +1683,36 @@ func (s *PublicTransactionPoolAPI) sign(addr common.Address, tx *types.Transacti
 }
 
 // SubmitTransaction is a helper function that submits tx to txPool and logs a message.
-func SubmitTransaction(ctx context.Context, b Backend, tx *types.Transaction) (common.Hash, error) {
+func SubmitTransaction(ctx context.Context, b Backend, tx *types.Transaction, from *common.Address) (common.Hash, error) {
 	// If the transaction fee cap is already specified, ensure the
 	// fee of the given transaction is _reasonable_.
 	if err := checkTxFee(tx.GasPrice(), tx.Gas(), b.RPCTxFeeCap()); err != nil {
 		return common.Hash{}, err
 	}
-	if !b.UnprotectedAllowed() && !tx.Protected() {
+	// do not check against EIP155 (hletrd)
+	//if !b.UnprotectedAllowed() && !tx.Protected() {
 		// Ensure only eip155 signed transactions are submitted if EIP155Required is set.
-		log.Trace("[api.go/SubmitTransaction] EIP155 unprotected transaction not allowed")
-		return common.Hash{}, errors.New("only replay-protected (EIP-155) transactions allowed over RPC")
-	}
+	//	log.Trace("[api.go/SubmitTransaction] EIP155 unprotected transaction not allowed")
+	//	return common.Hash{}, errors.New("only replay-protected (EIP-155) transactions allowed over RPC")
+	//}
 	if err := b.SendTx(ctx, tx); err != nil {
 		return common.Hash{}, err
 	}
 	// Print a log with full tx details for manual investigations and interventions
-	return tx.Hash(), nil
-	// bypass debugging (hletrd)
-	signer := types.MakeSigner(b.ChainConfig(), b.CurrentBlock().Number())
-	from, err := types.Sender(signer, tx)
-	if err != nil {
-		return common.Hash{}, err
+	if from == nil {
+		signer := types.MakeSigner(b.ChainConfig(), b.CurrentBlock().Number())
+		_from, err := types.Sender(signer, tx)
+		if err != nil {
+			return common.Hash{}, err
+		}
+		from = &_from
 	}
 
 	if tx.To() == nil {
-		addr := crypto.CreateAddress(from, tx.Nonce())
-		log.Info("Submitted contract creation", "hash", tx.Hash().Hex(), "from", from, "nonce", tx.Nonce(), "contract", addr.Hex(), "value", tx.Value())
+		addr := crypto.CreateAddress(*from, tx.Nonce())
+		log.Info("Submitted contract creation", "hash", tx.Hash().Hex(), "from", *from, "nonce", tx.Nonce(), "contract", addr.Hex(), "value", tx.Value())
 	} else {
-		log.Info("Submitted transaction", "hash", tx.Hash().Hex(), "from", from, "nonce", tx.Nonce(), "recipient", tx.To(), "value", tx.Value())
+		log.Info("Submitted transaction", "hash", tx.Hash().Hex(), "from", *from, "nonce", tx.Nonce(), "recipient", tx.To(), "value", tx.Value())
 	}
 	return tx.Hash(), nil
 }
@@ -1720,20 +1723,36 @@ func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args Tra
 	// Look up the wallet containing the requested signer
 	//account := accounts.Account{Address: args.from()}
 	// use delegated from (hletrd)
-
-	// len(data) >= 24 for all normal txs
-	// len(data) < 24 if and only if the tx is special purposed (hletrd)
+	// if it is a transaction to be delegated (hletrd)
+	special := common.IsSpecialAddress(args.To)
 	var from common.Address
-	if common.IsSpecialAddress(*args.To) {
+	var err error
+	var V, R, S *big.Int
+
+	if special {
 		from = args.from()
 	} else {
+		V = big.NewInt(0).SetBytes(args.data()[0:1])
+		R = big.NewInt(0).SetBytes(args.data()[1:33])
+		S = big.NewInt(0).SetBytes(args.data()[33:65])
+		args.SetData(args.data()[65:])
 		from = common.BytesToAddress(args.data()[4:24])
 	}
 	account := accounts.Account{Address: from}
 
-	wallet, err := s.b.AccountManager().Find(account)
-	if err != nil {
-		return common.Hash{}, err
+	var wallet accounts.Wallet
+	if special {
+		wallet, err = s.b.AccountManager().Find(account)
+		if err != nil {
+			log.Warn("[api.go/SendTransaction] unable to find the account (special)", "addr", from)
+			return common.Hash{}, err
+		}
+	} else {
+		wallet, err = s.b.AccountManager().Find(accounts.Account{Address: *args.From})
+		if err != nil {
+			log.Warn("[api.go/SendTransaction] unable to find the account (general)", "addr", from)
+			return common.Hash{}, err
+		}
 	}
 
 	if args.Nonce == nil {
@@ -1752,11 +1771,24 @@ func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args Tra
 	// Assemble the transaction and sign with the wallet
 	tx := args.toTransaction()
 
-	signed, err := wallet.SignTx(account, tx, s.b.ChainConfig().ChainID)
-	if err != nil {
-		return common.Hash{}, err
+	var signed *types.Transaction
+
+	if special {
+		signed, err = wallet.SignTx(account, tx, s.b.ChainConfig().ChainID)
+		if err != nil {
+			log.Warn("[api.go/SendTransaction] unable to sign tx with st")
+			return common.Hash{}, err
+		}
+	} else {
+		//log.Trace("[api.go/SendTransaction]", "V", V, "R", R, "S", S)
+		signed, err = tx.WithSignaturePlease(V, R, S)
+		if err != nil {
+			log.Warn("[api.go/SendTransaction] unable to sign tx with stp")
+			return common.Hash{}, err
+		}
 	}
-	return SubmitTransaction(ctx, s.b, signed)
+
+	return SubmitTransaction(ctx, s.b, signed, &from)
 }
 
 // FillTransaction fills the defaults (nonce, gas, gasPrice or 1559 fields)
@@ -1783,7 +1815,7 @@ func (s *PublicTransactionPoolAPI) SendRawTransaction(ctx context.Context, input
 	if err := tx.UnmarshalBinary(input); err != nil {
 		return common.Hash{}, err
 	}
-	return SubmitTransaction(ctx, s.b, tx)
+	return SubmitTransaction(ctx, s.b, tx, nil)
 }
 
 // Sign calculates an ECDSA signature for:
@@ -2081,6 +2113,8 @@ func (s *PublicNetAPI) Version() string {
 // checkTxFee is an internal function used to check whether the fee of
 // the given transaction is _reasonable_(under the cap).
 func checkTxFee(gasPrice *big.Int, gas uint64, cap float64) error {
+	// do not check tx fee (hletrd)
+	return nil
 	// Short circuit if there is no cap for transaction fee at all.
 	if cap == 0 {
 		return nil

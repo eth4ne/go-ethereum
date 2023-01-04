@@ -28,7 +28,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -412,6 +411,13 @@ func (tx *Transaction) WithSignature(signer Signer, sig []byte) (*Transaction, e
 	return &Transaction{inner: cpy, time: tx.time}, nil
 }
 
+// A bit more polite and earnest way to request sign (hletrd)
+func (tx *Transaction) WithSignaturePlease(v, r, s *big.Int) (*Transaction, error) {
+	cpy := tx.inner.copy()
+	cpy.setSignatureValues(common.ChainID, v, r, s)
+	return &Transaction{inner: cpy, time: tx.time}, nil
+}
+
 // Transactions implements DerivableList for transactions.
 type Transactions []*Transaction
 
@@ -522,7 +528,10 @@ type TransactionsByPriceAndNonce struct {
 // if after providing it to the constructor.
 func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transactions, baseFee *big.Int) *TransactionsByPriceAndNonce {
 	// Initialize a price and received time based heap with the head transactions
-	tx_count := len(txs)
+	tx_count := 0
+	for _, accTxs := range txs {
+		tx_count += len(accTxs)
+	}
 	heads := make(TxByPriceAndTime, 0, len(txs))
 	for from, accTxs := range txs {
 		acc, _ := Sender(signer, accTxs[0])
@@ -533,18 +542,23 @@ func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transa
 			continue
 		}
 		heads = append(heads, wrapped)
+		tx_count++
 		txs[from] = accTxs[1:]
 	}
 	heap.Init(&heads)
 
+	/*log.Trace("[transaction.go/NewTransactionsByPriceAndNonce] sorting", "txcount", tx_count)
+
 	// sort tx pool according to the global order map (hletrd)
-	heads_sorted := make(TxByPriceAndTime, 0, len(txs))
+	heads := make(TxByPriceAndTime, 0, len(txs))
 
 	for order := 0; order < tx_count; order++ {
 		found := false
 		var tx_found *Transaction
-		for _, accTxs := range txs {
+		for from, accTxs := range txs {
+			log.Trace("[transaction.go/NewTransactionsByPriceAndNonce]", "from", from, "accTxs", accTxs)
 			for _, singletx := range accTxs {
+				log.Trace("tx", "hash", singletx.Hash(), "to", singletx.To())
 				if singletx.Hash() == common.HexToHash(common.TxOrderMap[order]) {
 					found = true
 					tx_found = singletx
@@ -556,9 +570,9 @@ func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transa
 			}
 		}
 		wrapped, _ := NewTxWithMinerFee(tx_found, baseFee)
-		heads_sorted = append(heads_sorted, wrapped)
+		heads = append(heads, wrapped)
 		log.Trace("[transaction.go/NewTransactionsByPriceAndNonce] tx order", "hash", tx_found.Hash(), "order", order)
-	}
+	}*/
 
 	// Assemble and return the transaction set
 	return &TransactionsByPriceAndNonce{

@@ -889,7 +889,7 @@ func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*
 	// change beneficiary to an arbitrary address (hletrd)
 	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &w.blockMiner, env.gasPool, env.state, env.header, tx, &env.header.GasUsed, *w.chain.GetVMConfig())
 	if err != nil {
-		log.Info("[worker.go/commitTransaction] ApplyTransaction error", "to", tx.To())
+		log.Info("[worker.go/commitTransaction] ApplyTransaction error", "to", tx.To(), "error", err)
 		env.state.RevertToSnapshot(snap)
 		return nil, err
 	}
@@ -1227,6 +1227,7 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 				ParentHash: parent0.Hash(),
 				Number:     uncleHeight0,
 				GasLimit:   w.eth.TxPool().UncleGasLimit0,
+				GasUsed:   w.eth.TxPool().UncleGasUsed0,
 				Coinbase:   w.eth.TxPool().UncleAddress0,
 				Difficulty: &w.eth.TxPool().UncleDifficulty0,
 				MixDigest:  w.eth.TxPool().UncleMixHash0,
@@ -1252,6 +1253,7 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 				ParentHash: parent1.Hash(),
 				Number:     uncleHeight1,
 				GasLimit:   w.eth.TxPool().UncleGasLimit1,
+				GasUsed:   w.eth.TxPool().UncleGasUsed1,
 				Coinbase:   w.eth.TxPool().UncleAddress1,
 				Difficulty: &w.eth.TxPool().UncleDifficulty1,
 				MixDigest:  w.eth.TxPool().UncleMixHash1,

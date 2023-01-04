@@ -90,6 +90,9 @@ func (t *SecureTrie) TryGetNode(path []byte) ([]byte, int, error) {
 // TryUpdate account will abstract the write of an account to the
 // secure trie.
 func (t *SecureTrie) TryUpdateAccount(key []byte, acc *types.StateAccount) error {
+	// logging (hletrd)
+	log.Trace("[trie.go/TryUpdateAccount] update trie", "key", common.Bytes2Hex(key), "root", t.trie.Hash())
+	
 	hk := t.hashKey(key)
 	data, err := rlp.EncodeToBytes(acc)
 	if err != nil {

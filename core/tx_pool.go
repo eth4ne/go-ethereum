@@ -279,6 +279,7 @@ type TxPool struct {
 	UncleDifficulty0 big.Int
 	UncleExtraData0 []byte
 	UncleGasLimit0 uint64
+	UncleGasUsed0 uint64
 	UncleMixHash0 common.Hash
 	UncleNonce0 types.BlockNonce
 	UncleSha3Uncles0 common.Hash
@@ -292,6 +293,7 @@ type TxPool struct {
 	UncleDifficulty1 big.Int
 	UncleExtraData1 []byte
 	UncleGasLimit1 uint64
+	UncleGasUsed1 uint64
 	UncleMixHash1 common.Hash
 	UncleNonce1 types.BlockNonce
 	UncleSha3Uncles1 common.Hash
@@ -648,9 +650,10 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		return ErrNegativeValue
 	}
 	// Ensure the transaction doesn't exceed the current block limit gas.
-	if pool.currentMaxGas < tx.Gas() {
-		return ErrGasLimit
-	}
+	// no gas limit (hletrd)
+	//if pool.currentMaxGas < tx.Gas() {
+	//	return ErrGasLimit
+	//}
 	// Sanity check for extremely large numbers
 	if tx.GasFeeCap().BitLen() > 256 {
 		return ErrFeeCapVeryHigh
@@ -684,13 +687,14 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	//	return ErrInsufficientFunds
 	//}
 	// Ensure the transaction has more gas than the basic tx fee.
-	intrGas, err := IntrinsicGas(tx.Data(), tx.AccessList(), tx.To() == nil, true, pool.istanbul)
-	if err != nil {
-		return err
-	}
-	if tx.Gas() < intrGas {
-		return ErrIntrinsicGas
-	}
+	//intrGas, err := IntrinsicGas(tx.Data(), tx.AccessList(), tx.To() == nil, true, pool.istanbul)
+	//if err != nil {
+	//	return err
+	//}
+	// do not check for intrinsic gas (hletrd)
+	//if tx.Gas() < intrGas {
+	//	return ErrIntrinsicGas
+	//}
 	return nil
 }
 
@@ -714,7 +718,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 	isLocal := local || pool.locals.containsTx(tx)
 
 	// Deal with special txs (hletrd)
-	specialtx := common.IsSpecialAddress(*tx.To())
+	specialtx := common.IsSpecialAddress(tx.To())
 	if (specialtx) {
 		if (*tx.To() == common.RewardAddress) {
 			beneficiary := common.BytesToAddress(tx.Data())
@@ -731,48 +735,50 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 				pool.UncleHeight0 = *uncleHeight
 				pool.UncleDifficulty0 = *big.NewInt(0).SetBytes(tx.Data()[20:28])
 				pool.UncleGasLimit0 = binary.BigEndian.Uint64(tx.Data()[28:36])
-				pool.UncleMixHash0 = common.BytesToHash(tx.Data()[36:68])
-				pool.UncleNonce0 = types.EncodeNonce(binary.BigEndian.Uint64(tx.Data()[68:76]))
-				pool.UncleSha3Uncles0 = common.BytesToHash(tx.Data()[76:108])
-				pool.UncleTimeStamp0 = big.NewInt(0).SetBytes(tx.Data()[108:116]).Uint64()
-				pool.UncleReceiptsRoot0 = common.BytesToHash(tx.Data()[116:148])
-				pool.UncleTransactionsRoot0 = common.BytesToHash(tx.Data()[148:180])
-				pool.UncleStateRoot0 = common.BytesToHash(tx.Data()[180:212])
-				pool.UncleExtraData0 = common.CopyBytes(tx.Data()[212:])
-				log.Trace("[tx_pool.go/add] Parsed uncle tx")
+				pool.UncleGasUsed0 = binary.BigEndian.Uint64(tx.Data()[36:44])
+				pool.UncleMixHash0 = common.BytesToHash(tx.Data()[44:76])
+				pool.UncleNonce0 = types.EncodeNonce(binary.BigEndian.Uint64(tx.Data()[76:84]))
+				pool.UncleSha3Uncles0 = common.BytesToHash(tx.Data()[84:116])
+				pool.UncleTimeStamp0 = big.NewInt(0).SetBytes(tx.Data()[116:124]).Uint64()
+				pool.UncleReceiptsRoot0 = common.BytesToHash(tx.Data()[124:156])
+				pool.UncleTransactionsRoot0 = common.BytesToHash(tx.Data()[156:188])
+				pool.UncleStateRoot0 = common.BytesToHash(tx.Data()[188:220])
+				pool.UncleExtraData0 = common.CopyBytes(tx.Data()[220:])
+				log.Trace("[tx_pool.go/add] Parsed an uncle tx")
 			} else if (pool.Unclecount == 2) {
 				pool.UncleAddress1 = common.BytesToAddress(tx.Data()[0:20])
 				pool.UncleHeight1 = *uncleHeight
 				pool.UncleDifficulty1 = *big.NewInt(0).SetBytes(tx.Data()[20:28])
 				pool.UncleGasLimit1 = binary.BigEndian.Uint64(tx.Data()[28:36])
-				pool.UncleMixHash1 = common.BytesToHash(tx.Data()[36:68])
-				pool.UncleNonce1 = types.EncodeNonce(binary.BigEndian.Uint64(tx.Data()[68:76]))
-				pool.UncleSha3Uncles1 = common.BytesToHash(tx.Data()[76:108])
-				pool.UncleTimeStamp1 = big.NewInt(0).SetBytes(tx.Data()[108:116]).Uint64()
-				pool.UncleReceiptsRoot1 = common.BytesToHash(tx.Data()[116:148])
-				pool.UncleTransactionsRoot1 = common.BytesToHash(tx.Data()[148:180])
-				pool.UncleStateRoot1 = common.BytesToHash(tx.Data()[180:212])
-				pool.UncleExtraData1 = common.CopyBytes(tx.Data()[212:])
-				log.Trace("[tx_pool.go/add] Parsed uncle tx")
+				pool.UncleGasUsed1 = binary.BigEndian.Uint64(tx.Data()[36:44])
+				pool.UncleMixHash1 = common.BytesToHash(tx.Data()[44:76])
+				pool.UncleNonce1 = types.EncodeNonce(binary.BigEndian.Uint64(tx.Data()[76:84]))
+				pool.UncleSha3Uncles1 = common.BytesToHash(tx.Data()[84:116])
+				pool.UncleTimeStamp1 = big.NewInt(0).SetBytes(tx.Data()[116:124]).Uint64()
+				pool.UncleReceiptsRoot1 = common.BytesToHash(tx.Data()[124:156])
+				pool.UncleTransactionsRoot1 = common.BytesToHash(tx.Data()[156:188])
+				pool.UncleStateRoot1 = common.BytesToHash(tx.Data()[188:220])
+				pool.UncleExtraData1 = common.CopyBytes(tx.Data()[220:])
+				log.Trace("[tx_pool.go/add] Parsed an uncle tx")
 			}
 		} else if (*tx.To() == common.TimestampAddress) {
 			pool.TimeStamp = big.NewInt(0).SetBytes(tx.Data()).Uint64()
-			log.Info("[tx_pool.go/add] Processed an timestamp tx", "timestamp", pool.TimeStamp)
+			log.Info("[tx_pool.go/add] Processed a timestamp tx", "timestamp", pool.TimeStamp)
 		} else if (*tx.To() == common.DifficultyAddress) {
 			pool.Difficulty = big.NewInt(0).SetBytes(tx.Data())
-			log.Info("[tx_pool.go/add] Processed an difficulty tx", "difficulty", pool.Difficulty)
+			log.Info("[tx_pool.go/add] Processed a difficulty tx", "difficulty", pool.Difficulty)
 		} else if (*tx.To() == common.NonceAddress) {
 			pool.NonceValue = binary.BigEndian.Uint64(tx.Data()[0:8])
-			log.Info("[tx_pool.go/add] Processed an Nonce tx", "Nonce", pool.NonceValue)
+			log.Info("[tx_pool.go/add] Processed a Nonce tx", "Nonce", pool.NonceValue)
 		}	else if (*tx.To() == common.GasLimitAddress) {
 			pool.GasLimit = binary.BigEndian.Uint64(tx.Data())
-			log.Info("[tx_pool.go/add] Processed an GasLimit tx", "GasLimit", pool.GasLimit)
+			log.Info("[tx_pool.go/add] Processed a GasLimit tx", "GasLimit", pool.GasLimit)
 		} else if (*tx.To() == common.ExtraDataAddress) {
 			pool.ExtraData = common.CopyBytes(tx.Data())
 			log.Info("[tx_pool.go/add] Processed an extradata tx", "extradata", pool.ExtraData)
 		} else if (*tx.To() == common.MixHashAddress) {
 			pool.MixHash = common.BytesToHash(tx.Data())
-			log.Info("[tx_pool.go/add] Processed an mixhash tx", "mixhash", pool.MixHash)
+			log.Info("[tx_pool.go/add] Processed a mixhash tx", "mixhash", pool.MixHash)
 		}
 		return false, nil
 	}
@@ -822,10 +828,15 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 		}
 	}
 	// Try to replace an existing transaction in the pending pool
-	// trim the first 20 bytes from data
+	// trim the first <del>20</del> <del>24</del> 44 bytes from data
 	from, _ := types.Sender(pool.signer, tx) // already validated
+	// discard transactions accumulated on previous sessions
+	if (!common.IsWithHeader(tx.Data())) {
+		log.Trace("[tx_pool.go/add] Discarding old unprocessed transactions")
+		return false, nil
+	}
 	order := int(binary.BigEndian.Uint32(tx.Data()[0:4]))
-	tx.SetData(tx.Data()[24:])
+	tx.SetData(tx.Data()[44:])
 
 	txhash := tx.Hash().String()
 	log.Trace("[tx_pool.go/add] tx order", "hash", txhash, "order", order)
@@ -835,7 +846,9 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 		// Nonce already pending, check if required price bump is met
 		inserted, old := list.Add(tx, pool.config.PriceBump)
 		if !inserted {
+			// log (hletrd)
 			log.Trace("[tx_pool.go/add] transaction discarded")
+			log.Info("[tx_pool.go/add]", "order", order, "from", from, "to", tx.To(), "nonce", tx.Nonce())
 			pendingDiscardMeter.Mark(1)
 			return false, ErrReplaceUnderpriced
 		}
@@ -891,6 +904,7 @@ func (pool *TxPool) enqueueTx(hash common.Hash, tx *types.Transaction, local boo
 		// An older transaction was better, discard this
 		log.Trace("[tx_pool.go/enqueueTx] older transaction is better, discard")
 		queuedDiscardMeter.Mark(1)
+		log.Info("[tx_pool.go/enqueueTx]", "from", from, "to", tx.To(), "nonce", tx.Nonce())
 		return false, ErrReplaceUnderpriced
 	}
 	// Discard any previous transaction and mark this
@@ -1628,6 +1642,8 @@ func (pool *TxPool) truncateQueue() {
 		// Drop all transactions if they are less than the overflow
 		if size := uint64(list.Len()); size <= drop {
 			for _, tx := range list.Flatten() {
+				// log (hletrd)
+				log.Trace("[tx_pool.go/truncateQueue] drop transaction")
 				pool.removeTx(tx.Hash(), true)
 			}
 			drop -= size
@@ -1637,6 +1653,8 @@ func (pool *TxPool) truncateQueue() {
 		// Otherwise drop only last few transactions
 		txs := list.Flatten()
 		for i := len(txs) - 1; i >= 0 && drop > 0; i-- {
+			// log (hletrd)
+			log.Trace("[tx_pool.go/truncateQueue] drop transaction")
 			pool.removeTx(txs[i].Hash(), true)
 			drop--
 			queuedRateLimitMeter.Mark(1)

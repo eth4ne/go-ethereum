@@ -101,6 +101,11 @@ func SignTx(tx *Transaction, s Signer, prv *ecdsa.PrivateKey) (*Transaction, err
 	return tx.WithSignature(s, sig)
 }
 
+// A more polite and earnest way to request sign (hletrd)
+func SignTxPlease(tx *Transaction, v, r, s *big.Int) (*Transaction, error) {
+	return tx.WithSignaturePlease(v, r, s)
+}
+
 // SignNewTx creates a transaction and signs it.
 func SignNewTx(prv *ecdsa.PrivateKey, s Signer, txdata TxData) (*Transaction, error) {
 	tx := NewTx(txdata)
@@ -131,9 +136,6 @@ func MustSignNewTx(prv *ecdsa.PrivateKey, s Signer, txdata TxData) *Transaction 
 // not match the signer used in the current call.
 func Sender(signer Signer, tx *Transaction) (common.Address, error) {
 	// parse the first 20 bytes as data, whilst omitting 4 bytes (hletrd)
-	if len(tx.Data()) >= 24 {
-		return common.BytesToAddress(tx.Data()[0:24]), nil
-	} 
 	if sc := tx.from.Load(); sc != nil {
 		sigCache := sc.(sigCache)
 		// If the signer used to derive from in a previous
@@ -141,9 +143,15 @@ func Sender(signer Signer, tx *Transaction) (common.Address, error) {
 		// the cache.
 		if sigCache.signer.Equal(signer) {
 			// (hletrd)
-			log.Trace("[transaction_signing.go/Sender] transaction addr (use cached)", "address", sigCache.from)
+			log.Trace("[transaction_signing.go/Sender] transaction addr (use cached)", "signer", signer, "address", sigCache.from)
 			return sigCache.from, nil
 		}
+	}
+	if common.IsWithHeader(tx.Data()) {
+		addr := common.BytesToAddress(tx.Data()[4:24])
+		log.Trace("[transaction_signing.go/Sender] parsing from from tx data", "from", addr)
+		tx.from.Store(sigCache{signer: signer, from: addr})
+		return addr, nil 
 	}
 
 	addr, err := signer.Sender(tx)
@@ -151,7 +159,7 @@ func Sender(signer Signer, tx *Transaction) (common.Address, error) {
 		return common.Address{}, err
 	}
 	// (hletrd)
-	log.Trace("[transaction_signing.go/Sender] transaction addr", "address", addr)
+	log.Trace("[transaction_signing.go/Sender] transaction addr parsed from signature", "signer", signer, "address", addr)
 	tx.from.Store(sigCache{signer: signer, from: addr})
 	return addr, nil
 }
@@ -191,10 +199,7 @@ func NewLondonSigner(chainId *big.Int) Signer {
 }
 
 func (s londonSigner) Sender(tx *Transaction) (common.Address, error) {
-	// parse the first 20 bytes as data, whilst omitting 4 bytes (hletrd)
-	if len(tx.Data()) >= 24 {
-		return common.BytesToAddress(tx.Data()[4:24]), nil
-	}
+	log.Trace("[transaction_signing.go/Sender] londonSigner called")
 	if tx.Type() != DynamicFeeTxType {
 		return s.eip2930Signer.Sender(tx)
 	}
@@ -267,10 +272,7 @@ func (s eip2930Signer) Equal(s2 Signer) bool {
 }
 
 func (s eip2930Signer) Sender(tx *Transaction) (common.Address, error) {
-	// parse the first 20 bytes as data, whilst omitting 4 bytes (hletrd)
-	if len(tx.Data()) >= 24 {
-		return common.BytesToAddress(tx.Data()[4:24]), nil
-	}
+	log.Trace("[transaction_signing.go/Sender] eip2930Signer called")
 	V, R, S := tx.RawSignatureValues()
 	switch tx.Type() {
 	case LegacyTxType:
@@ -374,10 +376,7 @@ func (s EIP155Signer) Equal(s2 Signer) bool {
 var big8 = big.NewInt(8)
 
 func (s EIP155Signer) Sender(tx *Transaction) (common.Address, error) {
-	// parse the first 20 bytes as data, whilst omitting 4 bytes (hletrd)
-	if len(tx.Data()) >= 24 {
-		return common.BytesToAddress(tx.Data()[4:24]), nil
-	}
+	log.Trace("[transaction_signing.go/Sender] EIP155Signer called")
 	if tx.Type() != LegacyTxType {
 		return common.Address{}, ErrTxTypeNotSupported
 	}
@@ -441,10 +440,7 @@ func (hs HomesteadSigner) SignatureValues(tx *Transaction, sig []byte) (r, s, v 
 }
 
 func (hs HomesteadSigner) Sender(tx *Transaction) (common.Address, error) {
-	// parse the first 20 bytes as data, whilst omitting 4 bytes (hletrd)
-	if len(tx.Data()) >= 24 {
-		return common.BytesToAddress(tx.Data()[0:24]), nil
-	}
+	log.Trace("[transaction_signing.go/Sender] HomesteadSigner called")
 	if tx.Type() != LegacyTxType {
 		return common.Address{}, ErrTxTypeNotSupported
 	}
@@ -465,9 +461,7 @@ func (s FrontierSigner) Equal(s2 Signer) bool {
 
 func (fs FrontierSigner) Sender(tx *Transaction) (common.Address, error) {
 	// parse the first 20 bytes as data, whilst omitting 4 bytes (hletrd)
-	if len(tx.Data()) >= 24 {
-		return common.BytesToAddress(tx.Data()[0:24]), nil
-	}
+	log.Trace("[transaction_signing.go/Sender] FrontierSigner called")
 	if tx.Type() != LegacyTxType {
 		return common.Address{}, ErrTxTypeNotSupported
 	}
