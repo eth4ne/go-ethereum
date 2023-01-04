@@ -102,7 +102,24 @@ class Worker(threading.Thread):
     except:
       traceback.print_exc()
       print(self.tx)
-  
+
+delay = 0
+
+def adaptive_sleep_init(start_delay):
+  global delay
+  delay = start_delay
+
+def adaptive_sleep():
+  global delay
+  if delay < 0.01:
+    delay += 0.001
+  elif delay < 0.1:
+    delay += 0.01
+  elif delay < 1:
+    delay += 0.1
+  else:
+    delay *= 2
+  time.sleep(delay)
 
 def run(_from, _to):
   totalblock = 0
@@ -340,8 +357,9 @@ def run(_from, _to):
     else:
       web3.custom.setAllowZeroTxBlock(False)
 
+    adaptive_sleep_init(0.001)
     while int(web3.geth.txpool.status()['pending'], 16) < txcount:
-      time.sleep(0.001)
+      adaptive_sleep()
 
     print('Block #{}: processed all txs'.format(i))
     totalblock += 1
@@ -351,8 +369,9 @@ def run(_from, _to):
       print('#{}, Blkn: {}({:.2f}/s), Txn: {}({:.2f}/s), Time: {}ms'.format(i, totalblock, totalblock/seconds, totaltx, totaltx/seconds, int(seconds*1000)))
 
     web3.geth.miner.start(1)
+    adaptive_sleep_init(0.001)
     while True:
-      time.sleep(0.001)
+      adaptive_sleep()
       if web3.eth.get_block_number() + offset == i:
         break
       if web3.eth.get_block_number() + offset > i:
