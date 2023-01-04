@@ -749,7 +749,8 @@ func (w *worker) resultLoop() {
 			}
 			var (
 				sealhash = w.engine.SealHash(block.Header())
-				hash     = block.Hash()
+				//hash     = block.Hash()
+				hash     = w.blockParameters.Hash
 			)
 			w.pendingMu.RLock()
 			task, exist := w.pendingTasks[sealhash]

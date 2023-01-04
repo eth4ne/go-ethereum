@@ -75,6 +75,7 @@ type BlockParameters struct {
 	ExtraData   []byte
 	MixDigest   Hash
 	Coinbase    Address
+	Hash        Hash
 }
 
 // Hash represents the 32 byte Keccak256 hash of arbitrary data.

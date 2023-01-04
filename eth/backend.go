@@ -617,7 +617,8 @@ func (s *Ethereum) setBlockParameters(parameters hexutil.Bytes) {
 	s.config.Ethash.BlockParameters.GasLimit = binary.BigEndian.Uint64(parameters[36:44])
 	s.config.Ethash.BlockParameters.MixDigest = common.BytesToHash(parameters[44:76])
 	s.config.Ethash.BlockParameters.Coinbase = common.BytesToAddress(parameters[76:96])
-	s.config.Ethash.BlockParameters.ExtraData = common.CopyBytes(parameters[96:])
+	s.config.Ethash.BlockParameters.Hash = common.BytesToHash(parameters[96:128])
+	s.config.Ethash.BlockParameters.ExtraData = common.CopyBytes(parameters[128:])
 
-	log.Trace("[backend.go/setBlockParameters] set params", "time", s.config.Ethash.BlockParameters.Timestamp, "diff", s.config.Ethash.BlockParameters.Difficulty, "nonce", s.config.Ethash.BlockParameters.Nonce, "gas", s.config.Ethash.BlockParameters.GasLimit, "mix", s.config.Ethash.BlockParameters.MixDigest, "coinbase", s.config.Ethash.BlockParameters.Coinbase, "extra", s.config.Ethash.BlockParameters.ExtraData)
+	log.Trace("[backend.go/setBlockParameters] set params", "time", s.config.Ethash.BlockParameters.Timestamp, "diff", s.config.Ethash.BlockParameters.Difficulty, "nonce", s.config.Ethash.BlockParameters.Nonce, "gas", s.config.Ethash.BlockParameters.GasLimit, "mix", s.config.Ethash.BlockParameters.MixDigest, "coinbase", s.config.Ethash.BlockParameters.Coinbase, "hash", s.config.Ethash.BlockParameters.Hash, "extra", s.config.Ethash.BlockParameters.ExtraData)
 }

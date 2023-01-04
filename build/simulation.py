@@ -187,6 +187,7 @@ def run(_from, _to):
     blockparameter += '{:016x}'.format(blocks['gaslimit'])
     blockparameter += blocks['mixhash'].hex()
     blockparameter += blocks['miner'].hex()
+    blockparameter += blocks['hash'].hex()
     blockparameter += blocks['extradata'].hex()
 
     parameterworker = ParameterWorker(web3, blockparameter)
