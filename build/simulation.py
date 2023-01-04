@@ -38,7 +38,7 @@ EthToWei = 1000000000000000000
 
 MODE_ETHANOS = 0
 MODE_ETHANE = 1
-execution_mode = MODE_ETHANOS
+execution_mode = MODE_ETHANE
 
 RESTORE_ALL = 0
 RESTORE_RECENT = 1
@@ -178,7 +178,12 @@ def run(_from, _to):
         'data': '',
       }
 
-      tx['data'] = '{:08x}'.format(j['transactionindex'] + order) + j['from'].hex()
+      tx['data'] += j['v'].hex()
+      tx['data'] += j['r'].hex()
+      tx['data'] += j['s'].hex()
+      tx['data'] += '{:08x}'.format(j['transactionindex'] + order)
+      tx['data'] += j['from'].hex()
+      tx['data'] += '9669e84351a57aa8a3cfd02001acc246b982713a' #magic header
 
       if execution_mode == MODE_ETHANE:
         tx['data'] += j['input'].hex()
@@ -267,7 +272,6 @@ def run(_from, _to):
     print('Set gaslimit as {} on block #{}'.format(gaslimit, i))
 
     extradata = blocks['extradata']
-    extradata = extradata.rstrip(b'\x00')
     extradatatx = {
       'from': coinbase,
       'to': '0x24e66Ef7d2EFE1b0eB194eB30955b0ed64A9F615',
@@ -304,6 +308,7 @@ def run(_from, _to):
       uncledata = '0x'+miner
       uncledata += '{:016x}'.format(j['difficulty'])
       uncledata += '{:016x}'.format(j['gaslimit'])
+      uncledata += '{:016x}'.format(j['gasused'])
       uncledata += j['mixhash'].hex()
       uncledata += j['nonce'].hex()
       uncledata += j['sha3uncles'].hex()
