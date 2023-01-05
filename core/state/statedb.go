@@ -1711,8 +1711,7 @@ func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int
 
 	fmt.Println("\ninspect active trie to inactivate:", firstKey, "~", lastKey)
 
-	AccountsToInactivate, KeysToInactivate, _ := s.trie.TryGetAllLeafNodes(firstKey[:], lastKey[:]) // joonha
-	// AccountsToInactivate, KeysToInactivate, _ := s.trie.FindLeafNodes(firstKey[:], lastKey[:]) // jmlee
+	AccountsToInactivate, KeysToInactivate, _ := s.trie.FindLeafNodes(firstKey[:], lastKey[:])
 
 	fmt.Println("Accounts length: ", len(AccountsToInactivate))
 	fmt.Println("Keys length: ", len(KeysToInactivate))

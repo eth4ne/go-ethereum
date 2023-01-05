@@ -283,11 +283,6 @@ func (t *odrTrie) TryGet_SetKey(key []byte) ([]byte, error) {
 }
 
 // temp function for correct build, this will not be called in Ethane (joonha)
-func (t *odrTrie) TryGetAllLeafNodes(firstKey, lastKey []byte) ([][]byte, []common.Hash, error) {
-	return nil, nil, nil
-}
-
-// temp function for correct build, this will not be called in Ethane (joonha)
 func (t *odrTrie) FindLeafNodes(firstKey, lastKey []byte) ([][]byte, []common.Hash, error) {
 	return nil, nil, nil
 }

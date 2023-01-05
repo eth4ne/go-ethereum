@@ -110,7 +110,6 @@ type Trie interface {
 	GetLastKey() *big.Int
 	TryUpdate_SetKey(key, value []byte) error
 	TryGet_SetKey(key []byte) ([]byte, error)
-	TryGetAllLeafNodes([]byte, []byte) ([][]byte, []common.Hash, error)
 	FindLeafNodes([]byte, []byte) ([][]byte, []common.Hash, error)
 	TryGetAllSlots() (map[common.Hash][]byte, error)
 	Print_storageTrie()
