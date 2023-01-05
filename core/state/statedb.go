@@ -740,6 +740,13 @@ func (s *StateDB) Suicide(addr common.Address) bool {
 	stateObject.markSuicided()
 	stateObject.data.Balance = new(big.Int)
 
+	// (joonha)
+	// delete from AddrToKey
+	s.AddrToKeyDirty[addr] = common.NoExistKey
+
+	// delete previous leaf nodes immediately
+	s.immediateDeletePreviousSelfDestructedAccounts(addr, common.CheckpointKeys[int64(len(common.CheckpointKeys)-1)], s.CheckpointKey)
+
 	return true
 }
 
@@ -1935,4 +1942,29 @@ func (s *StateDB) DoDirtyCrumbExist(addr common.Address) bool {
 		return true
 	}
 	return false
+}
+
+// (joonha)
+// immediateDeletePreviousSelfDestructedAccounts traverse from the previous to the current checkpoint key
+// and if the found account's address is same with the self destructed account's then delete it immediately
+func (s *StateDB) immediateDeletePreviousSelfDestructedAccounts(selfDestructedAddr common.Address, firstKey, lastKey int64) {
+	// traverse from the firstKey to the lastKey
+	// find all previous leaf nodes corresponding to the self_destructed addr
+
+	fk := common.Int64ToHash(firstKey) // previous checkpoint key
+	lk := common.Int64ToHash(lastKey)  // current checkpoint key
+
+	AccountsToDelete, KeysToDelete, _ := s.trie.FindLeafNodes(fk[:], lk[:])
+
+	for index, key := range KeysToDelete {
+		addr := common.BytesToAddress(AccountsToDelete[index]) // BytesToAddress() turns last 20 bytes into addr
+
+		if addr == selfDestructedAddr { // self destructed account's previous leaf node
+			if err := s.trie.TryUpdate_SetKey(key[:], nil); err != nil {
+				s.setError(fmt.Errorf("updateStateObject (%x) error: %v", key[:], err))
+			}
+		}
+	}
+
+	// TODO(joonha) remove deleted previous leaf nodes' keys from the common.KeysToDelete
 }
