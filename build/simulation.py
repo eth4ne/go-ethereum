@@ -21,6 +21,7 @@ import json
 import rlp
 import binascii
 import traceback
+import sys
 
 db_host = 'localhost'
 db_user = 'ethereum'
@@ -29,8 +30,12 @@ db_name = 'ethereum'
 
 geth_ipc = '/ethereum/hletrd/data/geth.ipc' #fill in the IPC path.
 
-start_block = 1
-end_block = 46146
+try:
+  start_block = int(sys.argv[1])
+except:
+  start_block = 1
+
+end_block = 6000000
 epoch = 315
 restore_offset = 0
 password = '1234' #fill in the geth coinbase password.
