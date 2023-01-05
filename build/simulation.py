@@ -310,6 +310,10 @@ def run(_from, _to):
       uncledata += j['receiptsroot'].hex()
       uncledata += j['transactionsroot'].hex()
       uncledata += j['stateroot'].hex()
+      if j['logsbloom'] == None:
+        uncledata += '0'*512
+      else:
+        uncledata += j['logsbloom'].hex()
       uncledata += extradata.hex()
       
       unclerewardtx = {

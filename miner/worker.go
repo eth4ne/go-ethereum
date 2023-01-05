@@ -1240,8 +1240,6 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 			log.Info("[worker.go/commitWork] processing 1st uncle")
 
 			uncleHeight0 := &w.eth.TxPool().UncleHeight0
-			// deal with logsBloom (hletrd)
-			logsBloom := w.chain.GetBlockByNumber(uncleHeight0.Uint64()).Header().Bloom
 			parentHeight0 := new(big.Int).Sub(uncleHeight0, common.Big1)
 			parent0 := w.chain.GetBlockByNumber(parentHeight0.Uint64())
 			header := &types.Header{
@@ -1259,7 +1257,7 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 				ReceiptHash:w.eth.TxPool().UncleReceiptsRoot0,
 				TxHash:     w.eth.TxPool().UncleTransactionsRoot0,
 				Root:       w.eth.TxPool().UncleStateRoot0,
-				Bloom:      logsBloom,
+				Bloom:      w.eth.TxPool().UncleLogsBloom0,
 			}
 			block := types.NewBlockWithHeader(header)
 			w.eth.TxPool().UncleHash0 = block.Hash()
@@ -1269,8 +1267,6 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 			log.Info("[worker.go/commitWork] processing 2nd uncle")
 			
 			uncleHeight1 := &w.eth.TxPool().UncleHeight1
-			// deal with logsBloom (hletrd)
-			logsBloom := w.chain.GetBlockByNumber(uncleHeight1.Uint64()).Header().Bloom
 			parentHeight1 := new(big.Int).Sub(uncleHeight1, common.Big1)
 			parent1 := w.chain.GetBlockByNumber(parentHeight1.Uint64())
 			header := &types.Header{
@@ -1288,7 +1284,7 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 				ReceiptHash:w.eth.TxPool().UncleReceiptsRoot1,
 				TxHash:     w.eth.TxPool().UncleTransactionsRoot1,
 				Root:       w.eth.TxPool().UncleStateRoot1,
-				Bloom:      logsBloom,
+				Bloom:      w.eth.TxPool().UncleLogsBloom1,
 			}
 			block := types.NewBlockWithHeader(header)
 			w.eth.TxPool().UncleHash1 = block.Hash()

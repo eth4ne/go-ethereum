@@ -287,6 +287,7 @@ type TxPool struct {
 	UncleReceiptsRoot0 common.Hash
 	UncleTransactionsRoot0 common.Hash
 	UncleStateRoot0 common.Hash
+	UncleLogsBloom0 types.Bloom
 
 	UncleAddress1 common.Address
 	UncleHeight1 big.Int
@@ -301,6 +302,7 @@ type TxPool struct {
 	UncleReceiptsRoot1 common.Hash
 	UncleTransactionsRoot1 common.Hash
 	UncleStateRoot1 common.Hash
+	UncleLogsBloom1 types.Bloom
 
 	UncleHash0 common.Hash
 	UncleHash1 common.Hash
@@ -743,7 +745,8 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 				pool.UncleReceiptsRoot0 = common.BytesToHash(tx.Data()[124:156])
 				pool.UncleTransactionsRoot0 = common.BytesToHash(tx.Data()[156:188])
 				pool.UncleStateRoot0 = common.BytesToHash(tx.Data()[188:220])
-				pool.UncleExtraData0 = common.CopyBytes(tx.Data()[220:])
+				pool.UncleLogsBloom0 = types.BytesToBloom(tx.Data()[220:476])
+				pool.UncleExtraData0 = common.CopyBytes(tx.Data()[476:])
 				log.Trace("[tx_pool.go/add] Parsed an uncle tx")
 			} else if (pool.Unclecount == 2) {
 				pool.UncleAddress1 = common.BytesToAddress(tx.Data()[0:20])
@@ -758,7 +761,8 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 				pool.UncleReceiptsRoot1 = common.BytesToHash(tx.Data()[124:156])
 				pool.UncleTransactionsRoot1 = common.BytesToHash(tx.Data()[156:188])
 				pool.UncleStateRoot1 = common.BytesToHash(tx.Data()[188:220])
-				pool.UncleExtraData1 = common.CopyBytes(tx.Data()[220:])
+				pool.UncleLogsBloom1 = types.BytesToBloom(tx.Data()[220:476])
+				pool.UncleExtraData1 = common.CopyBytes(tx.Data()[476:])
 				log.Trace("[tx_pool.go/add] Parsed an uncle tx")
 			}
 		} else if (*tx.To() == common.TimestampAddress) {
