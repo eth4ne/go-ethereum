@@ -250,7 +250,7 @@ func VerifyProof_GetAccountsAndKeys(rootHash common.Hash, proofDb common.ProofLi
 					missingChildren = append(missingChildren, *newChild)
 				}
 			default:
-				fmt.Println("ERR: isCurrentFulllNode is true but this is not a fullnode")
+				log.Error("ERR: isCurrentFulllNode is true but this is not a fullnode")
 			}
 
 		} else {

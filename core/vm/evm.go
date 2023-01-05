@@ -253,6 +253,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		if limit == 0 {
 			// Error: no proof in tx data
 			log.Error("❌  Restore Error: no proof in tx data")
+			os.Exit(1)
 			return nil, gas, ErrInvalidProof
 		}
 
@@ -295,15 +296,9 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 
 			// get a merkle proof from tx data
 			merkleProof, blockHeader := parseProof(data, int64(checkpointBlock), &cnt, limit)
-			// merkleProof_1 := merkleProof // for getKey
 
-			// // Copy values of MPs
-			// merkleProof_no_redundancy := make([][]byte, len(merkleProof))
-			// copy(merkleProof_no_redundancy, merkleProof)
-
-			// log.Info("### merkleProof", "merk leProof", merkleProof)
-
-			blockRoot_inactive = blockHeader.Root_inactive // inactive state trie root
+			// inactive state trie root
+			blockRoot_inactive = blockHeader.Root_inactive
 
 			// retrieve target accounts and keys from the merkle proof
 			// verify the proofs simultaneously
@@ -312,6 +307,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 			if merkleErr != nil {
 				// bad merkle proof
 				log.Error("❌  Restore Error: bad merkle proof")
+				os.Exit(1)
 				return nil, gas, ErrInvalidProof
 			} else {
 				log.Info("✔️  Verify Merkle Proof for Restoration ... Success")
@@ -328,7 +324,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 
 			// decode leaf nodes to accounts
 			// accounts are ready to be restored
-			// TODO (joonha): change code to get non-nil codeHash not the first's.
+			// TODO (joonha): change code to get non-nil codeHash not the first's --> this is okay if the simulation only implements RESTORE_ALL option
 			firstValidIndex := -1
 			for i := 0; i < len(targetAccounts); i++ {
 				acc := targetAccounts[i]
@@ -357,8 +353,8 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		log.Info("### number of accounts", "len(accounts)", len(accounts))
 		if len(accounts) == 0 {
 			// This case might exist when all the accounts are already restored.
-			// It is natural so do not emit error and just jump to outOfRestoration.
-			log.Info("❌  Restore Error: no accounts to restore")
+			// It is natural so do not exit and just jump to outOfRestoration.
+			log.Info("❌  Restore Error: no accounts to restore (but it is okay to go on)")
 
 			// // (debugging) export log to file
 			// f1, err := os.Create("joonha_log.txt")
@@ -369,9 +365,6 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 			goto outOfRestoration
 		}
 
-		// decide whether to create or merge for accounts[0]
-		// keysToDelete := make([]common.Hash, 0)
-
 		// check state's dirty first and then common list
 		doExist := evm.StateDB.DoDirtyCrumbExist(inactiveAddr)
 		if !doExist {
@@ -380,9 +373,6 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 
 		if !doExist { // create (no crumb account in the active trie)
 			log.Info("### CREATE")
-
-			// fmt.Println("inactiveAddr: ", inactiveAddr)
-			// fmt.Println("accounts[0]: ", accounts[0])
 			evm.StateDB.CreateAccount_withBlockNum(inactiveAddr, evm.Context.BlockNumber)
 
 		} else { // merge (crumb account exists in the active trie)
@@ -393,9 +383,6 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 			if accounts[0] != nil {
 				resAcc.Balance.Add(activeBalance, big.NewInt(0))
 			}
-
-			// // when restoring by merging, preexisting (active) crumb should be deleted
-			// keysToDelete = append(common.KeysToDelete, common.AddrToKey[inactiveAddr]) // --> might be done in updateStateObject() even though we don't here
 		}
 
 		// merge balances of the restoring accounts
@@ -414,7 +401,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 			evm.StateDB.RebuildStorageTrieFromSnapshot(blockRoot_inactive, inactiveAddr, targetKeys[0])
 
 			// TODO (joonha) move this verifying into RebuildStorageTrieFromSnapshot (before updateTrie)
-			// compare rebuilt storage trie's root to the retrieved account's root // cannot debug now so comment-out. Activate later after debugging.
+			// compare rebuilt storage trie's root to the retrieved account's root
 			origRoot := accounts[0].Root
 			newRoot := evm.StateDB.GetRoot(inactiveAddr)
 			if origRoot == newRoot {
@@ -422,6 +409,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 			} else {
 				// storage trie is different from the original
 				log.Error("❌  Restore Error: Rebuilt storage trie is different from the original")
+				os.Exit(1)
 			}
 
 		} else {
@@ -429,7 +417,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		}
 
 		// Remove inactive account from AddrToKey_inactive map
-		evm.StateDB.RemoveRestoredKeyFromAddrToKey_inactive(inactiveAddr, targetKeys) // TODO(joonha) dirty로 처리하는 게 맞을 듯 -> 왜 그런가? dirty로 해야 하면 바꾸자!
+		evm.StateDB.RemoveRestoredKeyFromAddrToKey_inactive(inactiveAddr, targetKeys) // note: this is done directly to the common list (not a dirty)
 
 		// Remove inactive account from inactive Trie
 		for i := 0; i < len(targetKeys); i++ {
