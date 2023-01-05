@@ -520,7 +520,7 @@ def makeRestoreTx(web3, currentBlock, address, gasprice, fromaddr, order):
   rlped = rlp.encode(preRlp)
   rlpeds.append(len(binascii.hexlify(rlped)))
 
-  data = fromaddr + '{:08x}'.format(order) + rlped.hex()
+  data = '{:08x}'.format(order) + fromaddr + rlped.hex()
 
   tx = {
     'from': web3.eth.coinbase,
