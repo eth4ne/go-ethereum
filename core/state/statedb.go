@@ -745,7 +745,7 @@ func (s *StateDB) Suicide(addr common.Address) bool {
 	s.AddrToKeyDirty[addr] = common.NoExistKey
 
 	// delete previous leaf nodes immediately
-	s.immediateDeletePreviousSelfDestructedAccounts(addr, common.CheckpointKeys[int64(len(common.CheckpointKeys)-1)], s.CheckpointKey)
+	s.immediateDeletePreviousSelfDestructedAccounts(addr, common.CheckpointKeys[int64(len(common.CheckpointKeys)-2)], s.CheckpointKey)
 
 	return true
 }
