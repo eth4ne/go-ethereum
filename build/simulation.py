@@ -35,7 +35,7 @@ try:
 except:
   start_block = 1
 
-end_block = 6000000
+end_block = 10000000
 epoch = 315
 restore_offset = 0
 password = '1234' #fill in the geth coinbase password.
@@ -162,7 +162,7 @@ def run(_from, _to):
   coinbase = web3.eth.coinbase
   web3.geth.personal.unlock_account(coinbase, password, 0)
 
-  print('Account {} unlocked'.format(coinbase))
+  #print('Account {} unlocked'.format(coinbase))
   print('Run from {} to {}'.format(_from, _to))
 
   offset = 0 # - 1
@@ -414,29 +414,18 @@ def run(_from, _to):
     web3.geth.miner.start(1)
     adaptive_sleep_init(0.0001)
 
-    rewind = False
 
     while True:
       adaptive_sleep()
       if web3.eth.get_block_number() + offset == i:
         break
       if web3.eth.get_block_number() + offset > i:
-        print('block overrun')
-        print('block: {}, offset: {}, i: {}'.format(web3.eth.get_block_number(), offset, i))
+        print('Block overrun')
+        print('Block expected: #{}, got: {}'.format(i, web3.eth.get_block_number()))
         web3.geth.miner.stop()
         sys.stderr.write(str(i))
         exit(1)
-        time.sleep(0.2)
-        web3.debug.setHead(hex(i-1))
-        print('Rewinding head to {}'.format(i-1))
-        time.sleep(0.2)
-        i = i - 1
-        rewind = True
-        break
     web3.geth.miner.stop()
-
-    if rewind == True:
-      continue
 
     realblock = web3.eth.get_block_number()
     #print('Mined block #{}'.format(realblock))
@@ -447,26 +436,14 @@ def run(_from, _to):
       print('Block #{}: state root mismatch'.format(i))
       print('Expected: {}'.format(stateroot.hex()))
       print('Got: {}'.format(block_made['stateRoot'].hex()))
-      print('Rewinding head to {}'.format(i-1))
-      sys.stderr.write(str(i-1))
+      sys.stderr.write(str(i))
       exit(1)
-      time.sleep(0.2)
-      web3.debug.setHead(hex(i-1))
-      time.sleep(0.2)
-      #i = i
-      continue
     if blocks['hash'] != block_made['hash']:
       print('Block #{}: hash mismatch'.format(i))
       print('Expected: {}'.format(blocks['hash'].hex()))
       print('Got: {}'.format(block_made['hash'].hex()))
-      print('Rewinding head to {}'.format(i-1))
-      sys.stderr.write(str(i-1))
+      sys.stderr.write(str(i))
       exit(1)
-      time.sleep(0.2)
-      web3.debug.setHead(hex(i-1))
-      time.sleep(0.2)
-      #i = i
-      continue
       
     i = i + 1
     #print('='*60)
