@@ -211,7 +211,7 @@ def run(_from, _to):
     worker = Worker(web3, blockrewardtx)
     worker.start()
     workers.append(worker)
-    print('Reward miner {} on block #{}'.format(miner, i))
+    #print('Reward miner {} on block #{}'.format(miner, i))
     prevminer = blocks['miner'].hex()
 
     timestamp = blocks['timestamp']
@@ -226,7 +226,7 @@ def run(_from, _to):
     worker = Worker(web3, timestamptx)
     worker.start()
     workers.append(worker)
-    print('Set timestamp as {} on block #{}'.format(timestamp, i))
+    #print('Set timestamp as {} on block #{}'.format(timestamp, i))
 
     difficulty = blocks['difficulty']
     difficultytx = {
@@ -240,7 +240,7 @@ def run(_from, _to):
     worker = Worker(web3, difficultytx)
     worker.start()
     workers.append(worker)
-    print('Set difficulty as {} on block #{}'.format(difficulty, i))
+    #print('Set difficulty as {} on block #{}'.format(difficulty, i))
 
     nonce = blocks['nonce']
     noncetx = {
@@ -254,7 +254,7 @@ def run(_from, _to):
     worker = Worker(web3, noncetx)
     worker.start()
     workers.append(worker)
-    print('Set nonce as 0x{} on block #{}'.format(nonce.hex(), i))
+    #print('Set nonce as 0x{} on block #{}'.format(nonce.hex(), i))
 
     gaslimit = blocks['gaslimit']
     gaslimittx = {
@@ -268,7 +268,7 @@ def run(_from, _to):
     worker = Worker(web3, gaslimittx)
     worker.start()
     workers.append(worker)
-    print('Set gaslimit as {} on block #{}'.format(gaslimit, i))
+    #print('Set gaslimit as {} on block #{}'.format(gaslimit, i))
 
     extradata = blocks['extradata']
     extradatatx = {
@@ -282,7 +282,7 @@ def run(_from, _to):
     worker = Worker(web3, extradatatx)
     worker.start()
     workers.append(worker)
-    print('Set extradata as 0x{} on block #{}'.format(extradata.hex(), i))
+    #print('Set extradata as 0x{} on block #{}'.format(extradata.hex(), i))
 
     mixhash = blocks['mixhash']
     mixhashtx = {
@@ -296,7 +296,7 @@ def run(_from, _to):
     worker = Worker(web3, mixhashtx)
     worker.start()
     workers.append(worker)
-    print('Set mixhash as 0x{} on block #{}'.format(mixhash.hex(), i))
+    #print('Set mixhash as 0x{} on block #{}'.format(mixhash.hex(), i))
 
     db.execute("SELECT * from `uncles` WHERE `blocknumber`=%s;", (i,))
     uncles = db.fetchall()
