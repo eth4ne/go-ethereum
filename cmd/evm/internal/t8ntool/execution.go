@@ -47,15 +47,16 @@ type Prestate struct {
 // ExecutionResult contains the execution status after running a state test, any
 // error that might have occurred and a dump of the final state if requested.
 type ExecutionResult struct {
-	StateRoot   common.Hash           `json:"stateRoot"`
-	TxRoot      common.Hash           `json:"txRoot"`
-	ReceiptRoot common.Hash           `json:"receiptsRoot"`
-	LogsHash    common.Hash           `json:"logsHash"`
-	Bloom       types.Bloom           `json:"logsBloom"        gencodec:"required"`
-	Receipts    types.Receipts        `json:"receipts"`
-	Rejected    []*rejectedTx         `json:"rejected,omitempty"`
-	Difficulty  *math.HexOrDecimal256 `json:"currentDifficulty" gencodec:"required"`
-	GasUsed     math.HexOrDecimal64   `json:"gasUsed"`
+	StateRoot          common.Hash           `json:"stateRoot"`
+	StateRoot_inactive common.Hash           `json:"stateRoot"` // (joonha)
+	TxRoot             common.Hash           `json:"txRoot"`
+	ReceiptRoot        common.Hash           `json:"receiptsRoot"`
+	LogsHash           common.Hash           `json:"logsHash"`
+	Bloom              types.Bloom           `json:"logsBloom"        gencodec:"required"`
+	Receipts           types.Receipts        `json:"receipts"`
+	Rejected           []*rejectedTx         `json:"rejected,omitempty"`
+	Difficulty         *math.HexOrDecimal256 `json:"currentDifficulty" gencodec:"required"`
+	GasUsed            math.HexOrDecimal64   `json:"gasUsed"`
 }
 
 type ommer struct {
@@ -252,21 +253,22 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 		statedb.AddBalance(pre.Env.Coinbase, minerReward)
 	}
 	// Commit block
-	root, err := statedb.Commit(chainConfig.IsEIP158(vmContext.BlockNumber))
+	root, root_inactive, err := statedb.Commit(chainConfig.IsEIP158(vmContext.BlockNumber))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not commit state: %v", err)
 		return nil, nil, NewError(ErrorEVM, fmt.Errorf("could not commit state: %v", err))
 	}
 	execRs := &ExecutionResult{
-		StateRoot:   root,
-		TxRoot:      types.DeriveSha(includedTxs, trie.NewStackTrie(nil)),
-		ReceiptRoot: types.DeriveSha(receipts, trie.NewStackTrie(nil)),
-		Bloom:       types.CreateBloom(receipts),
-		LogsHash:    rlpHash(statedb.Logs()),
-		Receipts:    receipts,
-		Rejected:    rejectedTxs,
-		Difficulty:  (*math.HexOrDecimal256)(vmContext.Difficulty),
-		GasUsed:     (math.HexOrDecimal64)(gasUsed),
+		StateRoot:          root,
+		StateRoot_inactive: root_inactive, // (joonha)
+		TxRoot:             types.DeriveSha(includedTxs, trie.NewStackTrie(nil)),
+		ReceiptRoot:        types.DeriveSha(receipts, trie.NewStackTrie(nil)),
+		Bloom:              types.CreateBloom(receipts),
+		LogsHash:           rlpHash(statedb.Logs()),
+		Receipts:           receipts,
+		Rejected:           rejectedTxs,
+		Difficulty:         (*math.HexOrDecimal256)(vmContext.Difficulty),
+		GasUsed:            (math.HexOrDecimal64)(gasUsed),
 	}
 	return statedb, execRs, nil
 }
@@ -283,7 +285,7 @@ func MakePreState(db ethdb.Database, accounts core.GenesisAlloc) *state.StateDB 
 		}
 	}
 	// Commit and re-open to start with a clean state.
-	root, _ := statedb.Commit(false)
+	root, _, _ := statedb.Commit(false)
 	statedb, _ = state.New(root, sdb, nil)
 	return statedb
 }

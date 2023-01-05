@@ -616,6 +616,7 @@ func (dl *diskLayer) generate(stats *generatorStats) {
 			Balance  *big.Int
 			Root     common.Hash
 			CodeHash []byte
+			Addr     common.Address // in compactTrie, addr should be a node instance (joonha)
 		}
 		if err := rlp.DecodeBytes(val, &acc); err != nil {
 			log.Crit("Invalid account encountered during snapshot creation", "err", err)
@@ -632,7 +633,7 @@ func (dl *diskLayer) generate(stats *generatorStats) {
 				}
 				snapRecoveredAccountMeter.Mark(1)
 			} else {
-				data := SlimAccountRLP(acc.Nonce, acc.Balance, acc.Root, acc.CodeHash)
+				data := SlimAccountRLP(acc.Nonce, acc.Balance, acc.Root, acc.CodeHash, acc.Addr)
 				dataLen = len(data)
 				rawdb.WriteAccountSnapshot(batch, accountHash, data)
 				snapGeneratedAccountMeter.Mark(1)

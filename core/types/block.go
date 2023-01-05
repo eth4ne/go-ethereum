@@ -67,21 +67,22 @@ func (n *BlockNonce) UnmarshalText(input []byte) error {
 
 // Header represents a block header in the Ethereum blockchain.
 type Header struct {
-	ParentHash  common.Hash    `json:"parentHash"       gencodec:"required"`
-	UncleHash   common.Hash    `json:"sha3Uncles"       gencodec:"required"`
-	Coinbase    common.Address `json:"miner"            gencodec:"required"`
-	Root        common.Hash    `json:"stateRoot"        gencodec:"required"`
-	TxHash      common.Hash    `json:"transactionsRoot" gencodec:"required"`
-	ReceiptHash common.Hash    `json:"receiptsRoot"     gencodec:"required"`
-	Bloom       Bloom          `json:"logsBloom"        gencodec:"required"`
-	Difficulty  *big.Int       `json:"difficulty"       gencodec:"required"`
-	Number      *big.Int       `json:"number"           gencodec:"required"`
-	GasLimit    uint64         `json:"gasLimit"         gencodec:"required"`
-	GasUsed     uint64         `json:"gasUsed"          gencodec:"required"`
-	Time        uint64         `json:"timestamp"        gencodec:"required"`
-	Extra       []byte         `json:"extraData"        gencodec:"required"`
-	MixDigest   common.Hash    `json:"mixHash"`
-	Nonce       BlockNonce     `json:"nonce"`
+	ParentHash    common.Hash    `json:"parentHash"       gencodec:"required"`
+	UncleHash     common.Hash    `json:"sha3Uncles"       gencodec:"required"`
+	Coinbase      common.Address `json:"miner"            gencodec:"required"`
+	Root          common.Hash    `json:"stateRoot"        gencodec:"required"`         // active trie root (joonha)
+	Root_inactive common.Hash    `json:"inactiveStateRoot"        gencodec:"required"` // inactive trie root (joonha)
+	TxHash        common.Hash    `json:"transactionsRoot" gencodec:"required"`
+	ReceiptHash   common.Hash    `json:"receiptsRoot"     gencodec:"required"`
+	Bloom         Bloom          `json:"logsBloom"        gencodec:"required"`
+	Difficulty    *big.Int       `json:"difficulty"       gencodec:"required"`
+	Number        *big.Int       `json:"number"           gencodec:"required"`
+	GasLimit      uint64         `json:"gasLimit"         gencodec:"required"`
+	GasUsed       uint64         `json:"gasUsed"          gencodec:"required"`
+	Time          uint64         `json:"timestamp"        gencodec:"required"`
+	Extra         []byte         `json:"extraData"        gencodec:"required"`
+	MixDigest     common.Hash    `json:"mixHash"`
+	Nonce         BlockNonce     `json:"nonce"`
 
 	// BaseFee was added by EIP-1559 and is ignored in legacy headers.
 	BaseFee *big.Int `json:"baseFeePerGas" rlp:"optional"`
@@ -295,17 +296,24 @@ func (b *Block) GasUsed() uint64      { return b.header.GasUsed }
 func (b *Block) Difficulty() *big.Int { return new(big.Int).Set(b.header.Difficulty) }
 func (b *Block) Time() uint64         { return b.header.Time }
 
-func (b *Block) NumberU64() uint64        { return b.header.Number.Uint64() }
-func (b *Block) MixDigest() common.Hash   { return b.header.MixDigest }
-func (b *Block) Nonce() uint64            { return binary.BigEndian.Uint64(b.header.Nonce[:]) }
-func (b *Block) Bloom() Bloom             { return b.header.Bloom }
-func (b *Block) Coinbase() common.Address { return b.header.Coinbase }
-func (b *Block) Root() common.Hash        { return b.header.Root }
-func (b *Block) ParentHash() common.Hash  { return b.header.ParentHash }
-func (b *Block) TxHash() common.Hash      { return b.header.TxHash }
-func (b *Block) ReceiptHash() common.Hash { return b.header.ReceiptHash }
-func (b *Block) UncleHash() common.Hash   { return b.header.UncleHash }
-func (b *Block) Extra() []byte            { return common.CopyBytes(b.header.Extra) }
+func (b *Block) NumberU64() uint64          { return b.header.Number.Uint64() }
+func (b *Block) MixDigest() common.Hash     { return b.header.MixDigest }
+func (b *Block) Nonce() uint64              { return binary.BigEndian.Uint64(b.header.Nonce[:]) }
+func (b *Block) Bloom() Bloom               { return b.header.Bloom }
+func (b *Block) Coinbase() common.Address   { return b.header.Coinbase }
+func (b *Block) Root() common.Hash          { return b.header.Root }          // trie root
+func (b *Block) Root_inactive() common.Hash { return b.header.Root_inactive } // inactive trie root (joonha)
+func (b *Block) ParentHash() common.Hash    { return b.header.ParentHash }
+func (b *Block) TxHash() common.Hash        { return b.header.TxHash }
+func (b *Block) ReceiptHash() common.Hash   { return b.header.ReceiptHash }
+func (b *Block) UncleHash() common.Hash     { return b.header.UncleHash }
+func (b *Block) Extra() []byte              { return common.CopyBytes(b.header.Extra) }
+
+// SetRoot sets block root to parameter root (joonha)
+func (b *Block) SetRoot(root common.Hash, root_inactive common.Hash) {
+	b.header.Root = root
+	b.header.Root_inactive = root_inactive
+}
 
 func (b *Block) BaseFee() *big.Int {
 	if b.header.BaseFee == nil {
@@ -380,9 +388,9 @@ func (b *Block) WithBody(transactions []*Transaction, uncles []*Header) *Block {
 // Hash returns the keccak256 hash of b's header.
 // The hash is computed on the first call and cached thereafter.
 func (b *Block) Hash() common.Hash {
-	if hash := b.hash.Load(); hash != nil {
-		return hash.(common.Hash)
-	}
+	// if hash := b.hash.Load(); hash != nil { // ---> commented-out to re-calculate the hash value when the trie root is updated once again in state.Commit() (joonha)
+	// 	return hash.(common.Hash)
+	// }
 	v := b.header.Hash()
 	b.hash.Store(v)
 	return v

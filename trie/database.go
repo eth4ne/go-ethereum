@@ -98,6 +98,12 @@ type rawNode []byte
 
 func (n rawNode) cache() (hashNode, bool)   { panic("this should never end up in a live trie") }
 func (n rawNode) fstring(ind string) string { panic("this should never end up in a live trie") }
+func (n rawNode) toString(ind string, db *Database, depth int) string {
+	panic("this should never end up in a live trie")
+} // (jmlee)
+func (n rawNode) toString_storageTrie(ind string, db *Database) string {
+	panic("this should never end up in a live trie")
+} // (joonha)
 
 func (n rawNode) EncodeRLP(w io.Writer) error {
 	_, err := w.Write(n)
@@ -111,6 +117,12 @@ type rawFullNode [17]node
 
 func (n rawFullNode) cache() (hashNode, bool)   { panic("this should never end up in a live trie") }
 func (n rawFullNode) fstring(ind string) string { panic("this should never end up in a live trie") }
+func (n rawFullNode) toString(ind string, db *Database, depth int) string {
+	panic("this should never end up in a live trie")
+} // (jmlee)
+func (n rawFullNode) toString_storageTrie(ind string, db *Database) string {
+	panic("this should never end up in a live trie")
+} // (joonha)
 
 func (n rawFullNode) EncodeRLP(w io.Writer) error {
 	var nodes [17]node
@@ -135,6 +147,12 @@ type rawShortNode struct {
 
 func (n rawShortNode) cache() (hashNode, bool)   { panic("this should never end up in a live trie") }
 func (n rawShortNode) fstring(ind string) string { panic("this should never end up in a live trie") }
+func (n rawShortNode) toString(ind string, db *Database, depth int) string {
+	panic("this should never end up in a live trie")
+} // (jmlee)
+func (n rawShortNode) toString_storageTrie(ind string, db *Database) string {
+	panic("this should never end up in a live trie")
+} // (joonha)
 
 // cachedNode is all the information we know about a single cached trie node
 // in the memory database write layer.
@@ -754,6 +772,12 @@ func (db *Database) Commit(node common.Hash, report bool, callback func(common.H
 
 // commit is the private locked version of Commit.
 func (db *Database) commit(hash common.Hash, batch ethdb.Batch, uncacher *cleaner, callback func(common.Hash)) error {
+	// for Ethane's light inactive trie delete (jmlee)
+	// ignore zero hash node
+	if IsZeroHashNode(hash.Bytes()) {
+		return nil
+	}
+
 	// If the node does not exist, it's a previously committed node
 	node, ok := db.dirties[hash]
 	if !ok {

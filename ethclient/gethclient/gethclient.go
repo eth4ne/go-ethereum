@@ -60,13 +60,13 @@ func (ec *Client) CreateAccessList(ctx context.Context, msg ethereum.CallMsg) (*
 
 // AccountResult is the result of a GetProof operation.
 type AccountResult struct {
-	Address      common.Address  `json:"address"`
-	AccountProof []string        `json:"accountProof"`
-	Balance      *big.Int        `json:"balance"`
-	CodeHash     common.Hash     `json:"codeHash"`
-	Nonce        uint64          `json:"nonce"`
-	StorageHash  common.Hash     `json:"storageHash"`
-	StorageProof []StorageResult `json:"storageProof"`
+	Address      common.Address `json:"address"`
+	AccountProof []string       `json:"accountProof"`
+	Balance      *big.Int       `json:"balance"`
+	CodeHash     common.Hash    `json:"codeHash"`
+	Nonce        uint64         `json:"nonce"`
+	StorageHash  common.Hash    `json:"storageHash"`
+	// StorageProof []StorageResult `json:"storageProof"`
 }
 
 // StorageResult provides a proof for a key-value pair.
@@ -98,15 +98,15 @@ func (ec *Client) GetProof(ctx context.Context, account common.Address, keys []s
 
 	var res accountResult
 	err := ec.c.CallContext(ctx, &res, "eth_getProof", account, keys, toBlockNumArg(blockNumber))
-	// Turn hexutils back to normal datatypes
-	storageResults := make([]StorageResult, 0, len(res.StorageProof))
-	for _, st := range res.StorageProof {
-		storageResults = append(storageResults, StorageResult{
-			Key:   st.Key,
-			Value: st.Value.ToInt(),
-			Proof: st.Proof,
-		})
-	}
+	// // Turn hexutils back to normal datatypes
+	// storageResults := make([]StorageResult, 0, len(res.StorageProof))
+	// for _, st := range res.StorageProof {
+	// 	storageResults = append(storageResults, StorageResult{
+	// 		Key:   st.Key,
+	// 		Value: st.Value.ToInt(),
+	// 		Proof: st.Proof,
+	// 	})
+	// }
 	result := AccountResult{
 		Address:      res.Address,
 		AccountProof: res.AccountProof,

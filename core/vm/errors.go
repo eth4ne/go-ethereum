@@ -37,6 +37,9 @@ var (
 	ErrInvalidCode              = errors.New("invalid code: must not begin with 0xef")
 	ErrNonceUintOverflow        = errors.New("nonce uint64 overflow")
 
+	// ethane
+	ErrInvalidProof = errors.New("invalid proof for restoring inactive account")
+
 	// errStopToken is an internal token indicating interpreter loop termination,
 	// never returned to outside callers.
 	errStopToken = errors.New("stop token")

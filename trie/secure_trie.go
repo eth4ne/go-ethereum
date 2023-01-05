@@ -18,6 +18,7 @@ package trie
 
 import (
 	"fmt"
+	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -135,6 +136,17 @@ func (t *SecureTrie) TryUpdate(key, value []byte) error {
 	return nil
 }
 
+// set key as I want to implement Ethane (jmlee)
+func (t *SecureTrie) TryUpdate_SetKey(key, value []byte) error {
+	hk := key
+	err := t.trie.TryUpdate(hk, value)
+	if err != nil {
+		return err
+	}
+	// t.getSecKeyCache()[string(hk)] = common.CopyBytes(key)
+	return nil
+}
+
 // Delete removes any existing value for key from the trie.
 func (t *SecureTrie) Delete(key []byte) {
 	if err := t.TryDelete(key); err != nil {
@@ -219,4 +231,35 @@ func (t *SecureTrie) getSecKeyCache() map[string][]byte {
 		t.secKeyCache = make(map[string][]byte)
 	}
 	return t.secKeyCache
+}
+
+// print trie nodes details in human readable form (jmlee)
+func (t *SecureTrie) Print() {
+	t.trie.Print()
+}
+
+// Print_storageTrie print storage trie node details in human readable form (joonha)
+func (t *SecureTrie) Print_storageTrie() {
+	t.trie.Print_storageTrie()
+}
+
+// get last key among leaf nodes (i.e., right-most key value) (jmlee)
+func (t *SecureTrie) GetLastKey() *big.Int {
+	return t.trie.GetLastKey()
+}
+
+// set key as I want to implement Ethane (jmlee)
+func (t *SecureTrie) TryGet_SetKey(key []byte) ([]byte, error) {
+	// fmt.Println("at SecureTrie.TryGet_SetKey() -> key:", common.BytesToHash(key).Hex())
+	return t.trie.TryGet(key)
+}
+
+// DFS the range (from inactiveBoundaryKey to lastKeyToCheck) and return the found accounts (joonha)
+func (t *SecureTrie) FindLeafNodes(firstKey, lastKey []byte) ([][]byte, []common.Hash, error) {
+	return t.trie.FindLeafNodes(firstKey, lastKey)
+}
+
+// TryGetAllSlots return all the found slots while traversing storage trie (joonha)
+func (t *SecureTrie) TryGetAllSlots() (map[common.Hash][]byte, error) {
+	return t.trie.TryGetAllSlots()
 }
