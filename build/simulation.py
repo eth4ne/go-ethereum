@@ -143,8 +143,10 @@ def adaptive_sleep():
   global delay
   if delay < 1:
     delay *= 1.1
+  elif delay < 5:
+    delay += 1
   else:
-    delay *= 2
+    delay += 4 
   time.sleep(delay)
 
 def run(_from, _to):
