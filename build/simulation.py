@@ -61,7 +61,7 @@ restore_mode = RESTORE_OLDEST
 
 restorefile = 'restore_1_1000000_315.json'
 
-time.sleep(1)
+#time.sleep(1)
 
 conn_geth = lambda path: Web3(Web3.IPCProvider(path))
 conn_mariadb = lambda host, user, password, database: pymysql.connect(host=host, user=user, password=password, database=database, cursorclass=pymysql.cursors.DictCursor)
@@ -166,7 +166,9 @@ def run(_from, _to):
   print('Rewinding head to {}'.format(_from-1))
 
   coinbase = web3.eth.coinbase
-  web3.geth.personal.unlock_account(coinbase, password, 0)
+
+  if web3.geth.personal.list_wallets()[0].status != 'Unlocked':
+    web3.geth.personal.unlock_account(coinbase, password, 0)
 
   #print('Account {} unlocked'.format(coinbase))
   print('Run from {} to {}'.format(_from, _to))
