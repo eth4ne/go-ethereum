@@ -303,7 +303,6 @@ def run(_from, _to):
     for j in uncles:
       miner = j['miner'].hex()
       extradata = j['extradata']
-      extradata = extradata.rstrip(b'\x00')
       uncledata = '0x'+miner
       uncledata += '{:016x}'.format(j['difficulty'])
       uncledata += '{:016x}'.format(j['gaslimit'])
