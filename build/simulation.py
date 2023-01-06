@@ -40,6 +40,9 @@ epoch = 315
 restore_offset = 0
 password = '1234' #fill in the geth coinbase password.
 
+tx_timeout = 10
+block_timeout = 30
+
 EthToWei = 1000000000000000000
 
 MODE_ETHANOS = 0
@@ -403,20 +406,25 @@ def run(_from, _to):
       web3.custom.setAllowZeroTxBlock(False)
 
     adaptive_sleep_init(0.0001)
+    tx_time = time.time()
     while int(web3.geth.txpool.status()['pending'], 16) < txcount:
       adaptive_sleep()
+      if time.time() - tx_time > tx_timeout:
+        print('Block #{}: tx timeout'.format(i))
+        sys.stderr.write(str(i-1))
+        exit(1)
 
     #print('Block #{}: processed all txs'.format(i))
     totalblock += 1
 
-    if totalblock % 100 == 0:
+    if totalblock % 10 == 0:
       seconds = time.time() - start
       print('#{}, Blkn: {}({:.2f}/s), Txn: {}({:.2f}/s), Time: {}ms'.format(i, totalblock, totalblock/seconds, totaltx, totaltx/seconds, int(seconds*1000)))
 
     web3.geth.miner.start(1)
     adaptive_sleep_init(0.0001)
 
-
+    block_time = time.time()
     while True:
       adaptive_sleep()
       if web3.eth.get_block_number() + offset == i:
@@ -426,6 +434,10 @@ def run(_from, _to):
         print('Block expected: #{}, got: {}'.format(i, web3.eth.get_block_number()))
         web3.geth.miner.stop()
         sys.stderr.write(str(i))
+        exit(1)
+      if time.time() - block_time > block_timeout:
+        print('Block #{}: mining timeout'.format(i))
+        sys.stderr.write(str(i-1))
         exit(1)
     web3.geth.miner.stop()
 
