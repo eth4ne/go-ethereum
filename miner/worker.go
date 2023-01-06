@@ -1099,6 +1099,15 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 		header.MixDigest = w.eth.TxPool().MixHash
 		log.Trace("[worker.go/prepareWork] processed MixHash")
 	}
+	// apply DAO fork (hletrd)
+	if daoBlock := w.chain.Config().DAOForkBlock; daoBlock != nil {
+		limit := new(big.Int).Add(daoBlock, params.DAOForkExtraRange)
+		if header.Number.Cmp(daoBlock) >= 0 && header.Number.Cmp(limit) < 0 {
+			if w.chain.Config().DAOForkSupport {
+				header.Extra = common.CopyBytes(params.DAOForkBlockExtra)
+			}
+		}
+	}
 	// Set the randomness field from the beacon chain if it's available.
 	//if genParams.random != (common.Hash{}) {
 	//	header.MixDigest = genParams.random
@@ -1129,6 +1138,10 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	if err != nil {
 		log.Error("Failed to create sealing context", "err", err)
 		return nil, err
+	}
+	// apply DAO fork (hletrd)
+	if w.chain.Config().DAOForkSupport && w.chain.Config().DAOForkBlock != nil && w.chain.Config().DAOForkBlock.Cmp(header.Number) == 0 {
+		misc.ApplyDAOHardFork(env.state)
 	}
 	// Accumulate the uncles for the sealing work only if it's allowed.
 	if !genParams.noUncle {

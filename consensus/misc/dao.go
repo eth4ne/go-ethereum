@@ -23,6 +23,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -77,6 +78,9 @@ func ApplyDAOHardFork(statedb *state.StateDB) {
 		statedb.CreateAccount(params.DAORefundContract)
 	}
 
+	// log DAO hard fork (hletrd)
+	log.Info("[dao.go/ApplyDAOHardFork] apply hard fork")
+	
 	// Move every DAO account and extra-balance account funds into the refund contract
 	for _, addr := range params.DAODrainList() {
 		statedb.AddBalance(params.DAORefundContract, statedb.GetBalance(addr))
