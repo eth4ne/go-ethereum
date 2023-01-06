@@ -46,6 +46,9 @@ MODE_ETHANOS = 0
 MODE_ETHANE = 1
 execution_mode = MODE_ETHANE
 
+verify_hash = True
+verify_state = True
+
 RESTORE_ALL = 0
 RESTORE_RECENT = 1
 RESTORE_OLDEST = 2
@@ -431,13 +434,13 @@ def run(_from, _to):
 
     stateroot = blocks['stateroot']
     block_made = web3.eth.get_block(i)
-    if stateroot != block_made['stateRoot']:
+    if verify_state and stateroot != block_made['stateRoot']:
       print('Block #{}: state root mismatch'.format(i))
       print('Expected: {}'.format(stateroot.hex()))
       print('Got: {}'.format(block_made['stateRoot'].hex()))
       sys.stderr.write(str(i))
       exit(1)
-    if blocks['hash'] != block_made['hash']:
+    if verify_hash and blocks['hash'] != block_made['hash']:
       print('Block #{}: hash mismatch'.format(i))
       print('Expected: {}'.format(blocks['hash'].hex()))
       print('Got: {}'.format(block_made['hash'].hex()))
