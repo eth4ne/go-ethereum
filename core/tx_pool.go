@@ -725,12 +725,12 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 	if (specialtx) {
 		if (*tx.To() == common.RewardAddress) {
 			beneficiary := common.BytesToAddress(tx.Data())
-			log.Info("[tx_pool.go/add] Processed a reward tx", "beneficiary", beneficiary)
+			//log.Info("[tx_pool.go/add] Processed a reward tx", "beneficiary", beneficiary)
 			pool.RewardAddress = beneficiary
 		} else if (*tx.To() == common.UncleAddress) {
 			uncleHeight := tx.Value()
-			parentHeight := new(big.Int).Sub(uncleHeight, common.Big1)
-			log.Info("[tx_pool.go/add] Processed an uncle tx", "to", tx.To(), "uncleheight", uncleHeight, "parentHeight", parentHeight)
+			//parentHeight := new(big.Int).Sub(uncleHeight, common.Big1)
+			//log.Info("[tx_pool.go/add] Processed an uncle tx", "to", tx.To(), "uncleheight", uncleHeight, "parentHeight", parentHeight)
 			pool.Unclecount = pool.Unclecount + 1
 
 			if (pool.Unclecount == 1) {
@@ -748,7 +748,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 				pool.UncleStateRoot0 = common.BytesToHash(tx.Data()[188:220])
 				pool.UncleLogsBloom0 = types.BytesToBloom(tx.Data()[220:476])
 				pool.UncleExtraData0 = common.CopyBytes(tx.Data()[476:])
-				log.Trace("[tx_pool.go/add] Parsed an uncle tx")
+				//log.Trace("[tx_pool.go/add] Parsed an uncle tx")
 			} else if (pool.Unclecount == 2) {
 				pool.UncleAddress1 = common.BytesToAddress(tx.Data()[0:20])
 				pool.UncleHeight1 = *uncleHeight
@@ -764,26 +764,26 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 				pool.UncleStateRoot1 = common.BytesToHash(tx.Data()[188:220])
 				pool.UncleLogsBloom1 = types.BytesToBloom(tx.Data()[220:476])
 				pool.UncleExtraData1 = common.CopyBytes(tx.Data()[476:])
-				log.Trace("[tx_pool.go/add] Parsed an uncle tx")
+				//log.Trace("[tx_pool.go/add] Parsed an uncle tx")
 			}
 		} else if (*tx.To() == common.TimestampAddress) {
 			pool.TimeStamp = big.NewInt(0).SetBytes(tx.Data()).Uint64()
-			log.Info("[tx_pool.go/add] Processed a timestamp tx", "timestamp", pool.TimeStamp)
+			//log.Info("[tx_pool.go/add] Processed a timestamp tx", "timestamp", pool.TimeStamp)
 		} else if (*tx.To() == common.DifficultyAddress) {
 			pool.Difficulty = big.NewInt(0).SetBytes(tx.Data())
-			log.Info("[tx_pool.go/add] Processed a difficulty tx", "difficulty", pool.Difficulty)
+			//log.Info("[tx_pool.go/add] Processed a difficulty tx", "difficulty", pool.Difficulty)
 		} else if (*tx.To() == common.NonceAddress) {
 			pool.NonceValue = binary.BigEndian.Uint64(tx.Data()[0:8])
-			log.Info("[tx_pool.go/add] Processed a Nonce tx", "Nonce", pool.NonceValue)
+			//log.Info("[tx_pool.go/add] Processed a Nonce tx", "Nonce", pool.NonceValue)
 		}	else if (*tx.To() == common.GasLimitAddress) {
 			pool.GasLimit = binary.BigEndian.Uint64(tx.Data())
-			log.Info("[tx_pool.go/add] Processed a GasLimit tx", "GasLimit", pool.GasLimit)
+			//log.Info("[tx_pool.go/add] Processed a GasLimit tx", "GasLimit", pool.GasLimit)
 		} else if (*tx.To() == common.ExtraDataAddress) {
 			pool.ExtraData = common.CopyBytes(tx.Data())
-			log.Info("[tx_pool.go/add] Processed an extradata tx", "extradata", pool.ExtraData)
+			//log.Info("[tx_pool.go/add] Processed an extradata tx", "extradata", pool.ExtraData)
 		} else if (*tx.To() == common.MixHashAddress) {
 			pool.MixHash = common.BytesToHash(tx.Data())
-			log.Info("[tx_pool.go/add] Processed a mixhash tx", "mixhash", pool.MixHash)
+			//log.Info("[tx_pool.go/add] Processed a mixhash tx", "mixhash", pool.MixHash)
 		}
 		return false, nil
 	}
@@ -844,7 +844,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 	tx.SetData(tx.Data()[44:])
 
 	txhash := tx.Hash()
-	log.Trace("[tx_pool.go/add] tx order", "hash", txhash, "order", order)
+	//log.Trace("[tx_pool.go/add] tx order", "hash", txhash, "order", order)
 	common.TxOrderMap[order] = txhash
 
 	if list := pool.pending[from]; list != nil && list.Overlaps(tx) {
@@ -853,13 +853,13 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 		if !inserted {
 			// log (hletrd)
 			log.Trace("[tx_pool.go/add] transaction discarded")
-			log.Info("[tx_pool.go/add]", "order", order, "from", from, "to", tx.To(), "nonce", tx.Nonce())
+			//log.Info("[tx_pool.go/add]", "order", order, "from", from, "to", tx.To(), "nonce", tx.Nonce())
 			pendingDiscardMeter.Mark(1)
 			return false, ErrReplaceUnderpriced
 		}
 		// New transaction is better, replace old one
 		if old != nil {
-			log.Trace("[tx_pool.go/add] new transaction is better, discard")
+			//log.Trace("[tx_pool.go/add] new transaction is better, discard")
 			pool.all.Remove(old.Hash())
 			pool.priced.Removed(1)
 			pendingReplaceMeter.Mark(1)
@@ -868,7 +868,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 		pool.priced.Put(tx, isLocal)
 		pool.journalTx(from, tx)
 		pool.queueTxEvent(tx)
-		log.Trace("Pooled new executable transaction", "hash", hash, "from", from, "to", tx.To())
+		//log.Trace("Pooled new executable transaction", "hash", hash, "from", from, "to", tx.To())
 
 		// Successful promotion, bump the heartbeat
 		pool.beats[from] = time.Now()
@@ -890,7 +890,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 	}
 	pool.journalTx(from, tx)
 
-	log.Trace("Pooled new future transaction", "hash", hash, "from", from, "to", tx.To())
+	//log.Trace("Pooled new future transaction", "hash", hash, "from", from, "to", tx.To())
 	return replaced, nil
 }
 
@@ -1375,7 +1375,7 @@ func (pool *TxPool) runReorg(done chan struct{}, reset *txpoolResetRequest, dirt
 // of the transaction pool is valid with regard to the chain state.
 func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 	// If we're reorging an old state, reinject all dropped transactions
-	var reinject types.Transactions
+	//var reinject types.Transactions
 
 	if oldHead != nil && oldHead.Hash() != newHead.ParentHash {
 		// If the reorg is too deep, avoid doing it (will happen during fast sync)
@@ -1383,7 +1383,8 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 		newNum := newHead.Number.Uint64()
 
 		if depth := uint64(math.Abs(float64(oldNum) - float64(newNum))); depth > 64 {
-			log.Debug("Skipping deep transaction reorg", "depth", depth)
+			// remove log for sethead (hletrd)
+			//log.Debug("Skipping deep transaction reorg", "depth", depth)
 		} else {
 			// Reorg seems shallow enough to pull in all transactions into memory
 			var discarded, included types.Transactions
@@ -1403,8 +1404,9 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 					return
 				}
 				// If the reorg ended up on a lower number, it's indicative of setHead being the cause
-				log.Debug("Skipping transaction reset caused by setHead",
-					"old", oldHead.Hash(), "oldnum", oldNum, "new", newHead.Hash(), "newnum", newNum)
+				// remove log for sethead (hletrd)
+				//log.Debug("Skipping transaction reset caused by setHead",
+				//	"old", oldHead.Hash(), "oldnum", oldNum, "new", newHead.Hash(), "newnum", newNum)
 				// We still need to update the current state s.th. the lost transactions can be readded by the user
 			} else {
 				for rem.NumberU64() > add.NumberU64() {
@@ -1433,7 +1435,7 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 						return
 					}
 				}
-				reinject = types.TxDifference(discarded, included)
+				//reinject = types.TxDifference(discarded, included)
 			}
 		}
 	}
@@ -1451,9 +1453,11 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 	pool.currentMaxGas = newHead.GasLimit
 
 	// Inject any transactions discarded due to reorgs
-	log.Debug("Reinjecting stale transactions", "count", len(reinject))
-	senderCacher.recover(pool.signer, reinject)
-	pool.addTxsLocked(reinject, false)
+	// remove log for sethead (hletrd)
+	// TODO-hletrd: remove reinjection here
+	//log.Debug("Reinjecting stale transactions", "count", len(reinject))
+	//senderCacher.recover(pool.signer, reinject)
+	//pool.addTxsLocked(reinject, false)
 
 	// Update all fork indicator by next pending block number.
 	next := new(big.Int).Add(newHead.Number, big.NewInt(1))
