@@ -166,6 +166,9 @@ var (
 	// TODO(jmlee): logging restore related stats for current block
 	BlockRestoreStat RestoreStat
 
+	// how many corner cases occurred in inactive trie
+	InactiveCornerCaseNum = uint64(0)
+
 	// very large key which will not be reached forever
 	NoExistKey     = HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
 	ToBeDeletedKey = HexToHash("0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe")

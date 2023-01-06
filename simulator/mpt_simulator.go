@@ -194,6 +194,7 @@ func reset(deleteDisk bool) {
 	common.BlockRestoreStat.Reset()
 	common.DeletedActiveNodeNum = uint64(0)
 	common.DeletedInactiveNodeNum = uint64(0)
+	common.InactiveCornerCaseNum = uint64(0)
 
 	// TODO(jmlee): init for Ethanos
 	// reset Ethanos related vars
@@ -1244,8 +1245,41 @@ func deleteRestoredLeafNodes() {
 		}
 	}
 
+	// deal with corner case:
+	// when right-most inactive account will be deleted without newly inactivated accounts,
+	// inactivate a single empty account
+	doInactivateEmptyAccount := false
+	lastKey := common.Uint64ToHash(inactiveTrie.GetLastKey().Uint64())
+	for _, keyToDelete := range common.RestoredKeys {
+		if keyToDelete == lastKey {
+			// encoding empty account
+			var ethaneAccount types.EthaneStateAccount
+			ethaneAccount.Nonce = 0
+			ethaneAccount.Balance = new(big.Int)
+			ethaneAccount.Root = emptyRoot
+			ethaneAccount.CodeHash = emptyCodeHash
+			ethaneAccount.Addr = common.ZeroAddress
+			data, _ := rlp.EncodeToBytes(ethaneAccount)
+
+			keyToInsert := common.Uint64ToHash(common.InactiveBoundaryKey)
+			common.InactiveBoundaryKey++
+			fmt.Println("(restored)insert -> key:", keyToInsert.Hex())
+
+			err := inactiveTrie.TryUpdate(keyToInsert[:], data)
+			if err != nil {
+				fmt.Println("inactivateLeafNodes insert error:", err)
+				os.Exit(1)
+			}
+
+			doInactivateEmptyAccount = true
+			common.InactiveCornerCaseNum++
+			break
+		}
+	}
+
 	// delete all used merkle proofs for restoration
 	for _, keyToDelete := range common.RestoredKeys {
+		// fmt.Println("(restored)delete -> key:", keyToDelete.Hex())
 		err := inactiveTrie.TryDelete(keyToDelete[:])
 		if err != nil {
 			fmt.Println("ERROR in deleteRestoredLeafNodes(): trie.TryDelete() ->", err)
@@ -1259,6 +1293,12 @@ func deleteRestoredLeafNodes() {
 
 	// init keys to delete
 	common.RestoredKeys = make([]common.Hash, 0)
+
+	// delete useless empty account later
+	if doInactivateEmptyAccount {
+		common.RestoredKeys = append(common.RestoredKeys, common.Uint64ToHash(common.InactiveBoundaryKey-1))
+	}
+	fmt.Println("corner case occured num:", common.InactiveCornerCaseNum)
 }
 
 // move inactive accounts from active trie to inactive trie
@@ -1271,6 +1311,7 @@ func inactivateLeafNodes(firstKeyToCheck, lastKeyToCheck common.Hash) {
 		inactiveTrie = subNormTrie
 	}
 
+	// fmt.Println("last key of inactive trie:", inactiveTrie.GetLastKey())
 	// fmt.Println("do inactivation -> firstKey:", firstKeyToCheck.Big().Int64(), "lastKey:", lastKeyToCheck.Big().Int64())
 
 	// find accounts to inactivate (i.e., all leaf nodes in the range after delete prev leaf nodes)
