@@ -432,7 +432,7 @@ func flushTrieNodes() {
 	common.NewStorageNodeStat.Reset()
 
 	// flush state trie nodes
-	if common.NextBlockNum % common.FlushInterval == 0 || (common.SimulationMode == 2 && (common.NextBlockNum+1) % common.InactivateCriterion == 0) {
+	if common.NextBlockNum%common.FlushInterval == 0 || (common.SimulationMode == 2 && (common.NextBlockNum+1)%common.InactivateCriterion == 0) {
 		// fmt.Println("flush at block", common.NextBlockNum)
 		common.FlushStorageTries = false
 		normTrie.Commit(nil)
@@ -1092,21 +1092,21 @@ func restoreAccountForEthanos(restoreAddr common.Address) {
 	// is restoredAccountNum is not 1, this is weird restoration in RESTORE_ALL mode, so do not logging
 	if restoredAccountNum == 1 {
 		// logging restore stats
-	common.BlockRestoreStat.RestorationNum++
+		common.BlockRestoreStat.RestorationNum++
 		common.BlockRestoreStat.BloomFilterNum += bloomFilterNum
 		common.BlockRestoreStat.MerkleProofNum += merkleProofNum
-	common.BlockRestoreStat.MerkleProofsSize += proofSize
-	common.BlockRestoreStat.MerkleProofsNodesNum += nodeNum
+		common.BlockRestoreStat.MerkleProofsSize += proofSize
+		common.BlockRestoreStat.MerkleProofsNodesNum += nodeNum
 		common.BlockRestoreStat.RestoredAccountNum += restoredAccountNum
 
 		// update max/min proof size
-	if common.BlockRestoreStat.MaxProofSize < proofSize {
-		common.BlockRestoreStat.MaxProofSize = proofSize
+		if common.BlockRestoreStat.MaxProofSize < proofSize {
+			common.BlockRestoreStat.MaxProofSize = proofSize
 			common.BlockRestoreStat.VoidMerkleProofNumAtMaxProof = voidMerkleProofNum
 			common.BlockRestoreStat.FirstEpochNumAtMaxProof = firstEpochNum
-	}
-	if common.BlockRestoreStat.MinProofSize > proofSize || common.BlockRestoreStat.MinProofSize == 0 {
-		common.BlockRestoreStat.MinProofSize = proofSize
+		}
+		if common.BlockRestoreStat.MinProofSize > proofSize || common.BlockRestoreStat.MinProofSize == 0 {
+			common.BlockRestoreStat.MinProofSize = proofSize
 		}
 
 		// update maximum void proof num
@@ -1420,18 +1420,18 @@ func restoreAccountForEthane(restoreAddr common.Address) {
 	// is restoredAccountNum is not 1, this is weird restoration in RESTORE_ALL mode, so do not logging
 	if len(common.AddrToKeyInactive[restoreAddr]) == 1 {
 		// logging restore stats
-	common.BlockRestoreStat.RestorationNum++
-	common.BlockRestoreStat.RestoredAccountNum += len(common.AddrToKeyInactive[restoreAddr])
-	common.BlockRestoreStat.MerkleProofNum += len(common.AddrToKeyInactive[restoreAddr])
-	common.BlockRestoreStat.MerkleProofsSize += proofSize
-	common.BlockRestoreStat.MerkleProofsNodesNum += nodeNum
+		common.BlockRestoreStat.RestorationNum++
+		common.BlockRestoreStat.RestoredAccountNum += len(common.AddrToKeyInactive[restoreAddr])
+		common.BlockRestoreStat.MerkleProofNum += len(common.AddrToKeyInactive[restoreAddr])
+		common.BlockRestoreStat.MerkleProofsSize += proofSize
+		common.BlockRestoreStat.MerkleProofsNodesNum += nodeNum
 
 		// update max/min proof size
-	if common.BlockRestoreStat.MaxProofSize < proofSize {
-		common.BlockRestoreStat.MaxProofSize = proofSize
-	}
-	if common.BlockRestoreStat.MinProofSize > proofSize || common.BlockRestoreStat.MinProofSize == 0 {
-		common.BlockRestoreStat.MinProofSize = proofSize
+		if common.BlockRestoreStat.MaxProofSize < proofSize {
+			common.BlockRestoreStat.MaxProofSize = proofSize
+		}
+		if common.BlockRestoreStat.MinProofSize > proofSize || common.BlockRestoreStat.MinProofSize == 0 {
+			common.BlockRestoreStat.MinProofSize = proofSize
 		}
 	} else {
 		// writing error case
