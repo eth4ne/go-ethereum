@@ -1443,7 +1443,6 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 
 	// Inject any transactions discarded due to reorgs
 	// remove log for sethead (hletrd)
-	// TODO-hletrd: remove reinjection here
 	//log.Debug("Reinjecting stale transactions", "count", len(reinject))
 	//senderCacher.recover(pool.signer, reinject)
 	//pool.addTxsLocked(reinject, false)
@@ -1477,7 +1476,6 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) []*types.Trans
 		log.Trace("Removed old queued transactions", "count", len(forwards))
 		// Drop all transactions that are too costly (low balance or out of gas)
 		// do not drop transaction with insufficient balance (hletrd)
-		// TODO-hletrd: is it safe?
 		//drops, _ := list.Filter(pool.currentState.GetBalance(addr), pool.currentMaxGas)
 		//for _, tx := range drops {
 		//	hash := tx.Hash()

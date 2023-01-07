@@ -185,7 +185,6 @@ search:
 			}
 			// Compute the PoW value of this nonce
 			_, result := hashimotoFull(dataset.dataset, hash, nonce)
-			// TODO-hletrd: set custom hash
 			// do not calculate nonce (hletrd)
 			if true || powBuffer.SetBytes(result).Cmp(target) <= 0 {
 				// Correct nonce found, create a new header with it

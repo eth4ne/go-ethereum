@@ -157,7 +157,6 @@ func (args *TransactionArgs) setDefaults(ctx context.Context, b Backend) error {
 	//	return errors.New(`contract creation without any data provided`)
 	//}
 	// Estimate the gas usage if necessary.
-	// TODO-hletrd: check if delegated from is required here
 	if args.Gas == nil {
 		// These fields are immutable during the estimation, safe to
 		// pass the pointer directly.

@@ -248,7 +248,6 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 			reward.Div(reward, big.NewInt(8))
 			statedb.AddBalance(ommer.Address, reward)
 		}
-		// TODO-hletrd: validate the reward
 		statedb.AddBalance(pre.Env.Coinbase, minerReward)
 	}
 	// Commit block
