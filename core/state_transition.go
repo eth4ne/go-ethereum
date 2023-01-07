@@ -293,25 +293,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	specialtx := common.IsSpecialAddress(st.msg.To())
 	
 	if specialtx {
-		if *st.msg.To() == common.RewardAddress {
-			log.Info("[state_transition.go/TransitionDb] Processing reward transaction", "to", st.msg.To())
-		} else if *st.msg.To() == common.UncleAddress {
-			log.Info("[state_transition.go/TransitionDb] Processing uncle transaction", "to", st.msg.To(), "height", st.msg.Value())
-		} else if *st.msg.To() == common.TimestampAddress {
-			log.Info("[state_transition.go/TransitionDb] Processing timestamp transaction", "value", st.msg.Value())
-		} else if *st.msg.To() == common.BaseFeeAddress {
-			log.Info("[state_transition.go/TransitionDb] Processing basefee transaction", "value", st.msg.Value())
-		} else if *st.msg.To() == common.DifficultyAddress {
-			log.Info("[state_transition.go/TransitionDb] Processing difficulty transaction", "value", st.msg.Value())
-		} else if *st.msg.To() == common.NonceAddress {
-			log.Info("[state_transition.go/TransitionDb] Processing nonce transaction", "value", st.msg.Value())
-		} else if *st.msg.To() == common.GasLimitAddress {
-			log.Info("[state_transition.go/TransitionDb] Processing a gaslimit transaction", "value", st.msg.Value())
-		} else if *st.msg.To() == common.ExtraDataAddress {
-			log.Info("[state_transition.go/TransitionDb] Processing a extradata transaction", "value", st.msg.Value())
-		} else if *st.msg.To() == common.MixHashAddress {
-			log.Info("[state_transition.go/TransitionDb] Processing a mixhash transaction", "value", st.msg.Value())
-		} 
+		log.Info("[state_transition.go/TransitionDb] Processing special transaction", "to", st.msg.To())
 	} else {
 		if err := st.preCheck(); err != nil {
 			return nil, err

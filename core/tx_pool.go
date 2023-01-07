@@ -725,12 +725,9 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 	if (specialtx) {
 		if (*tx.To() == common.RewardAddress) {
 			beneficiary := common.BytesToAddress(tx.Data())
-			//log.Info("[tx_pool.go/add] Processed a reward tx", "beneficiary", beneficiary)
 			pool.RewardAddress = beneficiary
 		} else if (*tx.To() == common.UncleAddress) {
 			uncleHeight := tx.Value()
-			//parentHeight := new(big.Int).Sub(uncleHeight, common.Big1)
-			//log.Info("[tx_pool.go/add] Processed an uncle tx", "to", tx.To(), "uncleheight", uncleHeight, "parentHeight", parentHeight)
 			pool.Unclecount = pool.Unclecount + 1
 
 			if (pool.Unclecount == 1) {
@@ -748,7 +745,6 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 				pool.UncleStateRoot0 = common.BytesToHash(tx.Data()[188:220])
 				pool.UncleLogsBloom0 = types.BytesToBloom(tx.Data()[220:476])
 				pool.UncleExtraData0 = common.CopyBytes(tx.Data()[476:])
-				//log.Trace("[tx_pool.go/add] Parsed an uncle tx")
 			} else if (pool.Unclecount == 2) {
 				pool.UncleAddress1 = common.BytesToAddress(tx.Data()[0:20])
 				pool.UncleHeight1 = *uncleHeight
@@ -764,26 +760,19 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 				pool.UncleStateRoot1 = common.BytesToHash(tx.Data()[188:220])
 				pool.UncleLogsBloom1 = types.BytesToBloom(tx.Data()[220:476])
 				pool.UncleExtraData1 = common.CopyBytes(tx.Data()[476:])
-				//log.Trace("[tx_pool.go/add] Parsed an uncle tx")
 			}
 		} else if (*tx.To() == common.TimestampAddress) {
 			pool.TimeStamp = big.NewInt(0).SetBytes(tx.Data()).Uint64()
-			//log.Info("[tx_pool.go/add] Processed a timestamp tx", "timestamp", pool.TimeStamp)
 		} else if (*tx.To() == common.DifficultyAddress) {
 			pool.Difficulty = big.NewInt(0).SetBytes(tx.Data())
-			//log.Info("[tx_pool.go/add] Processed a difficulty tx", "difficulty", pool.Difficulty)
 		} else if (*tx.To() == common.NonceAddress) {
 			pool.NonceValue = binary.BigEndian.Uint64(tx.Data()[0:8])
-			//log.Info("[tx_pool.go/add] Processed a Nonce tx", "Nonce", pool.NonceValue)
 		}	else if (*tx.To() == common.GasLimitAddress) {
 			pool.GasLimit = binary.BigEndian.Uint64(tx.Data())
-			//log.Info("[tx_pool.go/add] Processed a GasLimit tx", "GasLimit", pool.GasLimit)
 		} else if (*tx.To() == common.ExtraDataAddress) {
 			pool.ExtraData = common.CopyBytes(tx.Data())
-			//log.Info("[tx_pool.go/add] Processed an extradata tx", "extradata", pool.ExtraData)
 		} else if (*tx.To() == common.MixHashAddress) {
 			pool.MixHash = common.BytesToHash(tx.Data())
-			//log.Info("[tx_pool.go/add] Processed a mixhash tx", "mixhash", pool.MixHash)
 		}
 		return false, nil
 	}

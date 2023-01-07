@@ -912,14 +912,6 @@ func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*
 		env.state.RevertToSnapshot(snap)
 		return nil, err
 	}
-	// process special txs (hletrd)
-	// TODO-hletrd: process other types of special txs
-	if receipt.TransactionIndex == uint(1048576) {
-		return nil, core.ErrExcludeTx
-	}
-	if receipt.TransactionIndex == uint(1048577) {
-		return nil, core.ErrExcludeTx
-	}
 
 	env.txs = append(env.txs, tx)
 	env.receipts = append(env.receipts, receipt)
