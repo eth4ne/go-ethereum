@@ -148,6 +148,11 @@ type BlockParameters struct {
 	Coinbase   Address
 }
 
+// Uint64ToHash converts uint64 to hex key (ex. 10 -> 0x0...0a) (jmlee)
+func Uint64ToHash(i uint64) Hash {
+	return HexToHash(strconv.FormatUint(i, 16))
+}
+
 // Marshal is a function that marshals the object into an io.Reader.
 // By default, it uses the JSON marshaller.
 var Marshal = func(v interface{}) (io.Reader, error) {
