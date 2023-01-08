@@ -1441,7 +1441,6 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, common.Hash, err
 		// delete common.KeysToDelete_restore (previous keys of inactive trie after restoration)
 		common.DeletingInactiveTrieFlag = true
 		s.DeletePreviousLeafNodes_inactive(common.KeysToDelete_restore)
-		common.KeysToDelete_restore = make([]common.Hash, 0)
 		common.DeletingInactiveTrieFlag = false
 
 		// reset AlreadyRestored list
@@ -1688,12 +1687,50 @@ func (s *StateDB) DeletePreviousLeafNodes(keysToDelete []common.Hash) {
 func (s *StateDB) DeletePreviousLeafNodes_inactive(keysToDelete []common.Hash) {
 	// fmt.Println("\ntrie root before delete leaf nodes:", s.trie.Hash().Hex())
 
+	// deal with a corner case:
+	// when right-most inactive account will be deleted without newly inactivated accounts,
+	// inactivate a single empty account
+	doInactivateEmptyAccount := false
+	lastKey := common.Uint64ToHash(s.trie_inactive.GetLastKey().Uint64())
+	for _, keyToDelete := range keysToDelete {
+		if keyToDelete == lastKey {
+			// encoding empty account
+			var ethaneAccount types.StateAccount
+			ethaneAccount.Nonce = 0
+			ethaneAccount.Balance = new(big.Int)
+			ethaneAccount.Root = emptyRoot
+			ethaneAccount.CodeHash = emptyCodeHash
+			ethaneAccount.Addr = common.ZeroAddress
+			data, _ := rlp.EncodeToBytes(ethaneAccount)
+
+			keyToInsert := common.Uint64ToHash(uint64(common.InactiveBoundaryKey))
+			common.InactiveBoundaryKey++
+			fmt.Println("(restored)insert -> key:", keyToInsert.Hex())
+
+			err := s.trie_inactive.TryUpdate(keyToInsert[:], data)
+			if err != nil {
+				fmt.Println("inactivateLeafNodes insert error:", err)
+				os.Exit(1)
+			}
+
+			doInactivateEmptyAccount = true
+			break
+		}
+	}
+
 	// delete previous leaf nodes from state trie
 	for i := 0; i < len(keysToDelete); i++ {
 		// fmt.Println("delete previous leaf node -> key:", keysToDelete[i].Hex())
 		if err := s.trie_inactive.TryUpdate_SetKey(keysToDelete[i][:], nil); err != nil {
 			s.setError(fmt.Errorf("updateStateObject (%x) error: %v", keysToDelete[i][:], err))
 		}
+	}
+
+	common.KeysToDelete_restore = make([]common.Hash, 0)
+
+	// delete useless empty account later
+	if doInactivateEmptyAccount {
+		common.KeysToDelete_restore = append(common.KeysToDelete_restore, common.Uint64ToHash(uint64(common.InactiveBoundaryKey)-1))
 	}
 
 	// fmt.Println("trie root after delete leaf nodes:", s.trie.Hash().Hex())
