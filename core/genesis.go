@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"sort"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -268,7 +269,31 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
 	if err != nil {
 		panic(err)
 	}
-	for addr, account := range g.Alloc {
+
+	// for addr, account := range g.Alloc { // --> original code (random sequence)
+	// 	statedb.AddBalance(addr, account.Balance)
+	// 	statedb.SetCode(addr, account.Code)
+	// 	statedb.SetNonce(addr, account.Nonce)
+	// 	for key, value := range account.Storage {
+	// 		statedb.SetState(addr, key, value)
+	// 	}
+	// 	// set GenesisSnapshot for the genesis allocation (joonha)
+	// 	statedb.SetSnapshot(addr, account.Balance, account.Code)
+	// }
+
+	// sort genesis allocation (joonha)
+	addrs := make([]common.Address, 0)
+	for k, _ := range g.Alloc {
+		addrs = append(addrs, k)
+	}
+	sort.Slice(addrs, func(i, j int) bool {
+		return bytes.Compare(addrs[i][:], addrs[j][:]) < 0
+	})
+	for idx, addr := range addrs {
+		account := g.Alloc[addr]
+		if idx > 8850 {
+			fmt.Println("g idx: ", idx, " / addr: ", addr)
+		}
 		statedb.AddBalance(addr, account.Balance)
 		statedb.SetCode(addr, account.Code)
 		statedb.SetNonce(addr, account.Nonce)
