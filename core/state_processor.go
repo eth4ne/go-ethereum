@@ -70,6 +70,12 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	// Mutate the block and state according to any hard-fork specs
 	if p.config.DAOForkSupport && p.config.DAOForkBlock != nil && p.config.DAOForkBlock.Cmp(block.Number()) == 0 {
 		misc.ApplyDAOHardFork(statedb)
+
+		if config := p.config; config.IsByzantium(header.Number) { // jhkim: 437만 블록 이후
+			statedb.Finalise(true)
+		} else {
+			statedb.Finalise(config.IsEIP158(header.Number)) // jhkim: 267.5만 ~ 437만 블록
+		}
 	}
 	blockContext := NewEVMBlockContext(header, p.bc, nil)
 	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, p.config, cfg)
