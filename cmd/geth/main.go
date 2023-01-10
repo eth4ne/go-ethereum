@@ -225,6 +225,7 @@ func init() {
 		consoleCommand,
 		attachCommand,
 		javascriptCommand,
+		replayblockCommand, //jhkim
 		// See misccmd.go:
 		makecacheCommand,
 		makedagCommand,
