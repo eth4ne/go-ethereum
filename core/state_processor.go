@@ -92,26 +92,6 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		common.BlockTxList[blocknumber] = make([]common.Hash, 0)
 	}
 
-	// jhkim: write block miner & uncles
-	minerStorageRoot := statedb.GetStorageTrieHash(block.Coinbase())
-	if minerStorageRoot != common.EmptyRoot {
-		fmt.Println("Block", common.GlobalBlockNumber, "'s miner", block.Coinbase(), " has not empty storage root/ storageroot:", minerStorageRoot)
-		// os.Exit(0)
-	}
-
-	uncles := block.Uncles()
-	if len(uncles) != 0 {
-		common.BlockUncleList[blocknumber] = []common.SimpleAccount{}
-		for _, uncle := range uncles {
-			uncleStorageRoot := statedb.GetStorageTrieHash(uncle.Coinbase)
-			if uncleStorageRoot != common.EmptyRoot {
-				fmt.Println("Block", common.GlobalBlockNumber, "'s uncle", uncle.Coinbase, "has not empty storage root/ storageroot:", uncleStorageRoot)
-				// os.Exit(0)
-			}
-		}
-
-	}
-
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
 
@@ -146,17 +126,17 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		Balance:     statedb.GetBalance(block.Coinbase()),
 		Nonce:       statedb.GetNonce(block.Coinbase()),
 		Codehash:    statedb.GetCodeHash(block.Coinbase()),
-		StorageRoot: minerStorageRoot, // jhkim: should be emptyhash
+		StorageRoot: statedb.GetStorageTrieHash(block.Coinbase()),
 	}
 
-	for _, uncle := range uncles {
-		uncleStorageRoot := statedb.GetStorageTrieHash(block.Coinbase())
+	for _, uncle := range block.Uncles() {
+
 		tmp := common.SimpleAccount{
 			Addr:        uncle.Coinbase,
 			Balance:     statedb.GetBalance(uncle.Coinbase),
 			Nonce:       statedb.GetNonce(uncle.Coinbase),
 			Codehash:    statedb.GetCodeHash(uncle.Coinbase),
-			StorageRoot: uncleStorageRoot, // jhkim: should be emptyhash
+			StorageRoot: statedb.GetStorageTrieHash(uncle.Coinbase),
 		}
 		common.BlockUncleList[blocknumber] = append(common.BlockUncleList[blocknumber], tmp)
 	}
