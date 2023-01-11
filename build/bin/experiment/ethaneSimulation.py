@@ -42,6 +42,8 @@ restoreListFilePath = "./restoreList/"
 
 # maximum byte length of response from the simulator
 maxResponseLen = 4096
+# infinite epoch for deletion & inactivation
+infiniteEpoch = 100000000
 
 # const for Ethane
 emptyCodeHash = "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"

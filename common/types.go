@@ -173,6 +173,9 @@ var (
 	NoExistKey     = HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
 	ToBeDeletedKey = HexToHash("0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe")
 	ZeroAddress    = HexToAddress("0x0")
+
+	// this means infinite epoch for deletion & inactivation
+	InfiniteEpoch = uint64(100000000)
 )
 
 // NodeInfo stores trie node related information

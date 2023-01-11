@@ -379,6 +379,11 @@ func flushTrieNodes() {
 			blockInfo.TimeToDelete = deleteElapsed.Nanoseconds()
 			// fmt.Println("time to delete:", blockInfo.TimeToDelete, "ns")
 		}
+		// leave log and empty KeysToDelete when delete epoch is infinite to prevent oom killer
+		if common.DeleteEpoch == common.InfiniteEpoch {
+			common.DeletedActiveNodeNum += uint64(len(common.KeysToDelete))
+			common.KeysToDelete = make([]common.Hash, 0)
+		}
 
 		// inactivate
 		if (bn+1)%common.InactivateEpoch == 0 && bn != common.InactivateEpoch-1 {
