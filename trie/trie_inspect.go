@@ -934,9 +934,10 @@ func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGro
 				tir.AccountBalance[addressHash] = *acc.Balance
 				rwMutex.Unlock()
 
+				// save intermediate result periodically
 				if tir.CANum%1000000 == 0 {
 					// fmt.Println(tir.CANum/1000, int(tir.CANum/1000))
-					tir.PrintIntermediateTrieInspectResult(1000000, 0, tir.CANum/1000000)
+					// tir.PrintIntermediateTrieInspectResult(1000000, 0, tir.CANum/1000000)
 				}
 
 				// inspect CA's storage trie (if it is not empty trie)
