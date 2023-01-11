@@ -9,6 +9,7 @@
 /simulator/blockInfos/*
 /simulator/trieInspects/*
 /simulator/graphs/*
+/simulator/trie_inspect*
 
 /tmp
 */**/*un~
