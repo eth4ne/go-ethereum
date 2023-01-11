@@ -897,8 +897,8 @@ def simulateEthereum(startBlockNum, endBlockNum, flushInterval):
                     seconds = currentTime - start
                     tempSeconds = currentTime - tempStart
                     tempStart = currentTime
-                    print('# Blkn: {} (avg: {:.2f}/s) (cur: {:.2f}/s) / ethereum {} ~ {} / time: {} ~ {} / port: {}'.format( \
-                        oldblocknumber, blockcount/seconds, loginterval/tempSeconds, startBlockNum, f"{endBlockNum:,}", \
+                    print('# Blkn: {} (avg: {:.2f}/s) (cur: {:.2f}/s) / ethereum {} ~ {} (FI: {}) / time: {} ~ {} / port: {}'.format( \
+                        oldblocknumber, blockcount/seconds, loginterval/tempSeconds, startBlockNum, f"{endBlockNum:,}", f"{flushInterval:,}", \
                         startTime.strftime("%d %H:%M:%S"), datetime.now().strftime("%d %H:%M:%S"), SERVER_PORT))
                 oldblocknumber += 1
                 #print("do block", oldblocknumber ,"\n")
@@ -1085,9 +1085,9 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
                     seconds = currentTime - start
                     tempSeconds = currentTime - tempStart
                     tempStart = currentTime
-                    print('# Blkn: {} (avg: {:.2f}/s) (cur: {:.2f}/s) / ethane {} ~ {} ({}, {}, {}) / time: {} ~ {} / port: {}'.format( \
+                    print('# Blkn: {} (avg: {:.2f}/s) (cur: {:.2f}/s) / ethane {} ~ {} ({}, {}, {}) (FI: {}) / time: {} ~ {} / port: {}'.format( \
                         oldblocknumber, blockcount/seconds, loginterval/tempSeconds, startBlockNum, f"{endBlockNum:,}", \
-                        f"{deleteEpoch:,}", f"{inactivateEpoch:,}", f"{inactivateCriterion:,}", \
+                        f"{deleteEpoch:,}", f"{inactivateEpoch:,}", f"{inactivateCriterion:,}", f"{flushInterval:,}", \
                         startTime.strftime("%d %H:%M:%S"), datetime.now().strftime("%d %H:%M:%S"), SERVER_PORT))
                 oldblocknumber += 1
                 #print("do block", oldblocknumber ,"\n")
@@ -1280,9 +1280,9 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel, 
                     seconds = currentTime - start
                     tempSeconds = currentTime - tempStart
                     tempStart = currentTime
-                    print('# Blkn: {} (avg: {:.2f}/s) (cur: {:.2f}/s), ethanos {} ~ {} ({}), time: {} ~ {} / port: {}'.format( \
+                    print('# Blkn: {} (avg: {:.2f}/s) (cur: {:.2f}/s), ethanos {} ~ {} ({}) (FI: {}) / time: {} ~ {} / port: {}'.format( \
                         oldblocknumber, blockcount/seconds, loginterval/tempSeconds, startBlockNum, f"{endBlockNum:,}", \
-                        f"{inactivateCriterion:,}", startTime.strftime("%d %H:%M:%S"), datetime.now().strftime("%d %H:%M:%S"), SERVER_PORT))
+                        f"{inactivateCriterion:,}", f"{flushInterval:,}", startTime.strftime("%d %H:%M:%S"), datetime.now().strftime("%d %H:%M:%S"), SERVER_PORT))
                 oldblocknumber += 1
                 #print("do block", oldblocknumber ,"\n")
 
