@@ -19,7 +19,7 @@ var path = "/home/jhkim/go/src/github.com/ethereum/go-ethereum/txDetail/" // use
 var _ = os.MkdirAll(path, 0777)
 
 // inspect storage tries or not (jmlee)
-var DoInspectStorageTrie = true
+var DoInspectStorageTrie = false
 
 func increaseSize(nodeSize int, node string, tir *TrieInspectResult, depth int) {
 	rwMutex.Lock()
