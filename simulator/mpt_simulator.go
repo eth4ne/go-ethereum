@@ -1279,7 +1279,7 @@ func deleteRestoredLeafNodes() {
 
 			keyToInsert := common.Uint64ToHash(common.InactiveBoundaryKey)
 			common.InactiveBoundaryKey++
-			fmt.Println("(restored)insert -> key:", keyToInsert.Hex())
+			// fmt.Println("(restored)insert -> key:", keyToInsert.Hex())
 
 			err := inactiveTrie.TryUpdate(keyToInsert[:], data)
 			if err != nil {
@@ -1289,6 +1289,7 @@ func deleteRestoredLeafNodes() {
 
 			doInactivateEmptyAccount = true
 			common.InactiveCornerCaseNum++
+			common.LastCornerCaseBlockNum = common.NextBlockNum
 			break
 		}
 	}
@@ -1314,7 +1315,7 @@ func deleteRestoredLeafNodes() {
 	if doInactivateEmptyAccount {
 		common.RestoredKeys = append(common.RestoredKeys, common.Uint64ToHash(common.InactiveBoundaryKey-1))
 	}
-	fmt.Println("corner case occured num:", common.InactiveCornerCaseNum)
+	fmt.Println("corner case occured num:", common.InactiveCornerCaseNum, "/ last case at block", common.LastCornerCaseBlockNum)
 }
 
 // move inactive accounts from active trie to inactive trie

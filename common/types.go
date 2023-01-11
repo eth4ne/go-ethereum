@@ -173,7 +173,8 @@ var (
 	BlockRestoreStat RestoreStat
 
 	// how many corner cases occurred in inactive trie
-	InactiveCornerCaseNum = uint64(0)
+	InactiveCornerCaseNum  = uint64(0)
+	LastCornerCaseBlockNum = uint64(0)
 
 	// very large key which will not be reached forever
 	NoExistKey     = HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
