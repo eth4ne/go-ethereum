@@ -155,10 +155,12 @@ func reset(deleteDisk bool) {
 	secureTrie, _ = trie.NewSecure(common.Hash{}, trie.NewDatabase(memorydb.New()))
 
 	// reset db stats
-	common.TotalNodeStat.Reset()
-	common.TotalStorageNodeStat.Reset()
 	common.NewNodeStat.Reset()
+	common.TotalNodeStat.Reset()
 	common.NewStorageNodeStat.Reset()
+	common.TotalStorageNodeStat.Reset()
+	common.NewInactiveNodeStat.Reset()
+	common.TotalInactiveNodeStat.Reset()
 
 	common.TrieNodeHashes = make(map[common.Hash]struct{})
 	common.TrieNodeInfos = make(map[common.Hash]common.NodeInfo)
@@ -436,6 +438,7 @@ func flushTrieNodes() {
 	// reset db stats before flush
 	common.NewNodeStat.Reset()
 	common.NewStorageNodeStat.Reset()
+	common.NewInactiveNodeStat.Reset()
 
 	// flush state trie nodes
 	if common.NextBlockNum%common.FlushInterval == 0 || (common.SimulationMode == 2 && (common.NextBlockNum+1)%common.InactivateCriterion == 0) {
@@ -444,9 +447,11 @@ func flushTrieNodes() {
 		normTrie.Commit(nil)
 		normTrie.TrieDB().Commit(normTrie.Hash(), false, nil)
 		if common.SimulationMode == 1 && common.InactiveTrieExist {
+			common.FlushInactiveTrie = true
 			subNormTrie.Commit(nil)
 			subNormTrie.TrieDB().Commit(subNormTrie.Hash(), false, nil)
 			blockInfo.InactiveRoot = subNormTrie.Hash()
+			common.FlushInactiveTrie = false
 		}
 		if common.SimulationMode == 2 {
 			// this is cached trie's root for Ethanos
@@ -476,9 +481,11 @@ func flushTrieNodes() {
 	blockInfo.Root = normTrie.Hash()
 	blockInfo.MaxAccountNonce = emptyAccount.Nonce
 	blockInfo.NewNodeStat = common.NewNodeStat
-	blockInfo.NewStorageNodeStat = common.NewStorageNodeStat
 	blockInfo.TotalNodeStat = common.TotalNodeStat
+	blockInfo.NewStorageNodeStat = common.NewStorageNodeStat
 	blockInfo.TotalStorageNodeStat = common.TotalStorageNodeStat
+	blockInfo.NewInactiveNodeStat = common.NewInactiveNodeStat
+	blockInfo.TotalInactiveNodeStat = common.TotalInactiveNodeStat
 	blockInfo.BlockRestoreStat = common.BlockRestoreStat
 	common.BlockRestoreStat.Reset()
 	blockInfo.DeletedActiveNodeNum = common.DeletedActiveNodeNum
@@ -493,15 +500,19 @@ func flushTrieNodes() {
 	}
 
 	// show db stat
-	// totalNodesNum, totalNodesSize := common.TotalNodeStat.GetSum()
-	// totalStorageNodesNum, totalStorageNodesSize := common.TotalStorageNodeStat.GetSum()
 	// newNodesNum, newNodesSize := common.NewNodeStat.GetSum()
 	// newStorageNodesNum, newStorageNodesSize := common.NewStorageNodeStat.GetSum()
+	// newInactiveNodesNum, newInactiveNodesSize := common.NewInactiveNodeStat.GetSum()
+	// totalNodesNum, totalNodesSize := common.TotalNodeStat.GetSum()
+	// totalStorageNodesNum, totalStorageNodesSize := common.TotalStorageNodeStat.GetSum()
+	// totalInactiveNodesNum, totalInactiveNodesSize := common.TotalInactiveNodeStat.GetSum()
 	// common.NewNodeStat.Print()
 	// fmt.Println("  new trie nodes:", newNodesNum, "/ increased db size:", newNodesSize)
 	// fmt.Println("  new storage trie nodes:", newStorageNodesNum, "/ increased db size:", newStorageNodesSize)
+	// fmt.Println("  new inactive nodes:", newInactiveNodesNum, "/ increased db size:", newInactiveNodesSize)
 	// fmt.Println("  total trie nodes:", totalNodesNum, "/ db size:", totalNodesSize)
 	// fmt.Println("  total storage trie nodes:", totalStorageNodesNum, "/ db size:", totalStorageNodesSize)
+	// fmt.Println("  total inactive nodes:", totalInactiveNodesNum, "/ db size:", totalInactiveNodesSize)
 
 	// if Ethanos simulation, sweep state trie
 	if common.SimulationMode == 2 {
@@ -1717,6 +1728,10 @@ func saveBlockInfos(fileName string, startBlockNum, endBlockNum uint64) {
 		log += strconv.Itoa(blockInfo.BlockRestoreStat.FirstEpochNumAtMaxProof) + delimiter
 		log += strconv.Itoa(blockInfo.BlockRestoreStat.MaxVoidMerkleProofNum) + delimiter
 
+		// TODO(jmlee): move position later to be with other NodeStats
+		log += blockInfo.NewInactiveNodeStat.ToString(delimiter)
+		log += blockInfo.TotalInactiveNodeStat.ToString(delimiter)
+
 		// fmt.Println("log at block", blockNum, ":", log)
 
 		// write log to file
@@ -1821,6 +1836,9 @@ func connHandler(conn net.Conn) {
 				fmt.Println("print getDBStatistics result: all storage tries nodes in disk (archive data)")
 				common.TotalStorageNodeStat.Print()
 				fmt.Println(common.TotalStorageNodeStat.ToString(" "))
+				fmt.Println("print getDBStatistics result: all inactive trie nodes in disk (archive data)")
+				common.TotalInactiveNodeStat.Print()
+				fmt.Println(common.TotalInactiveNodeStat.ToString(" "))
 				fmt.Println()
 
 				nodeNum := totalNodesNum + totalStorageNodesNum

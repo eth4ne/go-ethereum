@@ -83,16 +83,22 @@ var (
 	TrieNodeHashes = make(map[Hash]struct{})
 
 	// TODO(jmlee): change name to TotalStateNodeStat
-	// stats for all state trie's nodes in db (archive data)
-	TotalNodeStat NodeStat
-	// stats for all storage tries' nodes in db (archive data)
-	TotalStorageNodeStat NodeStat
 	// stats for newly flushed state trie's nodes in latest block
 	NewNodeStat NodeStat
-	// stats for newly flushed storage tries' nodes in latest block
-	NewStorageNodeStat NodeStat
+	// stats for all state trie's nodes in db (archive data)
+	TotalNodeStat NodeStat
 	// this is needed to split flush results
 	FlushStorageTries bool
+	// stats for newly flushed storage tries' nodes in latest block
+	NewStorageNodeStat NodeStat
+	// stats for all storage tries' nodes in db (archive data)
+	TotalStorageNodeStat NodeStat
+	// this is needed to split flush results
+	FlushInactiveTrie bool
+	// stats for newly flushed inactive trie's nodes in latest block
+	NewInactiveNodeStat NodeStat
+	// stats for inactive trie's nodes in db (archive data)
+	TotalInactiveNodeStat NodeStat
 
 	// mutex to avoid fatal error: "concurrent map read and map write"
 	ChildHashesMutex = sync.RWMutex{}
@@ -115,7 +121,7 @@ var (
 
 	// option: active trie & inactive trie vs one state trie
 	InactiveTrieExist = true
-	// option: do light deletion 
+	// option: do light deletion
 	// for Ethane's light inactive trie delete (jmlee)
 	DoLightInactiveDeletion = true
 	// this is not an option, but a flag
@@ -241,10 +247,12 @@ type BlockInfo struct {
 	FlushedNodeHashes []Hash // hashes of flushed nodes
 	MaxAccountNonce   uint64 // biggest nonce amoung accounts (just to regenerate same state root, not essential field)
 
-	NewNodeStat          NodeStat // stats for newly flushed state trie nodes in this block
-	NewStorageNodeStat   NodeStat // stats for newly flushed storage trie nodes in this block
-	TotalNodeStat        NodeStat // stats for total state trie data until this block
-	TotalStorageNodeStat NodeStat // stats for total storage trie data until this block
+	NewNodeStat           NodeStat // stats for newly flushed state trie nodes in this block
+	TotalNodeStat         NodeStat // stats for total state trie data until this block
+	NewStorageNodeStat    NodeStat // stats for newly flushed storage trie nodes in this block
+	TotalStorageNodeStat  NodeStat // stats for total storage trie data until this block
+	NewInactiveNodeStat   NodeStat // stats for newly flushed inactive trie nodes in this block
+	TotalInactiveNodeStat NodeStat // stats for total inactive trie data until this block
 
 	TimeToFlush      int64 // time to generate block (including delete & inactivate in Ethane)
 	TimeToDelete     int64 // time to delete previous leaf nodes in Ethane

@@ -147,6 +147,32 @@ func WriteTrieNode(db ethdb.KeyValueWriter, hash common.Hash, node []byte) {
 			totalNodeStat.FullNodesSize += nodeSize
 		}
 
+		// measure inactive nodes independently
+		if common.FlushInactiveTrie {
+			newNodeStat := &common.NewInactiveNodeStat
+			totalNodeStat := &common.TotalInactiveNodeStat
+
+			if nodeInfoDirty.IsLeafNode {
+				newNodeStat.LeafNodesNum++
+				newNodeStat.LeafNodesSize += nodeSize
+	
+				totalNodeStat.LeafNodesNum++
+				totalNodeStat.LeafNodesSize += nodeSize
+			} else if nodeInfoDirty.IsShortNode {
+				newNodeStat.ShortNodesNum++
+				newNodeStat.ShortNodesSize += nodeSize
+	
+				totalNodeStat.ShortNodesNum++
+				totalNodeStat.ShortNodesSize += nodeSize
+			} else {
+				newNodeStat.FullNodesNum++
+				newNodeStat.FullNodesSize += nodeSize
+	
+				totalNodeStat.FullNodesNum++
+				totalNodeStat.FullNodesSize += nodeSize
+			}
+		}
+
 		// update current block's stat
 		blockInfo, _ := common.Blocks[common.NextBlockNum]
 		blockInfo.FlushedNodeHashes = append(blockInfo.FlushedNodeHashes, hash)
