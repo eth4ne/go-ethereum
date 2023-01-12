@@ -1335,7 +1335,21 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 	}
 
 	usedAddrs := make([][]byte, 0, len(s.stateObjectsPending))
+	// here, stateObjectsPending is originally an unordered map so Ethane sorts the items
+	// in order to accomplish deterministic state roots (joonha)
+	sortedAddrs := make([]common.Address, 0)
 	for addr := range s.stateObjectsPending {
+		sortedAddrs = append(sortedAddrs, addr)
+	}
+	sort.Slice(sortedAddrs, func(i, j int) bool {
+		return bytes.Compare(sortedAddrs[i][:], sortedAddrs[j][:]) < 0
+	})
+	for _, addr := range sortedAddrs {
+
+		// if idx < 50 || idx > 8850 {
+		// 	fmt.Println("addr: ", addr)
+		// }
+
 		if obj := s.stateObjects[addr]; obj.deleted {
 			s.deleteStateObject(obj)
 			s.AccountDeleted += 1

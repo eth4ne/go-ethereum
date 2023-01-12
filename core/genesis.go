@@ -289,11 +289,8 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
 	sort.Slice(addrs, func(i, j int) bool {
 		return bytes.Compare(addrs[i][:], addrs[j][:]) < 0
 	})
-	for idx, addr := range addrs {
+	for _, addr := range addrs {
 		account := g.Alloc[addr]
-		if idx > 8850 {
-			fmt.Println("g idx: ", idx, " / addr: ", addr)
-		}
 		statedb.AddBalance(addr, account.Balance)
 		statedb.SetCode(addr, account.Code)
 		statedb.SetNonce(addr, account.Nonce)

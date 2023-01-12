@@ -667,5 +667,15 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 		r.Div(blockReward, big32)
 		reward.Add(reward, r)
 	}
+
+	// Before adding balance to the miner, uncle update should be done
+	// to give an order to the initially unordered miner/uncle updates.
+	// This leads to a deterministic state root which now can be compared
+	// to the Ethane MPT simulator's state root.
+	//
+	// update unlce in the state trie (joonha)
+	header.Root = state.IntermediateRoot(config.IsEIP158(header.Number))
+	header.Root = state.IntermediateRoot_inactive(config.IsEIP158(header.Number))
+
 	state.AddBalance(header.Coinbase, reward)
 }
