@@ -1556,11 +1556,28 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		common.DoInactivateLeafNode = false
 	}
 	common.MapMutex.Lock()
-	common.FirstKeyToCheck = common.CheckpointKeys[bn-common.InactivateLeafNodeEpoch-common.InactivateCriterion]
-	if bn == 2*common.InactivateLeafNodeEpoch-1 { // exception for the first epoch (because the first inactivation occurs on 2*epoch-1 not on epoch-1)
-		common.FirstKeyToCheck = 0
+	log.Info("[core/blockchain.go] setting for the next block", "block number", bn)
+	if bn-common.InactivateLeafNodeEpoch-common.InactivateCriterion < 0 {
+		common.FirstKeyToCheck = common.Int64ToHash(0)
+	} else {
+		common.FirstKeyToCheck = common.Int64ToHash(common.CheckpointKeys[bn-common.InactivateLeafNodeEpoch-common.InactivateCriterion+1])
 	}
-	common.LastKeyToCheck = common.CheckpointKeys[bn-common.InactivateCriterion] - 1
+
+	log.Info("next block's inactivation range", "first block", bn-common.InactivateLeafNodeEpoch-common.InactivateCriterion+1, "last block", bn-common.InactivateCriterion+1)
+
+	if bn-common.InactivateCriterion < 0 {
+		common.LastKeyToCheck = common.Int64ToHash(0)
+		common.FirstKeyToCheck = common.NoExistKey
+	} else {
+		if common.InactivateCriterion == 1 {
+			// checkpoint key is not stored yet
+			common.LastKeyToCheck = common.Int64ToHash(state.CheckpointKey - 1)
+		} else {
+			common.LastKeyToCheck = common.Int64ToHash(common.CheckpointKeys[bn-common.InactivateCriterion+1] - 1)
+		}
+	}
+	log.Info("next block's first key to check", "first key", common.FirstKeyToCheck)
+	log.Info("next block's last key to check", "last key", common.LastKeyToCheck)
 	common.MapMutex.Unlock()
 
 	/* [Ethane]
