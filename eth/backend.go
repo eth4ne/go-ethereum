@@ -18,6 +18,8 @@
 package eth
 
 import (
+	"database/sql"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/big"
@@ -25,6 +27,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	_ "github.com/go-sql-driver/mysql"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
@@ -100,6 +104,8 @@ type Ethereum struct {
 	lock sync.RWMutex // Protects the variadic fields (e.g. gas price and etherbase)
 
 	shutdownTracker *shutdowncheck.ShutdownTracker // Tracks if and when the node has shutdown ungracefully
+
+	sql *sql.DB
 }
 
 // New creates a new Ethereum object (including the
@@ -485,6 +491,7 @@ func (s *Ethereum) StartMining(threads int) error {
 		// introduced to speed sync times.
 		atomic.StoreUint32(&s.handler.acceptTxs, 1)
 
+		// (hletrd)
 		go s.miner.Start(eb)
 	}
 	return nil
@@ -582,4 +589,298 @@ func (s *Ethereum) Stop() error {
 	s.eventMux.Stop()
 
 	return nil
+}
+
+func (s *Ethereum) connectSQL(username string, password string) bool {
+	var err error
+	s.sql, err = sql.Open("mysql", username + ":" + password + "@/ethereum")
+	if err != nil {
+		log.Error("[backend.go/connectSQL] connection failed")
+		return false
+	}
+	return true
+}
+
+func (s *Ethereum) insertBlockRange(start int, end int) bool {
+	if end < start {
+		log.Error("[backend.go/insertBlockRange] end must be ge than start")
+		return false
+	}
+	for i := start; i < end; i++ {
+		result := s.insertBlock(i)
+		if result == false {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *Ethereum) insertBlock(number int) bool {
+	s.handler.downloader.Cancel()
+	if s.sql == nil {
+		log.Error("[backend.go/insertBlock] not connected to SQL server")
+		return false
+	}
+
+	block_row := s.sql.QueryRow("SELECT * FROM `blocks` WHERE `number` = ?", number)
+
+	var blocknumber_i uint64; var blocknumber *big.Int
+	var timestamp uint64
+	var transactions int
+	var miner_b []byte; var miner common.Address
+	var difficulty_i uint64; var difficulty *big.Int
+	var totaldifficulty_b []byte
+	var size int
+	var gasused uint64
+	var gaslimit uint64
+	var extradata []byte
+	var hash_b []byte; var hash common.Hash
+	var parenthash_b []byte; var parenthash common.Hash
+	var sha3uncles_b []byte; var sha3uncles common.Hash
+	var stateroot_b []byte; var stateroot common.Hash
+	var nonce_b []byte; var nonce types.BlockNonce
+	var receiptsroot_b []byte; var receiptsroot common.Hash
+	var transactionsroot_b []byte; var transactionsroot common.Hash
+	var mixhash_b []byte; var mixhash common.Hash
+	var basefee sql.NullInt64
+	err := block_row.Scan(&blocknumber_i, &timestamp, &transactions, &miner_b, &difficulty_i, &totaldifficulty_b, &size, &gasused, &gaslimit, &extradata, &hash_b, &parenthash_b, &sha3uncles_b, &stateroot_b, &nonce_b, &receiptsroot_b, &transactionsroot_b, &mixhash_b, &basefee)
+
+	_ = hash
+	_ = sha3uncles
+	_ = receiptsroot
+	_ = transactionsroot
+	_ = mixhash
+
+	if err != nil {
+		log.Error("[backend.go/insertBlock] failed to read a block", "err", err);
+		return false
+	}
+
+	parenthash = common.BytesToHash(parenthash_b)
+	// set parenthash as the latest block hash
+	parenthash = s.blockchain.CurrentBlock().Hash()
+
+	sha3uncles = common.BytesToHash(sha3uncles_b)
+	miner = common.BytesToAddress(miner_b)
+	stateroot = common.BytesToHash(stateroot_b)
+	hash = common.BytesToHash(hash_b)
+	transactionsroot = common.BytesToHash(transactionsroot_b)
+	receiptsroot = common.BytesToHash(receiptsroot_b)
+	//bloom
+	difficulty = new(big.Int).SetUint64(difficulty_i)
+	blocknumber = new(big.Int).SetUint64(blocknumber_i)
+	mixhash = common.BytesToHash(mixhash_b)
+	nonce = types.EncodeNonce(binary.BigEndian.Uint64(nonce_b))
+	
+	header := &types.Header{
+		ParentHash: parenthash,
+		UncleHash: sha3uncles,
+		Coinbase: miner,
+		Root: stateroot,
+		TxHash: transactionsroot,
+		ReceiptHash: receiptsroot,
+		Bloom: types.Bloom{},
+		Difficulty: difficulty,
+		Number: blocknumber,
+		GasLimit: gaslimit,
+		GasUsed: gasused,
+		Time: timestamp,
+		Extra: extradata,
+		MixDigest: mixhash,
+		Nonce: nonce,
+		BaseFee: nil,
+	}
+
+	if basefee.Valid {
+		header.BaseFee = new(big.Int).SetUint64(uint64(basefee.Int64))
+	}
+
+	_ = header
+	_ = basefee
+
+	var txs []*types.Transaction
+	var uncles []*types.Header
+
+	tx_db, err := s.sql.Query("SELECT * FROM `transactions` WHERE `blocknumber` = ?", number)
+	if err != nil {
+		log.Error("[backend.go/insertBlock] failed to read txs")
+		return false
+	}
+	defer tx_db.Close()
+
+	// TODO-ethane: create and apply restore txs to txs
+	// for address_to_restore {
+	//	txdata := &types.LegacyTx{
+	//		Nonce: nonce,
+	//		GasPrice: gasprice,
+	//		Gas: gas,
+	//		To: to,
+	//		Value: value,
+	//		Data: input,
+	//		V: v,
+	//		R: r,
+	//		S: s,
+	//		}
+	//	tx := types.NewTx(txdata)
+	//	txs = append(txs, tx)
+	// }
+
+	for tx_db.Next() {
+		var id uint64
+		var hash_b []byte; var hash common.Hash
+		var blocknumber_i uint64
+		var from_b []byte; var from common.Address
+		var to_b sql.NullString; var to *common.Address
+		var gas uint64
+		var gasprice_i uint64
+		var gasprice *big.Int
+		var input []byte
+		var nonce uint64
+		var transactionindex uint64
+		var value_b []byte; var value *big.Int
+		var v_b []byte; var v *big.Int
+		var r_b []byte; var r *big.Int
+		var s_b []byte; var s *big.Int
+		var type_b []byte; var type_ byte
+		var class int
+
+		_ = from
+		_ = type_
+
+		if err := tx_db.Scan(&id, &hash_b, &blocknumber_i, &from_b, &to_b, &gas, &gasprice_i, &input, &nonce, &transactionindex, &value_b, &v_b, &r_b, &s_b, &type_b, &class); err != nil {
+			log.Error("[backend.go/insertBlock] failed to read a tx from block")
+			return false
+		}
+
+		if to_b.Valid {
+			to_addr := common.BytesToAddress([]byte(to_b.String))
+			to = &to_addr
+		} else {
+			to = nil
+		}
+		
+		hash = common.BytesToHash(hash_b)
+		blocknumber = new(big.Int).SetUint64(blocknumber_i)
+		from = common.BytesToAddress(from_b)
+		gasprice = new(big.Int).SetUint64(gasprice_i)
+		value, _ = new(big.Int).SetString(string(value_b[:]), 10)
+		v = new(big.Int).SetBytes(v_b)
+		r = new(big.Int).SetBytes(r_b)
+		s = new(big.Int).SetBytes(s_b)
+		type_ = type_b[0]
+
+		txdata := &types.LegacyTx{
+			Nonce: nonce,
+			GasPrice: gasprice,
+			Gas: gas,
+			To: to,
+			Value: value,
+			Data: input,
+			V: v,
+			R: r,
+			S: s,
+		}
+
+		log.Trace("[backend.go/insertBlock] tx fetched", "hash", hash, "tx", txdata)
+		
+		tx := types.NewTx(txdata)
+
+		txs = append(txs, tx)
+	}
+
+	uncle_db, err := s.sql.Query("SELECT * FROM `uncles` WHERE `blocknumber` = ?", number)
+	if err != nil {
+		log.Error("[backend.go/insertBlock] failed to fetch an uncle")
+		return false
+	}
+	defer uncle_db.Close()
+
+	for uncle_db.Next() {
+		var id uint64
+		var blocknumber_i uint64; var blocknumber *big.Int
+		var uncleheight_i uint64; var uncleheight *big.Int
+		var uncleposition int
+		var timestamp uint64
+		var miner_b []byte; var miner common.Address
+		var difficulty_i uint64; var difficulty *big.Int
+		var size int
+		var gasused uint64
+		var gaslimit uint64
+		var extradata []byte
+		var hash_b []byte; var hash common.Hash
+		var parenthash_b []byte; var parenthash common.Hash
+		var sha3uncles_b []byte; var sha3uncles common.Hash
+		var stateroot_b []byte; var stateroot common.Hash
+		var nonce_b []byte; var nonce types.BlockNonce
+		var receiptsroot_b []byte; var receiptsroot common.Hash
+		var transactionsroot_b []byte; var transactionsroot common.Hash
+		var mixhash_b []byte; var mixhash common.Hash
+		var basefee sql.NullInt64
+		var logsbloom []byte
+
+		if err := uncle_db.Scan(&id, &blocknumber_i, &uncleheight_i, &uncleposition, &timestamp, &miner_b, &difficulty_i, &size, &gasused, &gaslimit, &extradata, &hash_b, &parenthash_b, &sha3uncles_b, &stateroot_b, &nonce_b, &receiptsroot_b, &transactionsroot_b, &mixhash_b, &basefee, &logsbloom); err != nil {
+			log.Error("[backend.go/insertBlock] failed to read an uncle", "error", err)
+			return false
+		}
+
+		_ = blocknumber
+
+		blocknumber = new(big.Int).SetUint64(blocknumber_i)
+		uncleheight = new(big.Int).SetUint64(uncleheight_i)
+		miner = common.BytesToAddress(miner_b)
+		difficulty = new(big.Int).SetUint64(difficulty_i)
+		hash = common.BytesToHash(hash_b)
+		parenthash = common.BytesToHash(parenthash_b)
+		sha3uncles = common.BytesToHash(sha3uncles_b)
+		stateroot = common.BytesToHash(stateroot_b)
+		nonce = types.EncodeNonce(binary.BigEndian.Uint64(nonce_b))
+		receiptsroot = common.BytesToHash(receiptsroot_b)
+		transactionsroot = common.BytesToHash(transactionsroot_b)
+		mixhash = common.BytesToHash(mixhash_b)
+		
+		uncle := &types.Header{
+			ParentHash: parenthash,
+			UncleHash: sha3uncles,
+			Coinbase: miner,
+			Root: stateroot,
+			TxHash: transactionsroot,
+			ReceiptHash: receiptsroot,
+			Bloom: types.BytesToBloom(logsbloom),
+			Difficulty: difficulty,
+			Number: uncleheight,
+			GasLimit: gaslimit,
+			GasUsed: gasused,
+			Time: timestamp,
+			Extra: extradata,
+			MixDigest: mixhash,
+			Nonce: nonce,
+			BaseFee: nil,
+		}
+
+		if basefee.Valid {
+			uncle.BaseFee = new(big.Int).SetUint64(uint64(basefee.Int64))
+		}
+
+		log.Info("[backend.go/insertBlock] uncle fetched", "hash", hash, "uncleheight", uncleheight)
+
+		uncles = append(uncles, uncle)
+	}
+
+	blocks := make([]*types.Block, 1)
+	block := types.NewBlockWithHeader(header).WithBody(txs, uncles)
+	blockhash := block.Hash()
+	blocksize := block.Size()
+	blockroot := block.Root()
+	log.Trace("[backend.go/insertBlock] block prepared", "block", block, "header", header, "hash", blockhash, "size", blocksize, "stateroot", blockroot)
+	
+	blocks[0] = block
+	index, err := s.blockchain.InsertChain(blocks)
+	_ = index
+
+	if err != nil {
+		log.Error("[backend.go/insertBlock] failed to insert a block", "err", err)
+		return false
+	}
+	log.Trace("[backend.go/insertBlock] inserted a block", "block", blocknumber)
+	return true
 }

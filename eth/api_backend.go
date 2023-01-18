@@ -359,3 +359,18 @@ func (b *EthAPIBackend) StateAtBlock(ctx context.Context, block *types.Block, re
 func (b *EthAPIBackend) StateAtTransaction(ctx context.Context, block *types.Block, txIndex int, reexec uint64) (core.Message, vm.BlockContext, *state.StateDB, error) {
 	return b.eth.stateAtTransaction(block, txIndex, reexec)
 }
+
+// create and insert a block (hletrd)
+func (b *EthAPIBackend) ConnectSQL(username string, password string) bool {
+	return b.eth.connectSQL(username, password)
+}
+
+// create and insert a block (hletrd)
+func (b *EthAPIBackend) InsertBlock(number int) bool {
+	return b.eth.insertBlock(number)
+}
+
+// create and insert many blocks (hletrd)
+func (b *EthAPIBackend) InsertBlockRange(start int, end int) bool {
+	return b.eth.insertBlockRange(start, end)
+}

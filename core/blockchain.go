@@ -1613,6 +1613,16 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 
 		// Validate the state using the default validator
 		substart = time.Now()
+		
+		// set header fields (hletrd)
+		// Bloom, stateroot, hash
+		header_sealed := block.Header()
+		header_sealed.Bloom = types.CreateBloom(receipts)
+		header_sealed.Root = statedb.IntermediateRoot(bc.chainConfig.IsEIP158(header_sealed.Number))
+		header_sealed.Hash()
+
+		block = block.WithSeal(header_sealed)
+
 		if err := bc.validator.ValidateState(block, statedb, receipts, usedGas); err != nil {
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)

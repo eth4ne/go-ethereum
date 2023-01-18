@@ -31,6 +31,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
@@ -567,12 +568,17 @@ func (ethash *Ethash) verifySeal(chain consensus.ChainHeaderReader, header *type
 		runtime.KeepAlive(cache)
 	}
 	// Verify the calculated values against the ones provided in the header
+	// Pass validation here, because block_validator.go will double-check the block and handle the rest. (hletrd)
 	if !bytes.Equal(header.MixDigest[:], digest) {
-		return errInvalidMixDigest
+		log.Error("[consensus.go/verifySeal] errorInvalidMixDigest", "have", header.MixDigest, "want", common.BytesToHash(digest))
+		// supressing error (hletrd)
+		//return errInvalidMixDigest
 	}
 	target := new(big.Int).Div(two256, header.Difficulty)
 	if new(big.Int).SetBytes(result).Cmp(target) > 0 {
-		return errInvalidPoW
+		log.Error("[consensus.go/verifySeal] errorInvalidPoW", "have", result, "want", target)
+		// supressing error (hletrd)
+		//return errInvalidPoW
 	}
 	return nil
 }

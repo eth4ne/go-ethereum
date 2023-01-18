@@ -5449,6 +5449,24 @@ var methods = function () {
         params: 0
     });
 
+    var connectSQL = new Method({
+        name: 'connectSQL',
+        call: 'eth_connectSQL',
+        params: 2
+    });
+    
+    var insertBlock = new Method({
+        name: 'insertBlock',
+        call: 'eth_insertBlock',
+        params: 1
+    });
+
+    var insertBlockRange = new Method({
+        name: 'insertBlockRange',
+        call: 'eth_insertBlockRange',
+        params: 2
+    });
+
     return [
         getBalance,
         getStorageAt,
@@ -5472,7 +5490,11 @@ var methods = function () {
         compileLLL,
         compileSerpent,
         submitWork,
-        getWork
+        getWork,
+        // (hletrd)
+        connectSQL,
+        insertBlock,
+        insertBlockRange,
     ];
 };
 

@@ -73,6 +73,11 @@ func (args *TransactionArgs) data() []byte {
 	return nil
 }
 
+// setter for data (hletrd)
+func (args *TransactionArgs) SetData(data []byte) {
+	*args.Data = common.CopyBytes(data)
+}
+
 // setDefaults fills in default values for unspecified tx fields.
 func (args *TransactionArgs) setDefaults(ctx context.Context, b Backend) error {
 	if args.GasPrice != nil && (args.MaxFeePerGas != nil || args.MaxPriorityFeePerGas != nil) {

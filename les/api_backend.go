@@ -331,3 +331,18 @@ func (b *LesApiBackend) StateAtBlock(ctx context.Context, block *types.Block, re
 func (b *LesApiBackend) StateAtTransaction(ctx context.Context, block *types.Block, txIndex int, reexec uint64) (core.Message, vm.BlockContext, *state.StateDB, error) {
 	return b.eth.stateAtTransaction(ctx, block, txIndex, reexec)
 }
+
+func (b *LesApiBackend) ConnectSQL(username string, password string) bool {
+	//dods nothing
+	return false
+}
+
+func (b *LesApiBackend) InsertBlock(number int) bool {
+	//does nothing
+	return false
+}
+
+func (b *LesApiBackend) InsertBlockRange(start int, end int) bool {
+	//does nothing
+	return false
+}
