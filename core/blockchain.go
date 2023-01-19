@@ -1174,7 +1174,8 @@ func (bc *BlockChain) writeKnownBlock(block *types.Block) error {
 // database.
 func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB) error {
 	// Calculate the total difficulty of the block
-	ptd := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
+	phash := bc.GetHeaderByNumber(block.NumberU64()-1).Hash()
+	ptd := bc.GetTd(phash, block.NumberU64()-1)
 	if ptd == nil {
 		return consensus.ErrUnknownAncestor
 	}
@@ -1343,20 +1344,21 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 	defer bc.blockProcFeed.Send(false)
 
 	// Do a sanity check that the provided chain is actually ordered and linked.
-	for i := 1; i < len(chain); i++ {
+	/*for i := 1; i < len(chain); i++ {
 		block, prev := chain[i], chain[i-1]
 		if block.NumberU64() != prev.NumberU64()+1 || block.ParentHash() != prev.Hash() {
-			log.Error("Non contiguous block insert",
-				"number", block.Number(),
-				"hash", block.Hash(),
-				"parent", block.ParentHash(),
-				"prevnumber", prev.Number(),
-				"prevhash", prev.Hash(),
-			)
-			return 0, fmt.Errorf("non contiguous insert: item %d is #%d [%x..], item %d is #%d [%x..] (parent [%x..])", i-1, prev.NumberU64(),
-				prev.Hash().Bytes()[:4], i, block.NumberU64(), block.Hash().Bytes()[:4], block.ParentHash().Bytes()[:4])
+			// parenthash will be manipulated later (hletrd)
+			//log.Error("Non contiguous block insert",
+			//	"number", block.Number(),
+			//	"hash", block.Hash(),
+			//	"parent", block.ParentHash(),
+			//	"prevnumber", prev.Number(),
+			//	"prevhash", prev.Hash(),
+			//)
+			//return 0, fmt.Errorf("non contiguous insert: item %d is #%d [%x..], item %d is #%d [%x..] (parent [%x..])", i-1, prev.NumberU64(),
+			//	prev.Hash().Bytes()[:4], i, block.NumberU64(), block.Hash().Bytes()[:4], block.ParentHash().Bytes()[:4])
 		}
-	}
+	}*/
 	// Pre-checks passed, start the full block imports
 	if !bc.chainmu.TryLock() {
 		return 0, errChainStopped
@@ -1400,8 +1402,13 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		headers[i] = block.Header()
 		seals[i] = verifySeals
 	}
-	abort, results := bc.engine.VerifyHeaders(bc, headers, seals)
-	defer close(abort)
+	// not to verify (hletrd)
+	//abort, results := bc.engine.VerifyHeaders(bc, headers, seals)
+	//defer close(abort)
+	results := make(chan error, len(headers))
+	for i := 0; i < len(headers); i++ {
+		results <- nil
+	}
 
 	// Peek the error for the first block to decide the directing import logic
 	it := newInsertIterator(chain, results, bc.validator)
@@ -1558,10 +1565,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 
 		// Retrieve the parent block and it's state to execute on top
 		start := time.Now()
-		parent := it.previous()
-		if parent == nil {
-			parent = bc.GetHeader(block.ParentHash(), block.NumberU64()-1)
-		}
+		parent := bc.GetHeaderByNumber(block.NumberU64()-1)
+
 		statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
 		if err != nil {
 			return it.index, err
@@ -1588,6 +1593,15 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 				}(time.Now(), followup, throwaway, &followupInterrupt)
 			}
 		}
+
+		header_sealed := block.Header()
+		header_sealed.Root = statedb.IntermediateRoot(bc.chainConfig.IsEIP158(header_sealed.Number))
+		header_sealed.UncleHash = types.CalcUncleHash(block.Uncles())
+		header_sealed.TxHash = types.DeriveSha(block.Transactions(), trie.NewStackTrie(nil))
+		header_sealed.ReceiptHash = emptyCodeHash
+		header_sealed.ParentHash = bc.GetHeaderByNumber(block.NumberU64()-1).Hash()
+		header_sealed.Hash()
+		block = block.WithSeal(header_sealed)
 
 		// Process block using the parent state as reference point
 		substart := time.Now()
@@ -1616,9 +1630,13 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		
 		// set header fields (hletrd)
 		// Bloom, stateroot, hash
-		header_sealed := block.Header()
+		header_sealed = block.Header()
 		header_sealed.Bloom = types.CreateBloom(receipts)
 		header_sealed.Root = statedb.IntermediateRoot(bc.chainConfig.IsEIP158(header_sealed.Number))
+		header_sealed.ReceiptHash = types.DeriveSha(receipts, trie.NewStackTrie(nil))
+		header_sealed.GasUsed = usedGas
+
+		// hash should be manipulated if needed
 		header_sealed.Hash()
 
 		block = block.WithSeal(header_sealed)
@@ -1958,7 +1976,7 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 		}
 	} else {
 		// New chain is longer, stash all blocks away for subsequent insertion
-		for ; newBlock != nil && newBlock.NumberU64() != oldBlock.NumberU64(); newBlock = bc.GetBlock(newBlock.ParentHash(), newBlock.NumberU64()-1) {
+		for ; newBlock != nil && newBlock.NumberU64() != oldBlock.NumberU64(); newBlock = bc.GetBlockByNumber(newBlock.NumberU64()-1) {
 			newChain = append(newChain, newBlock)
 		}
 	}
@@ -1992,7 +2010,7 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 		if oldBlock == nil {
 			return fmt.Errorf("invalid old chain")
 		}
-		newBlock = bc.GetBlock(newBlock.ParentHash(), newBlock.NumberU64()-1)
+		newBlock = bc.GetBlockByNumber(newBlock.NumberU64()-1)
 		if newBlock == nil {
 			return fmt.Errorf("invalid new chain")
 		}
