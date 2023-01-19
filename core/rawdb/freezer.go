@@ -514,13 +514,14 @@ func (f *freezer) freeze(db ethdb.KeyValueStore) {
 		}
 
 		// Log something friendly for the user
+		// no, do not. (hletrd)
 		context := []interface{}{
 			"blocks", f.frozen - first, "elapsed", common.PrettyDuration(time.Since(start)), "number", f.frozen - 1,
 		}
 		if n := len(ancients); n > 0 {
 			context = append(context, []interface{}{"hash", ancients[n-1]}...)
 		}
-		log.Info("Deep froze chain segment", context...)
+		log.Debug("Deep froze chain segment", context...)
 
 		// Avoid database thrashing with tiny writes
 		if f.frozen-first < freezerBatchLimit {

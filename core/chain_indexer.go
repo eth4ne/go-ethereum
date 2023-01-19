@@ -319,10 +319,11 @@ func (c *ChainIndexer) updateLoop() {
 			c.lock.Lock()
 			if c.knownSections > c.storedSections {
 				// Periodically print an upgrade log message to the user
+				// no, do not. (hletrd)
 				if time.Since(updated) > 8*time.Second {
 					if c.knownSections > c.storedSections+1 {
 						updating = true
-						c.log.Info("Upgrading chain index", "percentage", c.storedSections*100/c.knownSections)
+						c.log.Debug("Upgrading chain index", "percentage", c.storedSections*100/c.knownSections)
 					}
 					updated = time.Now()
 				}
@@ -353,7 +354,7 @@ func (c *ChainIndexer) updateLoop() {
 					c.setValidSections(section + 1)
 					if c.storedSections == c.knownSections && updating {
 						updating = false
-						c.log.Info("Finished upgrading chain index")
+						c.log.Debug("Finished upgrading chain index")
 					}
 					c.cascadedHead = c.storedSections*c.sectionSize - 1
 					for _, child := range c.children {
