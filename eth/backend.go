@@ -649,7 +649,6 @@ func (s *Ethereum) insertBlockRange(start int, end int) bool {
 			Difficulty: difficulty,
 			Number: blocknumber,
 			GasLimit: gaslimit,
-			//GasUsed: gasused,
 			Time: timestamp,
 			Extra: extradata,
 			MixDigest: mixhash,
