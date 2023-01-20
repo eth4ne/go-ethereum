@@ -608,7 +608,7 @@ func (s *Ethereum) connectSQL(username string, password string) bool {
 	return true
 }
 
-func (s *Ethereum) readBlock(number int) (*types.Header, error) {
+func (s *Ethereum) readBlock(number int, result chan<- *types.Header, err chan<- error) {
 	block_row := s.sql.QueryRow("SELECT `timestamp`, `miner`, `difficulty`, `gaslimit`, `extradata`, `nonce`, `mixhash`, `basefee` FROM `blocks` WHERE `number` = ?", number)
 
 	var blocknumber *big.Int
@@ -620,13 +620,14 @@ func (s *Ethereum) readBlock(number int) (*types.Header, error) {
 	var nonce_b []byte; var nonce types.BlockNonce
 	var mixhash_b []byte; var mixhash common.Hash
 	var basefee sql.NullInt64
-	err := block_row.Scan(&timestamp, &miner_b, &difficulty_i, &gaslimit, &extradata, &nonce_b, &mixhash_b, &basefee)
+	err_ := block_row.Scan(&timestamp, &miner_b, &difficulty_i, &gaslimit, &extradata, &nonce_b, &mixhash_b, &basefee)
 
 	_ = mixhash
 
-	if err != nil {
+	if err_ != nil {
 		log.Error("[backend.go/readBlock] failed to read a block", "number", number, "err", err);
-		return nil, ErrFetchBlock
+		result <- nil
+		err <- ErrFetchBlock
 	}
 
 	miner = common.BytesToAddress(miner_b)
@@ -650,16 +651,18 @@ func (s *Ethereum) readBlock(number int) (*types.Header, error) {
 	if basefee.Valid {
 		header.BaseFee = new(big.Int).SetUint64(uint64(basefee.Int64))
 	}
-	return header, nil
+	result <- header
+	err <- nil
 }
 
-func (s *Ethereum) readTransactions(blocknumber int) ([]*types.Transaction, error) {
+func (s *Ethereum) readTransactions(blocknumber int, result chan<- []*types.Transaction, err chan<- error) {
 	var txs []*types.Transaction
 
-	tx_db, err := s.sql.Query("SELECT `to`, `gas`, `gasprice`, `input`, `nonce`, `value`, `v`, `r`, `s`, `type` FROM `transactions` WHERE `blocknumber` = ?", blocknumber)
-	if err != nil {
+	tx_db, err_ := s.sql.Query("SELECT `to`, `gas`, `gasprice`, `input`, `nonce`, `value`, `v`, `r`, `s`, `type` FROM `transactions` WHERE `blocknumber` = ?", blocknumber)
+	if err_ != nil {
 		log.Error("[backend.go/readTransactions] failed to read txs", "block", blocknumber)
-		return nil, ErrFetchTxs
+		result <- nil
+		err <- ErrFetchTxs
 	}
 	defer tx_db.Close()
 
@@ -696,9 +699,10 @@ func (s *Ethereum) readTransactions(blocknumber int) ([]*types.Transaction, erro
 
 		_ = type_
 
-		if err := tx_db.Scan(&to_b, &gas, &gasprice_i, &input, &nonce, &value_b, &v_b, &r_b, &s_b, &type_b); err != nil {
+		if err_ := tx_db.Scan(&to_b, &gas, &gasprice_i, &input, &nonce, &value_b, &v_b, &r_b, &s_b, &type_b); err_ != nil {
 			log.Error("[backend.go/readTransactions] failed to read a tx from block", "block", blocknumber)
-			return nil, ErrFetchTxs
+			result <- nil
+			err <- ErrFetchTxs
 		}
 
 		if to_b.Valid {
@@ -733,16 +737,18 @@ func (s *Ethereum) readTransactions(blocknumber int) ([]*types.Transaction, erro
 		txs = append(txs, tx)
 	}
 
-	return txs, nil
+	result <- txs
+	err <- nil
 }
 
-func (s *Ethereum) readUncles(blocknumber int) ([]*types.Header, error) {
+func (s *Ethereum) readUncles(blocknumber int, result chan<- []*types.Header, err chan<- error) {
 	var uncles []*types.Header
 
-	uncle_db, err := s.sql.Query("SELECT `uncleheight`, `timestamp`, `miner`, `difficulty`, `gasused`, `gaslimit`, `extradata`, `parenthash`, `sha3uncles`, `stateroot`, `nonce`, `receiptsroot`, `transactionsroot`, `mixhash`, `basefee`, `logsbloom` FROM `uncles` WHERE `blocknumber` = ?", blocknumber)
-	if err != nil {
+	uncle_db, err_ := s.sql.Query("SELECT `uncleheight`, `timestamp`, `miner`, `difficulty`, `gasused`, `gaslimit`, `extradata`, `parenthash`, `sha3uncles`, `stateroot`, `nonce`, `receiptsroot`, `transactionsroot`, `mixhash`, `basefee`, `logsbloom` FROM `uncles` WHERE `blocknumber` = ?", blocknumber)
+	if err_ != nil {
 		log.Error("[backend.go/readUncles] failed to fetch an uncle")
-		return nil, ErrFetchUncles
+		result <- nil
+		err <- ErrFetchUncles
 	}
 	defer uncle_db.Close()
 
@@ -764,9 +770,10 @@ func (s *Ethereum) readUncles(blocknumber int) ([]*types.Header, error) {
 		var basefee sql.NullInt64
 		var logsbloom []byte
 
-		if err := uncle_db.Scan(&uncleheight_i, &timestamp, &miner_b, &difficulty_i, &gasused, &gaslimit, &extradata, &parenthash_b, &sha3uncles_b, &stateroot_b, &nonce_b, &receiptsroot_b, &transactionsroot_b, &mixhash_b, &basefee, &logsbloom); err != nil {
+		if err_ := uncle_db.Scan(&uncleheight_i, &timestamp, &miner_b, &difficulty_i, &gasused, &gaslimit, &extradata, &parenthash_b, &sha3uncles_b, &stateroot_b, &nonce_b, &receiptsroot_b, &transactionsroot_b, &mixhash_b, &basefee, &logsbloom); err_ != nil {
 			log.Error("[backend.go/readUncles] failed to read an uncle", "error", err)
-			return nil, ErrFetchUncles
+			result <- nil
+			err <- ErrFetchUncles
 		}
 
 		uncleheight = new(big.Int).SetUint64(uncleheight_i)
@@ -808,7 +815,18 @@ func (s *Ethereum) readUncles(blocknumber int) ([]*types.Header, error) {
 		uncles = append(uncles, uncle)
 	}
 
-	return uncles, nil
+	result <- uncles
+	err <- nil
+}
+
+func (s *Ethereum) insertChain(chain []*types.Block, result chan bool) {
+	index, err := s.blockchain.InsertChain(chain)
+	_ = index
+	if err != nil {
+		log.Error("[backend.go/insertChain] failed to insert blocks", "err", err)
+		result <- false
+	}
+	result <- true
 }
 
 func (s *Ethereum) insertBlockRange(start int, end int) bool {
@@ -820,26 +838,36 @@ func (s *Ethereum) insertBlockRange(start int, end int) bool {
 	s.handler.downloader.Cancel()
 
 	if s.sql == nil {
-		log.Error("[backend.go/insertBlock] not connected to an SQL server")
+		log.Error("[backend.go/insertBlockRange] not connected to an SQL server")
 		return false
 	}
 
-	blocks := make([]*types.Block, end - start)
+	batchsize := 256
+
+	blocks := make([]*types.Block, batchsize)
+	blocks_insert := make([]*types.Block, batchsize)
 	seq := 0
+	inserting := false
+
+	result_ch := make(chan bool)
+
+	header_ch := make(chan *types.Header)
+	txs_ch := make(chan []*types.Transaction)
+	uncles_ch := make(chan []*types.Header)
+	err_b_ch := make(chan error)
+	err_t_ch := make(chan error)
+	err_u_ch := make(chan error)
 
 	for number := start; number < end; number++ {
-		header, err := s.readBlock(number)
-		if err != nil {
-			return false
-		}
+		go s.readBlock(number, header_ch, err_b_ch)
+		go s.readTransactions(number, txs_ch, err_t_ch)
+		go s.readUncles(number, uncles_ch, err_u_ch)
 
-		txs, err := s.readTransactions(number)
-		if err != nil {
-			return false
-		}
+		header, txs, uncles := <-header_ch, <-txs_ch, <-uncles_ch
+		err_b, err_t, err_u := <-err_b_ch, <-err_t_ch, <-err_u_ch
 
-		uncles, err := s.readUncles(number)
-		if err != nil {
+		if err_b != nil || err_t != nil || err_u != nil {
+			log.Error("[backend.go/insertBlockRange] fetch failed")
 			return false
 		}
 
@@ -847,19 +875,42 @@ func (s *Ethereum) insertBlockRange(start int, end int) bool {
 		blockhash := block.Hash()
 		blocksize := block.Size()
 
-		log.Trace("[backend.go/insertBlock] block prepared", "block", block, "header", header, "hash", blockhash, "size", blocksize)
+		log.Trace("[backend.go/insertBlockRange] block prepared", "block", block, "header", header, "hash", blockhash, "size", blocksize)
 		blocks[seq] = block
 		seq++
+
+		if seq == batchsize {
+			log.Trace("[backend.go/insertBlockRange] block insert")
+			if inserting == true {
+				result := <- result_ch
+				if result == false {
+					log.Error("[backend.go/insertBlockRange] insert failed")
+					return false
+				}
+			}
+			copy(blocks_insert, blocks)
+			go s.insertChain(blocks_insert, result_ch)
+			inserting = true
+			seq = 0
+		}
 	}
 
-	index, err := s.blockchain.InsertChain(blocks)
-	_ = index
+	if inserting == true {
+		result := <- result_ch
+		if result == false {
+			log.Error("[backend.go/insertBlockRange] insert failed")
+			return false
+		}
+	}
+	go s.insertChain(blocks[:seq], result_ch)
+	result := <- result_ch
 
-	if err != nil {
-		log.Error("[backend.go/insertBlock] failed to insert blocks", "err", err)
+	if result == false {
+		log.Error("[backend.go/insertBlockRange] insert failed")
 		return false
 	}
-	log.Trace("[backend.go/insertBlock] inserted blocks", "start", start, "end", end)
+
+	log.Trace("[backend.go/insertBlockRange] inserted blocks", "start", start, "end", end)
 	return true
 }
 
