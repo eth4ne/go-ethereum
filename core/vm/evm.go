@@ -17,7 +17,10 @@
 package vm
 
 import (
+	"bytes"
+	"fmt"
 	"math/big"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -25,6 +28,14 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/holiman/uint256"
+
+	// (joonha)
+	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/trie"
 )
 
 // emptyCodeHash is used by create to ensure deployment is disallowed to already
@@ -36,10 +47,19 @@ type (
 	CanTransferFunc func(StateDB, common.Address, *big.Int) bool
 	// TransferFunc is the signature of a transfer function
 	TransferFunc func(StateDB, common.Address, common.Address, *big.Int)
+	// RestoreFunc is the signature of a restore function (joonha)
+	RestoreFunc func(StateDB, common.Address, *big.Int, []byte, common.Hash)
 	// GetHashFunc returns the n'th block hash in the blockchain
 	// and is used by the BLOCKHASH EVM op code.
 	GetHashFunc func(uint64) common.Hash
 )
+
+func checkError(err error) {
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+}
 
 func (evm *EVM) precompile(addr common.Address) (PrecompiledContract, bool) {
 	var precompiles map[common.Address]PrecompiledContract
@@ -65,6 +85,8 @@ type BlockContext struct {
 	CanTransfer CanTransferFunc
 	// Transfer transfers ether from one account to the other
 	Transfer TransferFunc
+	// Restore function should be defined here (joonha)
+	Restore RestoreFunc
 	// GetHash returns the hash corresponding to n
 	GetHash GetHashFunc
 
@@ -179,21 +201,237 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 
 	if !evm.StateDB.Exist(addr) {
 		if !isPrecompile && evm.chainRules.IsEIP158 && value.Sign() == 0 {
-			// Calling a non existing account, don't do anything, but ping the tracer
-			if evm.Config.Debug {
-				if evm.depth == 0 {
-					evm.Config.Tracer.CaptureStart(evm, caller.Address(), addr, false, input, gas, value)
-					evm.Config.Tracer.CaptureEnd(ret, 0, 0, nil)
-				} else {
-					evm.Config.Tracer.CaptureEnter(CALL, caller.Address(), addr, input, gas, value)
-					evm.Config.Tracer.CaptureExit(ret, 0, nil)
-				}
+			// // Calling a non existing account, don't do anything, but ping the tracer
+			// if evm.Config.Debug {
+			// 	if evm.depth == 0 {
+			// 		evm.Config.Tracer.CaptureStart(evm, caller.Address(), addr, false, input, gas, value)
+			// 		evm.Config.Tracer.CaptureEnd(ret, 0, 0, nil)
+			// 	} else {
+			// 		evm.Config.Tracer.CaptureEnter(CALL, caller.Address(), addr, input, gas, value)
+			// 		evm.Config.Tracer.CaptureExit(ret, 0, nil)
+			// 	}
+			// }
+
+			// (joonha)
+			if evm.Config.Debug && evm.depth == 0 {
+				evm.Config.Tracer.CaptureStart(evm, caller.Address(), addr, false, input, gas, value)
+				evm.Config.Tracer.CaptureEnd(ret, 0, 0, nil)
 			}
+
 			return nil, gas, nil
 		}
-		evm.StateDB.CreateAccount(addr)
+		// evm.StateDB.CreateAccount(addr) // --> original code
+
+		// if it is not a restoration tx, should create the account (joonha)
+		if addr != common.RestoreAddress {
+			evm.StateDB.CreateAccount_withBlockNum(addr, evm.Context.BlockNumber)
+		}
 	}
-	evm.Context.Transfer(evm.StateDB, caller.Address(), addr, value)
+
+	/*
+	* [Ethane]
+	* restore inactive accounts into the active trie
+	*
+	* If Tx's TO address is RestoreAddress, we restore.
+	* Restoring target nodes' information is in the
+	* restore Tx's data field and it reaches here as input.
+	* We decode the data and restore the accounts. The
+	* input contains target address, checkpoint block
+	* number, and the leaf nodes' Merkle proofs.
+	 */
+
+	if addr == common.RestoreAddress {
+
+		// decode rlp encoded data
+		var data []interface{}
+		rlp.Decode(bytes.NewReader(input), &data)
+		// log.Info("### print input decode", "data", data)
+
+		cnt := 0
+		limit := len(data)
+
+		if limit == 0 {
+			// Error: no proof in tx data
+			log.Error("❌  Restore Error: no proof in tx data")
+			os.Exit(1)
+			return nil, gas, ErrInvalidProof
+		}
+
+		// get inactive account address
+		inactiveAddrString := string(data[cnt].([]byte))
+		inactiveAddr := common.HexToAddress(inactiveAddrString)
+
+		log.Info("### restoration target", "address", inactiveAddr)
+		common.MapMutex.Lock()
+		log.Info("### len(AddrToKey_inactive)", "len(AddrToKey_inactive)", len(common.AddrToKey_inactive[inactiveAddr]))
+		common.MapMutex.Unlock()
+
+		// (log for Debugging)
+		// lastIndex := len(common.AddrToKey_inactive[inactiveAddr]) - 1
+		// ii := 0
+		// for ii <= lastIndex {
+		// 	log.Info("### addrtoKey_inactive", "ii", ii, ".", common.AddrToKey_inactive[inactiveAddr][ii])
+		// 	ii++
+		// }
+
+		// get block number to start restoration
+		blockNum := big.NewInt(0)
+		blockNum.SetBytes(data[1].([]byte))
+		log.Info("### block num", "blocknum", blockNum.Int64())
+		checkpointBlock := blockNum.Uint64()
+		log.Info("### Checkpoint Block", "checkpointBlock", checkpointBlock)
+
+		var curAcc, resAcc *state.Account
+		curAcc = nil              // temp account
+		resAcc = &state.Account{} // result account
+		resAcc.Balance = big.NewInt(0)
+		var accounts []*state.Account
+		var targetKeys []common.Hash
+		var targetAccounts [][]byte
+		var blockRoot_inactive common.Hash
+
+		cnt = cnt + 3
+		for cnt < limit {
+			// log.Info("### cnt < limit", "cnt", cnt, "limit", limit)
+
+			// get a merkle proof from tx data
+			merkleProof, blockHeader := parseProof(data, int64(checkpointBlock), &cnt, limit)
+
+			// inactive state trie root
+			blockRoot_inactive = blockHeader.Root_inactive
+
+			// retrieve target accounts and keys from the merkle proof
+			// verify the proofs simultaneously
+			var merkleErr error
+			targetAccounts, merkleErr, targetKeys = trie.VerifyProof_GetAccountsAndKeys(blockHeader.Root_inactive, merkleProof)
+			if merkleErr != nil {
+				// bad merkle proof
+				log.Error("❌  Restore Error: bad merkle proof")
+				os.Exit(1)
+				return nil, gas, ErrInvalidProof
+			} else {
+				log.Info("✔️  Verify Merkle Proof for Restoration ... Success")
+			}
+
+			log.Info("targetAccounts", "targetAccounts", targetAccounts)
+			log.Info("targetKeys", "targetKeys", targetKeys)
+			log.Info("len(targetKeys)", "len(targetKeys)", len(targetKeys))
+
+			// update alreadyRestored list
+			for i := 0; i < len(targetKeys); i++ {
+				evm.StateDB.UpdateAlreadyRestoredDirty(targetKeys[i])
+			}
+
+			// decode leaf nodes to accounts
+			// accounts are ready to be restored
+			// TODO (joonha): change code to get non-nil codeHash not the first's --> this is okay if the simulation only implements RESTORE_ALL option
+			firstValidIndex := -1
+			for i := 0; i < len(targetAccounts); i++ {
+				acc := targetAccounts[i]
+				if acc == nil { // there is no account // --> this case might not exist
+					log.Info("### No account in the merkle proof")
+				} else { // there is the account
+					log.Info("### There is the account in the merkle proof")
+					curAcc = &state.Account{}
+					rlp.DecodeBytes(acc, &curAcc)
+					accounts = append(accounts, curAcc)
+
+					// get codeHash and storageRoot of the first inactive CA
+					if firstValidIndex == -1 {
+						firstValidIndex = i
+						resAcc.CodeHash = curAcc.CodeHash
+						resAcc.Root = curAcc.Root
+					}
+				}
+			}
+		}
+
+		// Reaching here, 'accounts' contains a list of accounts to be restored,
+		// and 'retrievedKeys' contains a list of keys of that accounts.
+
+		// when there is no valid account
+		log.Info("### number of accounts", "len(accounts)", len(accounts))
+		if len(accounts) == 0 {
+			// This case might exist when all the accounts are already restored.
+			// It is natural so do not exit and just jump to outOfRestoration.
+			log.Info("❌  Restore Error: no accounts to restore (but it is okay to go on)")
+
+			// // (debugging) export log to file
+			// f1, err := os.Create("joonha_log.txt")
+			// checkError(err)
+			// defer f1.Close()
+			// fmt.Fprintf(f1, "joonha Restore Error: no accounts to restore\nblock number is %d", evm.Context.BlockNumber)
+
+			goto outOfRestoration
+		}
+
+		// check state's dirty first and then common list
+		doExist := evm.StateDB.DoDirtyCrumbExist(inactiveAddr)
+		if !doExist {
+			_, doExist = common.AddrToKey[inactiveAddr]
+		}
+
+		if !doExist { // create (no crumb account in the active trie)
+			log.Info("### CREATE")
+			evm.StateDB.CreateAccount_withBlockNum(inactiveAddr, evm.Context.BlockNumber)
+
+		} else { // merge (crumb account exists in the active trie)
+			log.Info("### MERGE")
+			activeBalance := evm.StateDB.GetBalance(inactiveAddr) // get balance info from active trie
+
+			log.Info("activeBalance", "activeBalance", activeBalance)
+			if accounts[0] != nil {
+				resAcc.Balance.Add(activeBalance, big.NewInt(0))
+			}
+		}
+
+		// merge balances of the restoring accounts
+		log.Info("len(accounts)", "len(accounts)", len(accounts))
+		for i := 0; i < len(accounts); i++ {
+			if accounts[i] != nil {
+				resAcc.Balance.Add(resAcc.Balance, accounts[i].Balance)
+			}
+		}
+
+		// apply balance, codeHash of resAcc
+		evm.Context.Restore(evm.StateDB, inactiveAddr, resAcc.Balance, resAcc.CodeHash, resAcc.Root)
+
+		// rebuild CA's storage trie if inactive storage snapshot is on
+		if common.UsingInactiveStorageSnapshot {
+			evm.StateDB.RebuildStorageTrieFromSnapshot(blockRoot_inactive, inactiveAddr, targetKeys[0])
+
+			// TODO (joonha) move this verifying into RebuildStorageTrieFromSnapshot (before updateTrie)
+			// compare rebuilt storage trie's root to the retrieved account's root
+			origRoot := accounts[0].Root
+			newRoot := evm.StateDB.GetRoot(inactiveAddr)
+			if origRoot == newRoot {
+				log.Info("✔️  Storage Trie Rebuilding ... Success")
+			} else {
+				// storage trie is different from the original
+				log.Error("❌  Restore Error: Rebuilt storage trie is different from the original")
+				os.Exit(1)
+			}
+
+		} else {
+			log.Warn("⚠️  Snapshot is OFF ... Please rebuild the storage trie in another way")
+		}
+
+		// Remove inactive account from AddrToKey_inactive map
+		evm.StateDB.RemoveRestoredKeyFromAddrToKey_inactive(inactiveAddr, targetKeys) // note: this is done directly to the common list (not a dirty)
+
+		// Remove inactive account from inactive Trie
+		for i := 0; i < len(targetKeys); i++ {
+			evm.StateDB.UpdateKeysToDeleteDirty_restore(common.BytesToHash(targetKeys[i][:]))
+		}
+
+		// restoration ends
+
+	} else { // no restoration (normal transaction)
+		// value transfer tx
+		evm.Context.Transfer(evm.StateDB, caller.Address(), addr, value)
+	}
+
+outOfRestoration: // when there is no account to restore, jump to here (joonha)
 
 	// Capture the tracer start/end events in debug mode
 	if evm.Config.Debug {
@@ -242,6 +480,31 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		//	evm.StateDB.DiscardSnapshot(snapshot)
 	}
 	return ret, gas, err
+}
+
+// parseProof get a merkle proof from tx data (joonha)
+func parseProof(data []interface{}, blockNum int64, cnt *int, limit int) (common.ProofList, *types.Header) {
+
+	// Get block header
+	blockHash := rawdb.ReadCanonicalHash(rawdb.GlobalDB, uint64(blockNum))
+	blockHeader := rawdb.ReadHeader(rawdb.GlobalDB, blockHash, uint64(blockNum))
+
+	log.Info("### PARSE PROOF")
+
+	// get Merkle proof
+	merkleProof := make(common.ProofList, 0)
+
+	n := big.NewInt(0)
+	n.SetBytes(data[*cnt].([]byte))
+
+	for *cnt < limit {
+		pf := data[*cnt].([]byte)
+		merkleProof = append(merkleProof, pf)
+		*cnt++
+	}
+	*cnt++ // for iteration
+
+	return merkleProof, blockHeader
 }
 
 // CallCode executes the contract associated with the addr with the given input

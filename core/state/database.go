@@ -19,6 +19,7 @@ package state
 import (
 	"errors"
 	"fmt"
+	"math/big"
 
 	"github.com/VictoriaMetrics/fastcache"
 	"github.com/ethereum/go-ethereum/common"
@@ -104,6 +105,15 @@ type Trie interface {
 	// nodes of the longest existing prefix of the key (at least the root), ending
 	// with the node that proves the absence of the key.
 	Prove(key []byte, fromLevel uint, proofDb ethdb.KeyValueWriter) error
+
+	// ethane
+	GetLastKey() *big.Int
+	TryUpdate_SetKey(key, value []byte) error
+	TryGet_SetKey(key []byte) ([]byte, error)
+	FindLeafNodes([]byte, []byte) ([][]byte, []common.Hash, error)
+	TryGetAllSlots() (map[common.Hash][]byte, error)
+	Print_storageTrie()
+	Print()
 }
 
 // NewDatabase creates a backing store for state. The returned database is safe for

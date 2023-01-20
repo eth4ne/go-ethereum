@@ -144,7 +144,7 @@ const (
 type blockChain interface {
 	CurrentBlock() *types.Block
 	GetBlock(hash common.Hash, number uint64) *types.Block
-	StateAt(root common.Hash) (*state.StateDB, error)
+	StateAt(root common.Hash, root_inactive common.Hash) (*state.StateDB, error)
 
 	SubscribeChainHeadEvent(ch chan<- ChainHeadEvent) event.Subscription
 }
@@ -638,6 +638,12 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	intrGas, err := IntrinsicGas(tx.Data(), tx.AccessList(), tx.To() == nil, true, pool.istanbul)
 	if err != nil {
 		return err
+	}
+	// to prevent ErrIntrinsicGas (joonha)
+	if tx.To() != nil {
+		if *tx.To() == common.HexToAddress("0x0123456789012345678901234567890123456789") { // (joonha)
+			intrGas = 0
+		}
 	}
 	if tx.Gas() < intrGas {
 		return ErrIntrinsicGas
@@ -1285,7 +1291,7 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 	if newHead == nil {
 		newHead = pool.chain.CurrentBlock().Header() // Special case during testing
 	}
-	statedb, err := pool.chain.StateAt(newHead.Root)
+	statedb, err := pool.chain.StateAt(newHead.Root, newHead.Root_inactive)
 	if err != nil {
 		log.Error("Failed to reset txpool state", "err", err)
 		return

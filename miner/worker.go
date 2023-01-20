@@ -750,7 +750,7 @@ func (w *worker) resultLoop() {
 func (w *worker) makeEnv(parent *types.Block, header *types.Header, coinbase common.Address) (*environment, error) {
 	// Retrieve the parent state to execute on top and start a prefetcher for
 	// the miner to speed block sealing up a bit.
-	state, err := w.chain.StateAt(parent.Root())
+	state, err := w.chain.StateAt(parent.Root(), parent.Root_inactive())
 	if err != nil {
 		// Note since the sealing block can be created upon the arbitrary parent
 		// block, but the state of parent block may already be pruned, so the necessary
@@ -1108,6 +1108,14 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 	if err != nil {
 		return
 	}
+
+	// save this block's initial NextKey
+	if work.header != nil && w.current != nil {
+		common.MapMutex.Lock()
+		common.CheckpointKeys[work.header.Number.Int64()] = w.current.state.NextKey
+		common.MapMutex.Unlock()
+	}
+
 	// Create an empty block based on temporary copied state for
 	// sealing in advance without waiting block execution finished.
 	if !noempty && atomic.LoadUint32(&w.noempty) == 0 {

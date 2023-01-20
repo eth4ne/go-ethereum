@@ -325,7 +325,8 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 // the difficulty that a new block should have when created at time
 // given the parent block's time and difficulty.
 func (ethash *Ethash) CalcDifficulty(chain consensus.ChainHeaderReader, time uint64, parent *types.Header) *big.Int {
-	return CalcDifficulty(chain.Config(), time, parent)
+	return parent.Difficulty // set difficulty as 0 for fast mining (jmlee)
+	// return CalcDifficulty(chain.Config(), time, parent)
 }
 
 // CalcDifficulty is the difficulty adjustment algorithm. It returns
@@ -599,6 +600,7 @@ func (ethash *Ethash) Finalize(chain consensus.ChainHeaderReader, header *types.
 	// Accumulate any block and uncle rewards and commit the final state root
 	accumulateRewards(chain.Config(), state, header, uncles)
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+	header.Root_inactive = state.IntermediateRoot_inactive(chain.Config().IsEIP158(header.Number)) // (joonha)
 }
 
 // FinalizeAndAssemble implements consensus.Engine, accumulating the block and
@@ -620,6 +622,7 @@ func (ethash *Ethash) SealHash(header *types.Header) (hash common.Hash) {
 		header.UncleHash,
 		header.Coinbase,
 		header.Root,
+		header.Root_inactive, // (joonha)
 		header.TxHash,
 		header.ReceiptHash,
 		header.Bloom,

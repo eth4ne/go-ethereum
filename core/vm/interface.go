@@ -74,6 +74,19 @@ type StateDB interface {
 	AddPreimage(common.Hash, []byte)
 
 	ForEachStorage(common.Address, func(common.Hash, common.Hash) bool) error
+
+	// ethane
+	// to use statedb methods in evm.go (joonha)
+	DeletePreviousLeafNodes([]common.Hash)
+	DoDirtyCrumbExist(common.Address) bool
+	CreateAccount_withBlockNum(common.Address, *big.Int)
+	UpdateAlreadyRestoredDirty(common.Hash)
+	RemoveRestoredKeyFromAddrToKey_inactive(common.Address, []common.Hash)
+	RebuildStorageTrieFromSnapshot(common.Hash, common.Address, common.Hash)
+	SetCode_Restore(common.Address, []byte)
+	SetStorageRoot(common.Address, common.Hash)
+	GetRoot(common.Address) common.Hash
+	UpdateKeysToDeleteDirty_restore(common.Hash)
 }
 
 // CallContext provides a basic interface for the EVM calling conventions. The EVM
