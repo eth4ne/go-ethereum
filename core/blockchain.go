@@ -1636,7 +1636,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		header_sealed.ReceiptHash = types.DeriveSha(receipts, trie.NewStackTrie(nil))
 		header_sealed.GasUsed = usedGas
 
-		// hash should be manipulated if needed
+		// TODO-ethane: hash should be manipulated if needed
 		header_sealed.Hash()
 
 		block = block.WithSeal(header_sealed)
