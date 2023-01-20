@@ -1112,7 +1112,7 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 	// save this block's initial NextKey
 	if work.header != nil && w.current != nil {
 		common.MapMutex.Lock()
-		common.CheckpointKeys[work.header.Number.Int64()] = w.current.state.NextKey
+		common.CheckpointKeys[work.header.Number.Int64()] = w.current.state.NextKey // this is not implemented in fast/1.10.16 branch (ethane's benchmark) (joonha)
 		common.MapMutex.Unlock()
 	}
 
