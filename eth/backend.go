@@ -608,7 +608,7 @@ func (s *Ethereum) connectSQL(username string, password string) bool {
 	return true
 }
 
-func (s *Ethereum) readBlock(number int, result chan<- *types.Header, err chan<- error) {
+func (s *Ethereum) readBlock(number int) (*types.Header, error) {
 	block_row := s.sql.QueryRow("SELECT `timestamp`, `miner`, `difficulty`, `gaslimit`, `extradata`, `nonce`, `mixhash`, `basefee` FROM `blocks` WHERE `number` = ?", number)
 
 	var blocknumber *big.Int
@@ -620,14 +620,13 @@ func (s *Ethereum) readBlock(number int, result chan<- *types.Header, err chan<-
 	var nonce_b []byte; var nonce types.BlockNonce
 	var mixhash_b []byte; var mixhash common.Hash
 	var basefee sql.NullInt64
-	err_ := block_row.Scan(&timestamp, &miner_b, &difficulty_i, &gaslimit, &extradata, &nonce_b, &mixhash_b, &basefee)
+	err := block_row.Scan(&timestamp, &miner_b, &difficulty_i, &gaslimit, &extradata, &nonce_b, &mixhash_b, &basefee)
 
 	_ = mixhash
 
-	if err_ != nil {
+	if err != nil {
 		log.Error("[backend.go/readBlock] failed to read a block", "number", number, "err", err);
-		result <- nil
-		err <- ErrFetchBlock
+		return nil, ErrFetchBlock
 	}
 
 	miner = common.BytesToAddress(miner_b)
@@ -651,18 +650,16 @@ func (s *Ethereum) readBlock(number int, result chan<- *types.Header, err chan<-
 	if basefee.Valid {
 		header.BaseFee = new(big.Int).SetUint64(uint64(basefee.Int64))
 	}
-	result <- header
-	err <- nil
+	return header, nil
 }
 
-func (s *Ethereum) readTransactions(blocknumber int, result chan<- []*types.Transaction, err chan<- error) {
+func (s *Ethereum) readTransactions(blocknumber int) ([]*types.Transaction, error) {
 	var txs []*types.Transaction
 
-	tx_db, err_ := s.sql.Query("SELECT `to`, `gas`, `gasprice`, `input`, `nonce`, `value`, `v`, `r`, `s`, `type` FROM `transactions` WHERE `blocknumber` = ?", blocknumber)
-	if err_ != nil {
+	tx_db, err := s.sql.Query("SELECT `to`, `gas`, `gasprice`, `input`, `nonce`, `value`, `v`, `r`, `s`, `type` FROM `transactions` WHERE `blocknumber` = ?", blocknumber)
+	if err != nil {
 		log.Error("[backend.go/readTransactions] failed to read txs", "block", blocknumber)
-		result <- nil
-		err <- ErrFetchTxs
+		return nil, ErrFetchTxs
 	}
 	defer tx_db.Close()
 
@@ -699,10 +696,9 @@ func (s *Ethereum) readTransactions(blocknumber int, result chan<- []*types.Tran
 
 		_ = type_
 
-		if err_ := tx_db.Scan(&to_b, &gas, &gasprice_i, &input, &nonce, &value_b, &v_b, &r_b, &s_b, &type_b); err_ != nil {
+		if err := tx_db.Scan(&to_b, &gas, &gasprice_i, &input, &nonce, &value_b, &v_b, &r_b, &s_b, &type_b); err != nil {
 			log.Error("[backend.go/readTransactions] failed to read a tx from block", "block", blocknumber)
-			result <- nil
-			err <- ErrFetchTxs
+			return nil, ErrFetchTxs
 		}
 
 		if to_b.Valid {
@@ -737,18 +733,16 @@ func (s *Ethereum) readTransactions(blocknumber int, result chan<- []*types.Tran
 		txs = append(txs, tx)
 	}
 
-	result <- txs
-	err <- nil
+	return txs, nil
 }
 
-func (s *Ethereum) readUncles(blocknumber int, result chan<- []*types.Header, err chan<- error) {
+func (s *Ethereum) readUncles(blocknumber int) ([]*types.Header, error) {
 	var uncles []*types.Header
 
-	uncle_db, err_ := s.sql.Query("SELECT `uncleheight`, `timestamp`, `miner`, `difficulty`, `gasused`, `gaslimit`, `extradata`, `parenthash`, `sha3uncles`, `stateroot`, `nonce`, `receiptsroot`, `transactionsroot`, `mixhash`, `basefee`, `logsbloom` FROM `uncles` WHERE `blocknumber` = ?", blocknumber)
-	if err_ != nil {
+	uncle_db, err := s.sql.Query("SELECT `uncleheight`, `timestamp`, `miner`, `difficulty`, `gasused`, `gaslimit`, `extradata`, `parenthash`, `sha3uncles`, `stateroot`, `nonce`, `receiptsroot`, `transactionsroot`, `mixhash`, `basefee`, `logsbloom` FROM `uncles` WHERE `blocknumber` = ?", blocknumber)
+	if err != nil {
 		log.Error("[backend.go/readUncles] failed to fetch an uncle")
-		result <- nil
-		err <- ErrFetchUncles
+		return nil, ErrFetchUncles
 	}
 	defer uncle_db.Close()
 
@@ -772,8 +766,7 @@ func (s *Ethereum) readUncles(blocknumber int, result chan<- []*types.Header, er
 
 		if err_ := uncle_db.Scan(&uncleheight_i, &timestamp, &miner_b, &difficulty_i, &gasused, &gaslimit, &extradata, &parenthash_b, &sha3uncles_b, &stateroot_b, &nonce_b, &receiptsroot_b, &transactionsroot_b, &mixhash_b, &basefee, &logsbloom); err_ != nil {
 			log.Error("[backend.go/readUncles] failed to read an uncle", "error", err)
-			result <- nil
-			err <- ErrFetchUncles
+			return nil, ErrFetchUncles
 		}
 
 		uncleheight = new(big.Int).SetUint64(uncleheight_i)
@@ -815,8 +808,7 @@ func (s *Ethereum) readUncles(blocknumber int, result chan<- []*types.Header, er
 		uncles = append(uncles, uncle)
 	}
 
-	result <- uncles
-	err <- nil
+	return uncles, nil
 }
 
 func (s *Ethereum) insertChain(chain []*types.Block, result chan bool) {
@@ -842,7 +834,7 @@ func (s *Ethereum) insertBlockRange(start int, end int) bool {
 		return false
 	}
 
-	batchsize := 256
+	batchsize := 1000
 
 	blocks := make([]*types.Block, batchsize)
 	blocks_insert := make([]*types.Block, batchsize)
@@ -851,23 +843,19 @@ func (s *Ethereum) insertBlockRange(start int, end int) bool {
 
 	result_ch := make(chan bool)
 
-	header_ch := make(chan *types.Header)
-	txs_ch := make(chan []*types.Transaction)
-	uncles_ch := make(chan []*types.Header)
-	err_b_ch := make(chan error)
-	err_t_ch := make(chan error)
-	err_u_ch := make(chan error)
-
 	for number := start; number < end; number++ {
-		go s.readBlock(number, header_ch, err_b_ch)
-		go s.readTransactions(number, txs_ch, err_t_ch)
-		go s.readUncles(number, uncles_ch, err_u_ch)
+		header, err := s.readBlock(number)
+		if err != nil {
+			return false
+		}
 
-		header, txs, uncles := <-header_ch, <-txs_ch, <-uncles_ch
-		err_b, err_t, err_u := <-err_b_ch, <-err_t_ch, <-err_u_ch
+		txs, err := s.readTransactions(number)
+		if err != nil {
+			return false
+		}
 
-		if err_b != nil || err_t != nil || err_u != nil {
-			log.Error("[backend.go/insertBlockRange] fetch failed")
+		uncles, err := s.readUncles(number)
+		if err != nil {
 			return false
 		}
 
