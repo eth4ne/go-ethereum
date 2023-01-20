@@ -488,6 +488,9 @@ func (bc *BlockChain) loadLastState() error {
 	// load common.AddrToKey from disk (jmlee)
 	common.LoadAddrToKey(head.Hex())
 
+	// load restore list (joonha)
+	common.LoadRestoreList()
+
 	// Restore the last known head fast block
 	bc.currentFastBlock.Store(currentBlock)
 	headFastBlockGauge.Update(int64(currentBlock.NumberU64()))

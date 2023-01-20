@@ -114,6 +114,10 @@ var (
 	// this is not an option, but a flag
 	// for Ethane's light inactive trie delete (jmlee)
 	DeletingInactiveTrieFlag = false
+
+	// restore list loaded from json file
+	restoreFile = "restore_list_1_1000000_d1_ie1_ic315.json"
+	RestoreList = make(map[int][]Address)
 )
 
 // Block parameters (hletrd)
@@ -283,6 +287,21 @@ func LoadAddrToKey(blockHash string) error {
 	// for k, v := range AddrToKey {
 	// 	fmt.Println("common.AddrToKey -> k:", k, " / v:", v)
 	// }
+	return err
+}
+
+func LoadRestoreList() error {
+	path := restoreFile
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	decoder := json.NewDecoder(f)
+	err = decoder.Decode(&RestoreList)
+	if err != nil {
+		return err
+	}
 	return err
 }
 
