@@ -1737,17 +1737,12 @@ func (s *StateDB) DeletePreviousLeafNodes_inactive(keysToDelete []common.Hash) {
 }
 
 // InactivateLeafNodes inactivates inactive accounts (i.e., move old leaf nodes to left) (jmlee)
-func (s *StateDB) InactivateLeafNodes(firstKeyToCheck, lastKeyToCheck int64) int64 {
+func (s *StateDB) InactivateLeafNodes(firstKey, lastKey common.Hash) int64 {
 
-	fmt.Println("\ninspect trie to inactivate:", firstKeyToCheck, "~", lastKeyToCheck)
+	fmt.Println("\ninspect trie to inactivate:", firstKey, "~", lastKey)
 	fmt.Println("active trie root before inactivate leaf nodes:", s.trie.Hash().Hex())
 
 	// DFS the non-nil leaf nodes from the active trie (joonha)
-	firstKey := common.Int64ToHash(firstKeyToCheck)
-	lastKey := common.Int64ToHash(lastKeyToCheck)
-
-	fmt.Println("\ninspect active trie to inactivate:", firstKey, "~", lastKey)
-
 	AccountsToInactivate, KeysToInactivate, _ := s.trie.FindLeafNodes(firstKey[:], lastKey[:])
 
 	fmt.Println("Accounts length: ", len(AccountsToInactivate))

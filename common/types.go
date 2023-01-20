@@ -92,8 +92,8 @@ var (
 	InactivateCriterion     = int64(1)              // inactive accounts were touched more before than this block timestamp (min: 1) (const)
 	InactiveBoundaryKey     = int64(0)              // inactive accounts have keys smaller than this key
 	CheckpointKeys          = make(map[int64]int64) // initial NextKeys of blocks (CheckpointKeys[blockNumber] = initialNextKeyOfTheBlock)
-	FirstKeyToCheck         int64
-	LastKeyToCheck          int64
+	FirstKeyToCheck         Hash
+	LastKeyToCheck          Hash
 
 	// snapshot option
 	UsingActiveSnapshot          bool
