@@ -46,7 +46,7 @@ func (st *insertStats) report(chain []*types.Block, index int, dirty common.Stor
 		elapsed = now.Sub(st.startTime)
 	)
 	// If we're at the last block of the batch or report period reached, log
-	if index == len(chain)-1 || elapsed >= statsReportLimit {
+	if index == len(chain)-1 {
 		// Count the number of transactions in this segment
 		var txs int
 		for _, block := range chain[st.lastIndex : index+1] {

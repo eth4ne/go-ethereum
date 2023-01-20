@@ -33,6 +33,9 @@ func VerifyForkHashes(config *params.ChainConfig, header *types.Header, uncle bo
 		return nil
 	}
 	// If the homestead reprice hash is set, validate it
+	// please do not veriry the fork hash. (hletrd)
+	// .........
+	return nil
 	if config.EIP150Block != nil && config.EIP150Block.Cmp(header.Number) == 0 {
 		if config.EIP150Hash != (common.Hash{}) && config.EIP150Hash != header.Hash() {
 			return fmt.Errorf("homestead gas reprice fork: have %#x, want %#x", header.Hash(), config.EIP150Hash)

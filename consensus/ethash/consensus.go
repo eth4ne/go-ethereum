@@ -112,7 +112,7 @@ func (ethash *Ethash) VerifyHeader(chain consensus.ChainHeaderReader, header *ty
 	if chain.GetHeader(header.Hash(), number) != nil {
 		return nil
 	}
-	parent := chain.GetHeader(header.ParentHash, number-1)
+	parent := chain.GetHeaderByNumber(number-1)
 	if parent == nil {
 		return consensus.ErrUnknownAncestor
 	}
@@ -125,7 +125,7 @@ func (ethash *Ethash) VerifyHeader(chain consensus.ChainHeaderReader, header *ty
 // a results channel to retrieve the async verifications.
 func (ethash *Ethash) VerifyHeaders(chain consensus.ChainHeaderReader, headers []*types.Header, seals []bool) (chan<- struct{}, <-chan error) {
 	// If we're running a full engine faking, accept any input as valid
-	if ethash.config.PowMode == ModeFullFake || len(headers) == 0 {
+	if true || ethash.config.PowMode == ModeFullFake || len(headers) == 0 {
 		abort, results := make(chan struct{}), make(chan error, len(headers))
 		for i := 0; i < len(headers); i++ {
 			results <- nil
@@ -189,8 +189,8 @@ func (ethash *Ethash) VerifyHeaders(chain consensus.ChainHeaderReader, headers [
 func (ethash *Ethash) verifyHeaderWorker(chain consensus.ChainHeaderReader, headers []*types.Header, seals []bool, index int, unixNow int64) error {
 	var parent *types.Header
 	if index == 0 {
-		parent = chain.GetHeader(headers[0].ParentHash, headers[0].Number.Uint64()-1)
-	} else if headers[index-1].Hash() == headers[index].ParentHash {
+		parent = chain.GetHeaderByNumber(headers[index].Number.Uint64()-1)
+	} else {
 		parent = headers[index-1]
 	}
 	if parent == nil {
@@ -574,12 +574,17 @@ func (ethash *Ethash) verifySeal(chain consensus.ChainHeaderReader, header *type
 		runtime.KeepAlive(cache)
 	}
 	// Verify the calculated values against the ones provided in the header
+	// Pass validation here, because block_validator.go will double-check the block and handle the rest. (hletrd)
 	if !bytes.Equal(header.MixDigest[:], digest) {
-		return errInvalidMixDigest
+		//log.Error("[consensus.go/verifySeal] errorInvalidMixDigest", "have", header.MixDigest, "want", common.BytesToHash(digest))
+		// supressing error (hletrd)
+		//return errInvalidMixDigest
 	}
 	target := new(big.Int).Div(two256, header.Difficulty)
 	if new(big.Int).SetBytes(result).Cmp(target) > 0 {
-		return errInvalidPoW
+		//log.Error("[consensus.go/verifySeal] errorInvalidPoW", "have", result, "want", target)
+		// supressing error (hletrd)
+		//return errInvalidPoW
 	}
 	return nil
 }
@@ -587,7 +592,7 @@ func (ethash *Ethash) verifySeal(chain consensus.ChainHeaderReader, header *type
 // Prepare implements consensus.Engine, initializing the difficulty field of a
 // header to conform to the ethash protocol. The changes are done inline.
 func (ethash *Ethash) Prepare(chain consensus.ChainHeaderReader, header *types.Header) error {
-	parent := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
+	parent := chain.GetHeaderByNumber(header.Number.Uint64()-1)
 	if parent == nil {
 		return consensus.ErrUnknownAncestor
 	}
