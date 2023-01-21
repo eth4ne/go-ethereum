@@ -658,7 +658,7 @@ func (s *Ethereum) readTransactionsBatch(start int, end int) ([][]*types.Transac
 	}
 	defer tx_db.Close()
 
-	var blocknumber_i uint64
+	blocknumber_i := uint64(start)
 	var to_b sql.NullString; var to *common.Address
 	var gas uint64
 	var gasprice_i uint64
@@ -711,13 +711,17 @@ func (s *Ethereum) readTransactionsBatch(start int, end int) ([][]*types.Transac
 		log.Trace("[backend.go/readTransactionsBatch] tx fetched", "tx", txdata)
 
 		if seq != blocknumber_i {
-			result[seq] = txs
+			result[seq-uint64(start)] = txs
 			seq = blocknumber_i
 			txs = make([]*types.Transaction, 0)
 		}
 
 		tx := types.NewTx(txdata)
 		txs = append(txs, tx)
+	}
+
+	if len(txs) > 0 {
+		result[blocknumber_i-uint64(start)] = txs
 	}
 
 	return result, nil
@@ -736,24 +740,25 @@ func (s *Ethereum) readUnclesBatch(start int, end int) ([][]*types.Header, error
 	var uncles []*types.Header
 	seq := uint64(start)
 
+	blocknumber_i := uint64(start)
+	var uncleheight_i uint64; var uncleheight *big.Int
+	var timestamp uint64
+	var miner_b []byte; var miner common.Address
+	var difficulty_i uint64; var difficulty *big.Int
+	var gasused uint64
+	var gaslimit uint64
+	var extradata []byte
+	var parenthash_b []byte; var parenthash common.Hash
+	var sha3uncles_b []byte; var sha3uncles common.Hash
+	var stateroot_b []byte; var stateroot common.Hash
+	var nonce_b []byte; var nonce types.BlockNonce
+	var receiptsroot_b []byte; var receiptsroot common.Hash
+	var transactionsroot_b []byte; var transactionsroot common.Hash
+	var mixhash_b []byte; var mixhash common.Hash
+	var basefee sql.NullInt64
+	var logsbloom []byte
+
 	for uncle_db.Next() {
-		var blocknumber_i uint64
-		var uncleheight_i uint64; var uncleheight *big.Int
-		var timestamp uint64
-		var miner_b []byte; var miner common.Address
-		var difficulty_i uint64; var difficulty *big.Int
-		var gasused uint64
-		var gaslimit uint64
-		var extradata []byte
-		var parenthash_b []byte; var parenthash common.Hash
-		var sha3uncles_b []byte; var sha3uncles common.Hash
-		var stateroot_b []byte; var stateroot common.Hash
-		var nonce_b []byte; var nonce types.BlockNonce
-		var receiptsroot_b []byte; var receiptsroot common.Hash
-		var transactionsroot_b []byte; var transactionsroot common.Hash
-		var mixhash_b []byte; var mixhash common.Hash
-		var basefee sql.NullInt64
-		var logsbloom []byte
 
 		if err_ := uncle_db.Scan(&blocknumber_i, &uncleheight_i, &timestamp, &miner_b, &difficulty_i, &gasused, &gaslimit, &extradata, &parenthash_b, &sha3uncles_b, &stateroot_b, &nonce_b, &receiptsroot_b, &transactionsroot_b, &mixhash_b, &basefee, &logsbloom); err_ != nil {
 			log.Error("[backend.go/readUnclesBatch] failed to read an uncle", "number", blocknumber_i, "error", err)
@@ -794,15 +799,19 @@ func (s *Ethereum) readUnclesBatch(start int, end int) ([][]*types.Header, error
 			uncle.BaseFee = new(big.Int).SetUint64(uint64(basefee.Int64))
 		}
 
+		log.Trace("[backend.go/readUnclesBatch] uncle fetched", "block", blocknumber_i, "uncleheight", uncleheight)
+
 		if seq != blocknumber_i {
-			result[seq] = uncles
+			result[seq-uint64(start)] = uncles
 			seq = blocknumber_i
 			uncles = make([]*types.Header, 0)
 		}
 
-		log.Trace("[backend.go/readUnclesBatch] uncle fetched", "block", blocknumber_i, "uncleheight", uncleheight)
-
 		uncles = append(uncles, uncle)
+	}
+
+	if len(uncles) > 0 {
+		result[blocknumber_i-uint64(start)] = uncles
 	}
 
 	return result, nil
@@ -855,49 +864,52 @@ func (s *Ethereum) insertBlockRange(start int, end int) bool {
 
 	blocks := make([]*types.Block, batchsize)
 	blocks_insert := make([]*types.Block, batchsize)
-	seq := 0
+	//seq := 0
 	inserting := false
 
 	result_ch := make(chan bool)
 
-	for number := start; number < end; number++ {
-		header, err := s.readBlock(number)
+	for number := start; number < end; number+=batchsize {
+		end_batch := number+batchsize
+		if end_batch > end {
+			end_batch = end
+		}
+
+		header, err := s.readBlockBatch(number, end_batch)
 		if err != nil {
 			return false
 		}
 
-		txs, err := s.readTransactions(number)
+		txs, err := s.readTransactionsBatch(number, end_batch)
 		if err != nil {
 			return false
 		}
 
-		uncles, err := s.readUncles(number)
+		uncles, err := s.readUnclesBatch(number, end_batch)
 		if err != nil {
 			return false
 		}
 
-		block := types.NewBlockWithHeader(header).WithBody(txs, uncles)
-		blockhash := block.Hash()
-		blocksize := block.Size()
+		for i := 0; i < end_batch-number; i++ {
+			block := types.NewBlockWithHeader(header[i]).WithBody(txs[i], uncles[i])
+			blockhash := block.Hash()
+			blocksize := block.Size()
 
-		log.Trace("[backend.go/insertBlockRange] block prepared", "block", block, "header", header, "hash", blockhash, "size", blocksize)
-		blocks[seq] = block
-		seq++
+			log.Trace("[backend.go/insertBlockRange] block prepared", "block", block, "header", header, "hash", blockhash, "size", blocksize)
+			blocks[i] = block
+		}
 
-		if seq == batchsize {
-			log.Trace("[backend.go/insertBlockRange] block insert")
-			if inserting == true {
-				result := <- result_ch
-				if result == false {
-					log.Error("[backend.go/insertBlockRange] insert failed")
-					return false
-				}
+		log.Trace("[backend.go/insertBlockRange] block insert")
+		if inserting == true {
+			result := <- result_ch
+			if result == false {
+				log.Error("[backend.go/insertBlockRange] insert failed")
+				return false
 			}
-			copy(blocks_insert, blocks)
-			go s.insertChain(blocks_insert, result_ch)
-			inserting = true
-			seq = 0
 		}
+		copy(blocks_insert, blocks)
+		go s.insertChain(blocks_insert, result_ch)
+		inserting = true
 	}
 
 	if inserting == true {
@@ -906,13 +918,6 @@ func (s *Ethereum) insertBlockRange(start int, end int) bool {
 			log.Error("[backend.go/insertBlockRange] insert failed")
 			return false
 		}
-	}
-	go s.insertChain(blocks[:seq], result_ch)
-	result := <- result_ch
-
-	if result == false {
-		log.Error("[backend.go/insertBlockRange] insert failed")
-		return false
 	}
 
 	log.Trace("[backend.go/insertBlockRange] inserted blocks", "start", start, "end", end)
