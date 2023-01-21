@@ -1250,6 +1250,7 @@ func (bc *BlockChain) writeKnownBlock(block *types.Block) error {
 // database.
 func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.Receipt, state *state.StateDB) error {
 	// Calculate the total difficulty of the block
+	// get parent block only using number (hletrd)
 	phash := bc.GetHeaderByNumber(block.NumberU64()-1).Hash()
 	ptd := bc.GetTd(phash, block.NumberU64()-1)	
 	if ptd == nil {
@@ -1419,6 +1420,7 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 	bc.blockProcFeed.Send(true)
 	defer bc.blockProcFeed.Send(false)
 
+	// bypass sanity check (hletrd)
 	// Do a sanity check that the provided chain is actually ordered and linked.
 	/*for i := 1; i < len(chain); i++ {
 		block, prev := chain[i], chain[i-1]
@@ -1641,6 +1643,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		}
 
 		// Retrieve the parent block and it's state to execute on top
+		// retrieve using block number (hletrd)
 		start := time.Now()
 		parent := bc.GetHeaderByNumber(block.NumberU64()-1)
 
@@ -1671,6 +1674,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 			}
 		}
 
+		// create a new header (hletrd)
 		header_sealed := block.Header()
 		header_sealed.Root = statedb.IntermediateRoot(bc.chainConfig.IsEIP158(header_sealed.Number))
 		header_sealed.UncleHash = types.CalcUncleHash(block.Uncles())
@@ -2055,6 +2059,7 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 		}
 	} else {
 		// New chain is longer, stash all blocks away for subsequent insertion
+		// get parent by its number (hletrd)
 		for ; newBlock != nil && newBlock.NumberU64() != oldBlock.NumberU64(); newBlock = bc.GetBlockByNumber(newBlock.NumberU64()-1) {
 			newChain = append(newChain, newBlock)
 		}
@@ -2091,6 +2096,7 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 		if oldBlock == nil {
 			return fmt.Errorf("invalid old chain")
 		}
+		// get parent using number (hletrd)
 		newBlock = bc.GetBlockByNumber(newBlock.NumberU64()-1)
 		if newBlock == nil {
 			return fmt.Errorf("invalid new chain")

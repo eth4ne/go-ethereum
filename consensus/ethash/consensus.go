@@ -112,6 +112,7 @@ func (ethash *Ethash) VerifyHeader(chain consensus.ChainHeaderReader, header *ty
 	if chain.GetHeader(header.Hash(), number) != nil {
 		return nil
 	}
+	// fetch parent block only using number (hletrd)
 	parent := chain.GetHeaderByNumber(number-1)
 	if parent == nil {
 		return consensus.ErrUnknownAncestor
@@ -125,6 +126,7 @@ func (ethash *Ethash) VerifyHeader(chain consensus.ChainHeaderReader, header *ty
 // a results channel to retrieve the async verifications.
 func (ethash *Ethash) VerifyHeaders(chain consensus.ChainHeaderReader, headers []*types.Header, seals []bool) (chan<- struct{}, <-chan error) {
 	// If we're running a full engine faking, accept any input as valid
+	// always accept any input as valid (hletrd)
 	if true || ethash.config.PowMode == ModeFullFake || len(headers) == 0 {
 		abort, results := make(chan struct{}), make(chan error, len(headers))
 		for i := 0; i < len(headers); i++ {
@@ -189,6 +191,7 @@ func (ethash *Ethash) VerifyHeaders(chain consensus.ChainHeaderReader, headers [
 func (ethash *Ethash) verifyHeaderWorker(chain consensus.ChainHeaderReader, headers []*types.Header, seals []bool, index int, unixNow int64) error {
 	var parent *types.Header
 	if index == 0 {
+		// fetch parent block only using number (hletrd)
 		parent = chain.GetHeaderByNumber(headers[index].Number.Uint64()-1)
 	} else {
 		parent = headers[index-1]
@@ -592,6 +595,7 @@ func (ethash *Ethash) verifySeal(chain consensus.ChainHeaderReader, header *type
 // Prepare implements consensus.Engine, initializing the difficulty field of a
 // header to conform to the ethash protocol. The changes are done inline.
 func (ethash *Ethash) Prepare(chain consensus.ChainHeaderReader, header *types.Header) error {
+	// fetch parent block only using number (hletrd)
 	parent := chain.GetHeaderByNumber(header.Number.Uint64()-1)
 	if parent == nil {
 		return consensus.ErrUnknownAncestor
