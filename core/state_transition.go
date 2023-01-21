@@ -201,9 +201,16 @@ func (st *StateTransition) buyGas() error {
 	if have, want := st.state.GetBalance(st.msg.From()), balanceCheck; have.Cmp(want) < 0 {
 		return fmt.Errorf("%w: address %v have %v want %v", ErrInsufficientFunds, st.msg.From().Hex(), have, want)
 	}
-	if err := st.gp.SubGas(st.msg.Gas()); err != nil {
-		return err
+	if st.msg.To() != nil {
+		if *st.msg.To() == common.RestoreAddress {
+			// do not levy gas? (joonha)
+		} else {
+			if err := st.gp.SubGas(st.msg.Gas()); err != nil {
+				return err
+			}
+		}
 	}
+
 	st.gas += st.msg.Gas()
 
 	st.initialGas = st.msg.Gas()
@@ -220,8 +227,8 @@ func (st *StateTransition) preCheck() error {
 			return fmt.Errorf("%w: address %v, tx: %d state: %d", ErrNonceTooHigh,
 				st.msg.From().Hex(), msgNonce, stNonce)
 		} else if stNonce > msgNonce {
-			return fmt.Errorf("%w: address %v, tx: %d state: %d", ErrNonceTooLow,
-				st.msg.From().Hex(), msgNonce, stNonce)
+			// return fmt.Errorf("%w: address %v, tx: %d state: %d", ErrNonceTooLow,
+			// 	st.msg.From().Hex(), msgNonce, stNonce)
 		} else if stNonce+1 < stNonce {
 			return fmt.Errorf("%w: address %v, nonce: %d", ErrNonceMax,
 				st.msg.From().Hex(), stNonce)

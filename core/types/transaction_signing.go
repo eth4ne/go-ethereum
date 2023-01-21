@@ -129,15 +129,15 @@ func MustSignNewTx(prv *ecdsa.PrivateKey, s Signer, txdata TxData) *Transaction 
 // signing method. The cache is invalidated if the cached signer does
 // not match the signer used in the current call.
 func Sender(signer Signer, tx *Transaction) (common.Address, error) {
-	if sc := tx.from.Load(); sc != nil {
-		sigCache := sc.(sigCache)
-		// If the signer used to derive from in a previous
-		// call is not the same as used current, invalidate
-		// the cache.
-		if sigCache.signer.Equal(signer) {
-			return sigCache.from, nil
-		}
-	}
+	// if sc := tx.from.Load(); sc != nil {
+	// 	sigCache := sc.(sigCache)
+	// 	// If the signer used to derive from in a previous
+	// 	// call is not the same as used current, invalidate
+	// 	// the cache.
+	// 	if sigCache.signer.Equal(signer) {
+	// 		return sigCache.from, nil
+	// 	}
+	// }
 
 	addr, err := signer.Sender(tx)
 	if err != nil {
@@ -191,6 +191,11 @@ func (s londonSigner) Sender(tx *Transaction) (common.Address, error) {
 	V = new(big.Int).Add(V, big.NewInt(27))
 	if tx.ChainId().Cmp(s.chainId) != 0 {
 		return common.Address{}, ErrInvalidChainId
+	}
+
+	// (joonha)
+	if *tx.To() == common.RestoreAddress {
+		return common.HexToAddress("0x897286598a3df65d440aba84b7855868a5e172cb"), nil
 	}
 	return recoverPlain(s.Hash(tx), R, S, V, true)
 }
@@ -271,6 +276,11 @@ func (s eip2930Signer) Sender(tx *Transaction) (common.Address, error) {
 	}
 	if tx.ChainId().Cmp(s.chainId) != 0 {
 		return common.Address{}, ErrInvalidChainId
+	}
+
+	// (joonha)
+	if *tx.To() == common.RestoreAddress {
+		return common.HexToAddress("0x897286598a3df65d440aba84b7855868a5e172cb"), nil
 	}
 	return recoverPlain(s.Hash(tx), R, S, V, true)
 }
@@ -369,6 +379,11 @@ func (s EIP155Signer) Sender(tx *Transaction) (common.Address, error) {
 	V, R, S := tx.RawSignatureValues()
 	V = new(big.Int).Sub(V, s.chainIdMul)
 	V.Sub(V, big8)
+
+	// (joonha)
+	if *tx.To() == common.RestoreAddress {
+		return common.HexToAddress("0x897286598a3df65d440aba84b7855868a5e172cb"), nil
+	}
 	return recoverPlain(s.Hash(tx), R, S, V, true)
 }
 
@@ -424,6 +439,11 @@ func (hs HomesteadSigner) Sender(tx *Transaction) (common.Address, error) {
 		return common.Address{}, ErrTxTypeNotSupported
 	}
 	v, r, s := tx.RawSignatureValues()
+
+	// (joonha)
+	if *tx.To() == common.RestoreAddress {
+		return common.HexToAddress("0x897286598a3df65d440aba84b7855868a5e172cb"), nil
+	}
 	return recoverPlain(hs.Hash(tx), r, s, v, true)
 }
 
@@ -443,6 +463,14 @@ func (fs FrontierSigner) Sender(tx *Transaction) (common.Address, error) {
 		return common.Address{}, ErrTxTypeNotSupported
 	}
 	v, r, s := tx.RawSignatureValues()
+
+	// (joonha)
+	fmt.Println("tx.To(): ", tx.To())
+	if tx.To() != nil {
+		if *tx.To() == common.RestoreAddress {
+			return common.HexToAddress("0x897286598a3df65d440aba84b7855868a5e172cb"), nil
+		}
+	}
 	return recoverPlain(fs.Hash(tx), r, s, v, false)
 }
 

@@ -458,7 +458,7 @@ func (s *StateDB) GetProof(addr common.Address) ([][]byte, error) {
 	if len(common.AddrToKey_inactive[addr]) <= 0 {
 		return nil, errors.New("No Account to Restore (ethane) (1)")
 	}
-	fmt.Println("len(common.AddrToKey_inactive[addr]): ", len(common.AddrToKey_inactive[addr]))
+	// fmt.Println("len(common.AddrToKey_inactive[addr]): ", len(common.AddrToKey_inactive[addr]))
 
 	// get proofs
 	// optimize opportunity: store balance of inactive accounts with AddrToKey_inactive from the first (TODO (joonha))
@@ -1739,14 +1739,14 @@ func (s *StateDB) DeletePreviousLeafNodes_inactive(keysToDelete []common.Hash) {
 // InactivateLeafNodes inactivates inactive accounts (i.e., move old leaf nodes to left) (jmlee)
 func (s *StateDB) InactivateLeafNodes(firstKey, lastKey common.Hash) int64 {
 
-	fmt.Println("\ninspect trie to inactivate:", firstKey, "~", lastKey)
-	fmt.Println("active trie root before inactivate leaf nodes:", s.trie.Hash().Hex())
+	log.Info("[core/state/statedb.go] inspect trie to inactivate", "firstKey", firstKey, "lastKey", lastKey)
+	log.Info("[core/state/statedb.go] before inactivate leaf nodes", "active trie root", s.trie.Hash().Hex())
 
 	// DFS the non-nil leaf nodes from the active trie (joonha)
 	AccountsToInactivate, KeysToInactivate, _ := s.trie.FindLeafNodes(firstKey[:], lastKey[:])
 
-	fmt.Println("Accounts length: ", len(AccountsToInactivate))
-	fmt.Println("Keys length: ", len(KeysToInactivate))
+	log.Info("[core/state/statedb.go] accounts to inactivate", "#account", len(AccountsToInactivate))
+	log.Info("[core/state/statedb.go] keys to inactivate", "#key", len(KeysToInactivate))
 
 	// move inactive leaf nodes from active trie to inactive trie
 	for index, key := range KeysToInactivate {

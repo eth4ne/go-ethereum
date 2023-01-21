@@ -18,9 +18,11 @@ package vm
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 	"os"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -252,18 +254,18 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 
 		if limit == 0 {
 			// Error: no proof in tx data
-			log.Error("❌  Restore Error: no proof in tx data")
+			log.Error("[core/vm/evm.go] ❌  Restore Error: no proof in tx data")
 			os.Exit(1)
 			return nil, gas, ErrInvalidProof
 		}
 
 		// get inactive account address
-		inactiveAddrString := string(data[cnt].([]byte))
+		inactiveAddrString := hex.EncodeToString(data[0].([]byte))
 		inactiveAddr := common.HexToAddress(inactiveAddrString)
 
-		log.Info("### restoration target", "address", inactiveAddr)
+		log.Info("[core/vm/evm.go] restoration target", "address", inactiveAddr)
 		common.MapMutex.Lock()
-		log.Info("### len(AddrToKey_inactive)", "len(AddrToKey_inactive)", len(common.AddrToKey_inactive[inactiveAddr]))
+		log.Info("[core/vm/evm.go] len(AddrToKey_inactive)", "len(AddrToKey_inactive)", len(common.AddrToKey_inactive[inactiveAddr]))
 		common.MapMutex.Unlock()
 
 		// (log for Debugging)
@@ -275,11 +277,12 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		// }
 
 		// get block number to start restoration
-		blockNum := big.NewInt(0)
-		blockNum.SetBytes(data[1].([]byte))
-		log.Info("### block num", "blocknum", blockNum.Int64())
+		bn, _ := strconv.Atoi(string(data[1].([]byte)))
+		blockNum := big.NewInt(int64(bn))
+
+		log.Info("[core/vm/evm.go]  block num", "blocknum", blockNum.Int64())
 		checkpointBlock := blockNum.Uint64()
-		log.Info("### Checkpoint Block", "checkpointBlock", checkpointBlock)
+		log.Info("[core/vm/evm.go]  Checkpoint Block", "checkpointBlock", checkpointBlock)
 
 		var curAcc, resAcc *state.Account
 		curAcc = nil              // temp account
@@ -290,58 +293,63 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		var targetAccounts [][]byte
 		var blockRoot_inactive common.Hash
 
-		cnt = cnt + 3
-		for cnt < limit {
-			// log.Info("### cnt < limit", "cnt", cnt, "limit", limit)
+		cnt = cnt + 2
+		// log.Info("### cnt < limit", "cnt", cnt, "limit", limit)
 
-			// get a merkle proof from tx data
-			merkleProof, blockHeader := parseProof(data, int64(checkpointBlock), &cnt, limit)
+		// get a merkle proof from tx data
+		merkleProof, _ := parseProof(data, int64(checkpointBlock), &cnt, limit)
 
-			// inactive state trie root
-			blockRoot_inactive = blockHeader.Root_inactive
+		// blockHeader := GetHeaderByNumber() // TODO-joonha: blockchain의 헤더를 디비로부터 가져와야 하고 mp의 루트와 비교해야 함
 
-			// retrieve target accounts and keys from the merkle proof
-			// verify the proofs simultaneously
-			var merkleErr error
-			targetAccounts, merkleErr, targetKeys = trie.VerifyProof_GetAccountsAndKeys(blockHeader.Root_inactive, merkleProof)
-			if merkleErr != nil {
-				// bad merkle proof
-				log.Error("❌  Restore Error: bad merkle proof")
-				os.Exit(1)
-				return nil, gas, ErrInvalidProof
-			} else {
-				log.Info("✔️  Verify Merkle Proof for Restoration ... Success")
-			}
+		// // inactive state trie root
+		// if blockHeader == nil {
+		// 	log.Error("[core/vm/evm.go] ❌  Restore Error: block header is nil")
+		// 	goto outOfRestoration
+		// }
+		// blockRoot_inactive = blockHeader.Root_inactive
 
-			log.Info("targetAccounts", "targetAccounts", targetAccounts)
-			log.Info("targetKeys", "targetKeys", targetKeys)
-			log.Info("len(targetKeys)", "len(targetKeys)", len(targetKeys))
+		// retrieve target accounts and keys from the merkle proof
+		// verify the proofs simultaneously
+		var merkleErr error
+		// targetAccounts, merkleErr, targetKeys = trie.VerifyProof_GetAccountsAndKeys(blockHeader.Root_inactive, merkleProof)                                                              // should be this
+		targetAccounts, merkleErr, targetKeys = trie.VerifyProof_GetAccountsAndKeys(common.HexToHash("0x0"), merkleProof) // temp without verifying trie root
+		if merkleErr != nil {
+			// bad merkle proof
+			log.Error("[core/vm/evm.go] ❌  Restore Error: bad merkle proof")
+			os.Exit(1)
+			return nil, gas, ErrInvalidProof
+		} else {
+			log.Info("[core/vm/evm.go] ✔️  Verify Merkle Proof for Restoration ... Success")
+		}
 
-			// update alreadyRestored list
-			for i := 0; i < len(targetKeys); i++ {
-				evm.StateDB.UpdateAlreadyRestoredDirty(targetKeys[i])
-			}
+		log.Info("[core/vm/evm.go] targetAccounts", "targetAccounts", targetAccounts)
+		log.Info("[core/vm/evm.go] targetKeys", "targetKeys", targetKeys)
+		log.Info("[core/vm/evm.go] len(targetKeys)", "len(targetKeys)", len(targetKeys))
 
-			// decode leaf nodes to accounts
-			// accounts are ready to be restored
-			// TODO (joonha): change code to get non-nil codeHash not the first's --> this is okay if the simulation only implements RESTORE_ALL option
-			firstValidIndex := -1
-			for i := 0; i < len(targetAccounts); i++ {
-				acc := targetAccounts[i]
-				if acc == nil { // there is no account // --> this case might not exist
-					log.Info("### No account in the merkle proof")
-				} else { // there is the account
-					log.Info("### There is the account in the merkle proof")
-					curAcc = &state.Account{}
-					rlp.DecodeBytes(acc, &curAcc)
-					accounts = append(accounts, curAcc)
+		// update alreadyRestored list
+		for i := 0; i < len(targetKeys); i++ {
+			evm.StateDB.UpdateAlreadyRestoredDirty(targetKeys[i])
+		}
 
-					// get codeHash and storageRoot of the first inactive CA
-					if firstValidIndex == -1 {
-						firstValidIndex = i
-						resAcc.CodeHash = curAcc.CodeHash
-						resAcc.Root = curAcc.Root
-					}
+		// decode leaf nodes to accounts
+		// accounts are ready to be restored
+		// TODO (joonha): change code to get non-nil codeHash not the first's --> this is okay if the simulation only implements RESTORE_ALL option
+		firstValidIndex := -1
+		for i := 0; i < len(targetAccounts); i++ {
+			acc := targetAccounts[i]
+			if acc == nil { // there is no account // --> this case might not exist
+				log.Info("[core/vm/evm.go] No account in the merkle proof")
+			} else { // there is the account
+				log.Info("[core/vm/evm.go] There is the account in the merkle proof")
+				curAcc = &state.Account{}
+				rlp.DecodeBytes(acc, &curAcc)
+				accounts = append(accounts, curAcc)
+
+				// get codeHash and storageRoot of the first inactive CA
+				if firstValidIndex == -1 {
+					firstValidIndex = i
+					resAcc.CodeHash = curAcc.CodeHash
+					resAcc.Root = curAcc.Root
 				}
 			}
 		}
@@ -350,11 +358,11 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		// and 'retrievedKeys' contains a list of keys of that accounts.
 
 		// when there is no valid account
-		log.Info("### number of accounts", "len(accounts)", len(accounts))
+		log.Info("[core/vm/evm.go] number of accounts", "len(accounts)", len(accounts))
 		if len(accounts) == 0 {
 			// This case might exist when all the accounts are already restored.
 			// It is natural so do not exit and just jump to outOfRestoration.
-			log.Info("❌  Restore Error: no accounts to restore (but it is okay to go on)")
+			log.Info("[core/vm/evm.go] ❌  Restore Error: no accounts to restore (but it is okay to go on)")
 
 			// // (debugging) export log to file
 			// f1, err := os.Create("joonha_log.txt")
@@ -372,21 +380,21 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		}
 
 		if !doExist { // create (no crumb account in the active trie)
-			log.Info("### CREATE")
+			log.Info("[core/vm/evm.go] CREATE")
 			evm.StateDB.CreateAccount_withBlockNum(inactiveAddr, evm.Context.BlockNumber)
 
 		} else { // merge (crumb account exists in the active trie)
-			log.Info("### MERGE")
+			log.Info("[core/vm/evm.go] MERGE")
 			activeBalance := evm.StateDB.GetBalance(inactiveAddr) // get balance info from active trie
 
-			log.Info("activeBalance", "activeBalance", activeBalance)
+			log.Info("[core/vm/evm.go] activeBalance", "activeBalance", activeBalance)
 			if accounts[0] != nil {
 				resAcc.Balance.Add(activeBalance, big.NewInt(0))
 			}
 		}
 
 		// merge balances of the restoring accounts
-		log.Info("len(accounts)", "len(accounts)", len(accounts))
+		log.Info("[core/vm/evm.go] len(accounts)", "len(accounts)", len(accounts))
 		for i := 0; i < len(accounts); i++ {
 			if accounts[i] != nil {
 				resAcc.Balance.Add(resAcc.Balance, accounts[i].Balance)
@@ -405,15 +413,15 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 			origRoot := accounts[0].Root
 			newRoot := evm.StateDB.GetRoot(inactiveAddr)
 			if origRoot == newRoot {
-				log.Info("✔️  Storage Trie Rebuilding ... Success")
+				log.Info("[core/vm/evm.go] ✔️  Storage Trie Rebuilding ... Success")
 			} else {
 				// storage trie is different from the original
-				log.Error("❌  Restore Error: Rebuilt storage trie is different from the original")
+				log.Error("[core/vm/evm.go] ❌  Restore Error: Rebuilt storage trie is different from the original")
 				os.Exit(1)
 			}
 
 		} else {
-			log.Warn("⚠️  Snapshot is OFF ... Please rebuild the storage trie in another way")
+			log.Warn("[core/vm/evm.go] ⚠️  Snapshot is OFF ... Please rebuild the storage trie in another way")
 		}
 
 		// Remove inactive account from AddrToKey_inactive map
@@ -489,13 +497,10 @@ func parseProof(data []interface{}, blockNum int64, cnt *int, limit int) (common
 	blockHash := rawdb.ReadCanonicalHash(rawdb.GlobalDB, uint64(blockNum))
 	blockHeader := rawdb.ReadHeader(rawdb.GlobalDB, blockHash, uint64(blockNum))
 
-	log.Info("### PARSE PROOF")
+	log.Info("[core/vm/evm.go] parse proof")
 
 	// get Merkle proof
 	merkleProof := make(common.ProofList, 0)
-
-	n := big.NewInt(0)
-	n.SetBytes(data[*cnt].([]byte))
 
 	for *cnt < limit {
 		pf := data[*cnt].([]byte)

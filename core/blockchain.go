@@ -1495,41 +1495,42 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
 	}
 
-	// print inactive trie (joonha)
-	if block.Header().Number.Int64()%common.InspectEpoch == 0 {
-		// print state trie (jmlee)
-		fmt.Println("$$$ print inactive state trie at block", bc.CurrentBlock().Header().Number)
-		ldb := trie.NewDatabase(bc.db)
-		if bc.CurrentBlock().Root_inactive() != common.HexToHash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421") {
-			stateTrie, _ := trie.NewSecure(bc.CurrentBlock().Root_inactive(), ldb)
-			// stateTrie.Print()
-			if stateTrie == nil {
-				fmt.Println("stateTrie is nil")
-			} else {
-				stateTrie.Print()
-			}
-		}
-	}
+	// // print inactive trie (joonha)
+	// if block.Header().Number.Int64()%common.InspectEpoch == 0 {
+	// 	// print state trie (jmlee)
+	// 	fmt.Println("$$$ print inactive state trie at block", bc.CurrentBlock().Header().Number)
+	// 	ldb := trie.NewDatabase(bc.db)
+	// 	if bc.CurrentBlock().Root_inactive() != common.HexToHash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421") {
+	// 		stateTrie, _ := trie.NewSecure(bc.CurrentBlock().Root_inactive(), ldb)
+	// 		// stateTrie.Print()
+	// 		if stateTrie == nil {
+	// 			fmt.Println("stateTrie is nil")
+	// 		} else {
+	// 			stateTrie.Print()
+	// 		}
+	// 	}
+	// }
 
-	// print database inspect result (jmlee)
-	// fmt.Println("\nblock inserted -> blocknumber:", block.Header().Number.Int64())
-	// fmt.Println("InactiveBoundaryKey:", common.InactiveBoundaryKey)
-	// fmt.Println("common.CheckpointKeys:", common.CheckpointKeys)
-	if block.Header().Number.Int64()%common.InspectEpoch == 0 {
-		// print state trie (jmlee)
-		fmt.Println("$$$ print active state trie at block", bc.CurrentBlock().Header().Number)
-		ldb := trie.NewDatabase(bc.db)
-		stateTrie, _ := trie.NewSecure(bc.CurrentBlock().Root(), ldb)
-		// stateTrie.Print()
-		if stateTrie == nil {
-			fmt.Println("stateTrie is nil")
-		} else {
-			stateTrie.Print()
-		}
-	}
+	// // print database inspect result (jmlee)
+	// // fmt.Println("\nblock inserted -> blocknumber:", block.Header().Number.Int64())
+	// // fmt.Println("InactiveBoundaryKey:", common.InactiveBoundaryKey)
+	// // fmt.Println("common.CheckpointKeys:", common.CheckpointKeys)
+	// if block.Header().Number.Int64()%common.InspectEpoch == 0 {
+	// 	// print state trie (jmlee)
+	// 	fmt.Println("$$$ print active state trie at block", bc.CurrentBlock().Header().Number)
+	// 	ldb := trie.NewDatabase(bc.db)
+	// 	stateTrie, _ := trie.NewSecure(bc.CurrentBlock().Root(), ldb)
+	// 	// stateTrie.Print()
+	// 	if stateTrie == nil {
+	// 		fmt.Println("stateTrie is nil")
+	// 	} else {
+	// 		stateTrie.Print()
+	// 	}
+	// }
 
-	fmt.Println("\n>>> inactive trie root: ", bc.CurrentBlock().Root_inactive())
-	fmt.Println(">>> active trie root: ", bc.CurrentBlock().Root())
+	fmt.Println("\n[Ethane]\nblock number: ", block.Header().Number.Int64())
+	fmt.Println("inactive trie root: ", bc.CurrentBlock().Root_inactive())
+	fmt.Println("active trie root: ", bc.CurrentBlock().Root())
 
 	/* [Ethane]
 	* set flags for the next block

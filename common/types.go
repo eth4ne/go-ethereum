@@ -81,15 +81,15 @@ var (
 
 	// for deletion
 	DoDeleteLeafNode    bool              // flag to determine whether to delete leaf nodes or not
-	DeleteLeafNodeEpoch = int64(3)        // block epoch to delete previous leaf nodes (from active area to temp area) (const)
+	DeleteLeafNodeEpoch = int64(1)        // block epoch to delete previous leaf nodes (from active area to temp area) (const)
 	KeysToDelete        = make([]Hash, 0) // store previous leaf nodes' keys to delete later
 
 	// for inactivation
 	AddrToKey_inactive = make(map[Address][]Hash) // map storing inactive accounts list
 
 	DoInactivateLeafNode    bool                    // flag to determine whether to delete leaf nodes or not
-	InactivateLeafNodeEpoch = int64(3)              // block epoch to inactivate inactive leaf nodes (from temp area to inactive trie)
-	InactivateCriterion     = int64(1)              // inactive accounts were touched more before than this block timestamp (min: 1) (const)
+	InactivateLeafNodeEpoch = int64(1)              // block epoch to inactivate inactive leaf nodes (from temp area to inactive trie)
+	InactivateCriterion     = int64(315)            // inactive accounts were touched more before than this block timestamp (min: 1) (const)
 	InactiveBoundaryKey     = int64(0)              // inactive accounts have keys smaller than this key
 	CheckpointKeys          = make(map[int64]int64) // initial NextKeys of blocks (CheckpointKeys[blockNumber] = initialNextKeyOfTheBlock)
 	FirstKeyToCheck         Hash
@@ -118,6 +118,12 @@ var (
 	// restore list loaded from json file
 	restoreFile = "restore_list_1_1000000_d1_ie1_ic315.json"
 	RestoreList = make(map[int][]Address)
+
+	// local coinbase nonce
+	LocalCoinbaseNonceCounter = uint64(0)
+
+	//
+	DoInsertBlockBeforeRestoration = false
 )
 
 // Block parameters (hletrd)
