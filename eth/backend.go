@@ -589,11 +589,16 @@ func (s *Ethereum) connectSQL(username string, password string) bool {
 	return true
 }
 
-// read a block from the database (hletrd)
-func (s *Ethereum) readBlock(number int) (*types.Header, error) {
-	block_row := s.sql.QueryRow("SELECT `timestamp`, `miner`, `difficulty`, `gaslimit`, `extradata`, `nonce`, `mixhash`, `basefee` FROM `blocks` WHERE `number` = ?", number)
+// read blocks as a batch (hletrd)
+func (s *Ethereum) readBlockBatch(start int, end int) ([]*types.Header, error) {
+	block_db, err := s.sql.Query("SELECT `number`, `timestamp`, `miner`, `difficulty`, `gaslimit`, `extradata`, `nonce`, `mixhash`, `basefee` FROM `blocks` WHERE `number` >= ? AND `number` < ?", start, end)
+	if err != nil {
+		log.Error("[backend.go/readBlockBatch] failed to read blocks", "start", start, "end", end)
+		return nil, ErrFetchTxs
+	}
+	defer block_db.Close()
 
-	var blocknumber *big.Int
+	var blocknumber_i uint64; var blocknumber *big.Int
 	var timestamp uint64
 	var miner_b []byte; var miner common.Address
 	var difficulty_i uint64; var difficulty *big.Int
@@ -602,87 +607,80 @@ func (s *Ethereum) readBlock(number int) (*types.Header, error) {
 	var nonce_b []byte; var nonce types.BlockNonce
 	var mixhash_b []byte; var mixhash common.Hash
 	var basefee sql.NullInt64
-	err := block_row.Scan(&timestamp, &miner_b, &difficulty_i, &gaslimit, &extradata, &nonce_b, &mixhash_b, &basefee)
 
-	_ = mixhash
+	result := make([]*types.Header, end - start)
+	seq := 0
 
-	if err != nil {
-		log.Error("[backend.go/readBlock] failed to read a block", "number", number, "err", err);
-		return nil, ErrFetchBlock
+	for block_db.Next() {
+		err := block_db.Scan(&blocknumber_i, &timestamp, &miner_b, &difficulty_i, &gaslimit, &extradata, &nonce_b, &mixhash_b, &basefee)
+
+		_ = mixhash
+
+		if err != nil {
+			log.Error("[backend.go/readBlockBatch] failed to read a block", "number", blocknumber_i, "err", err);
+			return nil, ErrFetchBlock
+		}
+
+		miner = common.BytesToAddress(miner_b)
+		difficulty = new(big.Int).SetUint64(difficulty_i)
+		blocknumber = new(big.Int).SetUint64(blocknumber_i)
+		mixhash = common.BytesToHash(mixhash_b)
+		nonce = types.EncodeNonce(binary.BigEndian.Uint64(nonce_b))
+
+		header := &types.Header{
+			Coinbase: miner,
+			Difficulty: difficulty,
+			Number: blocknumber,
+			GasLimit: gaslimit,
+			Time: timestamp,
+			Extra: extradata,
+			MixDigest: mixhash,
+			Nonce: nonce,
+			BaseFee: nil,
+		}
+
+		if basefee.Valid {
+			header.BaseFee = new(big.Int).SetUint64(uint64(basefee.Int64))
+		}
+		result[seq] = header
+		seq++
 	}
 
-	miner = common.BytesToAddress(miner_b)
-	difficulty = new(big.Int).SetUint64(difficulty_i)
-	blocknumber = new(big.Int).SetUint64(uint64(number))
-	mixhash = common.BytesToHash(mixhash_b)
-	nonce = types.EncodeNonce(binary.BigEndian.Uint64(nonce_b))
-
-	header := &types.Header{
-		Coinbase: miner,
-		Difficulty: difficulty,
-		Number: blocknumber,
-		GasLimit: gaslimit,
-		Time: timestamp,
-		Extra: extradata,
-		MixDigest: mixhash,
-		Nonce: nonce,
-		BaseFee: nil,
-	}
-
-	if basefee.Valid {
-		header.BaseFee = new(big.Int).SetUint64(uint64(basefee.Int64))
-	}
-	return header, nil
+	return result, nil
 }
 
-// read txs from the database (hletrd)
-func (s *Ethereum) readTransactions(blocknumber int) ([]*types.Transaction, error) {
-	var txs []*types.Transaction
-
-	tx_db, err := s.sql.Query("SELECT `to`, `gas`, `gasprice`, `input`, `nonce`, `value`, `v`, `r`, `s`, `type` FROM `transactions` WHERE `blocknumber` = ?", blocknumber)
+// read txs as a batch (hletrd)
+func (s *Ethereum) readTransactionsBatch(start int, end int) ([][]*types.Transaction, error) {
+	tx_db, err := s.sql.Query("SELECT `blocknumber`, `to`, `gas`, `gasprice`, `input`, `nonce`, `value`, `v`, `r`, `s`, `type` FROM `transactions` WHERE `blocknumber` >= ? AND `blocknumber` < ?", start, end)
 	if err != nil {
-		log.Error("[backend.go/readTransactions] failed to read txs", "block", blocknumber)
+		log.Error("[backend.go/readTransactionsBatch] failed to read txs", "start", start, "end", end)
 		return nil, ErrFetchTxs
 	}
 	defer tx_db.Close()
 
-	// TODO-ethane: create and apply restore txs to txs
-	// example:
-	// for address_to_restore {
-	//	restore_tx_data := &types.LegacyTx{
-	//		Nonce: nonce,
-	//		GasPrice: gasprice,
-	//		Gas: gas,
-	//		To: to,
-	//		Value: value,
-	//		Data: input,
-	//	}
-	//	restore_tx := types.NewTx(restore_tx_data)
-	//	account := accounts.Account{Address: addr_to_sign}
-	//	wallet, err := s.accountManager.Find(account)
-	//	restore_tx = wallet.SignTx(account, restore_tx, s.BlockChain().Config().ChainID)
-	//	txs = append(txs, restore_tx)
-	// }
+	var blocknumber_i uint64
+	var to_b sql.NullString; var to *common.Address
+	var gas uint64
+	var gasprice_i uint64
+	var gasprice *big.Int
+	var input []byte
+	var nonce uint64
+	var value_b []byte; var value *big.Int
+	var V_b []byte; var V *big.Int
+	var R_b []byte; var R *big.Int
+	var S_b []byte; var S *big.Int
+	var type_b []byte; var type_ byte
+
+	result := make([][]*types.Transaction, end - start)
+	var txs []*types.Transaction
+	seq := uint64(start)
 
 	for tx_db.Next() {
-		var to_b sql.NullString; var to *common.Address
-		var gas uint64
-		var gasprice_i uint64
-		var gasprice *big.Int
-		var input []byte
-		var nonce uint64
-		var value_b []byte; var value *big.Int
-		var v_b []byte; var v *big.Int
-		var r_b []byte; var r *big.Int
-		var s_b []byte; var s *big.Int
-		var type_b []byte; var type_ byte
-
-		_ = type_
-
-		if err := tx_db.Scan(&to_b, &gas, &gasprice_i, &input, &nonce, &value_b, &v_b, &r_b, &s_b, &type_b); err != nil {
-			log.Error("[backend.go/readTransactions] failed to read a tx from block", "block", blocknumber)
+		if err := tx_db.Scan(&blocknumber_i, &to_b, &gas, &gasprice_i, &input, &nonce, &value_b, &V_b, &R_b, &S_b, &type_b); err != nil {
+			log.Error("[backend.go/readTransactionsBatch] failed to read a tx from block", "block", blocknumber_i)
 			return nil, ErrFetchTxs
 		}
+		_ = type_
 
 		if to_b.Valid {
 			to_addr := common.BytesToAddress([]byte(to_b.String))
@@ -693,9 +691,9 @@ func (s *Ethereum) readTransactions(blocknumber int) ([]*types.Transaction, erro
 
 		gasprice = new(big.Int).SetUint64(gasprice_i)
 		value, _ = new(big.Int).SetString(string(value_b[:]), 10)
-		v = new(big.Int).SetBytes(v_b)
-		r = new(big.Int).SetBytes(r_b)
-		s = new(big.Int).SetBytes(s_b)
+		V = new(big.Int).SetBytes(V_b)
+		R = new(big.Int).SetBytes(R_b)
+		S = new(big.Int).SetBytes(S_b)
 		type_ = type_b[0]
 
 		txdata := &types.LegacyTx{
@@ -705,32 +703,41 @@ func (s *Ethereum) readTransactions(blocknumber int) ([]*types.Transaction, erro
 			To: to,
 			Value: value,
 			Data: input,
-			V: v,
-			R: r,
-			S: s,
+			V: V,
+			R: R,
+			S: S,
 		}
 
-		log.Trace("[backend.go/readTransactions] tx fetched", "tx", txdata)
+		log.Trace("[backend.go/readTransactionsBatch] tx fetched", "tx", txdata)
+
+		if seq != blocknumber_i {
+			result[seq] = txs
+			seq = blocknumber_i
+			txs = make([]*types.Transaction, 0)
+		}
 
 		tx := types.NewTx(txdata)
 		txs = append(txs, tx)
 	}
 
-	return txs, nil
+	return result, nil
 }
 
-// read uncles from the database (hletrd)
-func (s *Ethereum) readUncles(blocknumber int) ([]*types.Header, error) {
-	var uncles []*types.Header
-
-	uncle_db, err := s.sql.Query("SELECT `uncleheight`, `timestamp`, `miner`, `difficulty`, `gasused`, `gaslimit`, `extradata`, `parenthash`, `sha3uncles`, `stateroot`, `nonce`, `receiptsroot`, `transactionsroot`, `mixhash`, `basefee`, `logsbloom` FROM `uncles` WHERE `blocknumber` = ?", blocknumber)
+// read uncles as a batch (hletrd)
+func (s *Ethereum) readUnclesBatch(start int, end int) ([][]*types.Header, error) {
+	uncle_db, err := s.sql.Query("SELECT `blocknumber`, `uncleheight`, `timestamp`, `miner`, `difficulty`, `gasused`, `gaslimit`, `extradata`, `parenthash`, `sha3uncles`, `stateroot`, `nonce`, `receiptsroot`, `transactionsroot`, `mixhash`, `basefee`, `logsbloom` FROM `uncles` WHERE `blocknumber` >= ? AND `blocknumber` < ?", start, end)
 	if err != nil {
-		log.Error("[backend.go/readUncles] failed to fetch an uncle")
+		log.Error("[backend.go/readUnclesBatch] failed to fetch an uncle")
 		return nil, ErrFetchUncles
 	}
 	defer uncle_db.Close()
 
+	result := make([][]*types.Header, end - start)
+	var uncles []*types.Header
+	seq := uint64(start)
+
 	for uncle_db.Next() {
+		var blocknumber_i uint64
 		var uncleheight_i uint64; var uncleheight *big.Int
 		var timestamp uint64
 		var miner_b []byte; var miner common.Address
@@ -748,8 +755,8 @@ func (s *Ethereum) readUncles(blocknumber int) ([]*types.Header, error) {
 		var basefee sql.NullInt64
 		var logsbloom []byte
 
-		if err_ := uncle_db.Scan(&uncleheight_i, &timestamp, &miner_b, &difficulty_i, &gasused, &gaslimit, &extradata, &parenthash_b, &sha3uncles_b, &stateroot_b, &nonce_b, &receiptsroot_b, &transactionsroot_b, &mixhash_b, &basefee, &logsbloom); err_ != nil {
-			log.Error("[backend.go/readUncles] failed to read an uncle", "error", err)
+		if err_ := uncle_db.Scan(&blocknumber_i, &uncleheight_i, &timestamp, &miner_b, &difficulty_i, &gasused, &gaslimit, &extradata, &parenthash_b, &sha3uncles_b, &stateroot_b, &nonce_b, &receiptsroot_b, &transactionsroot_b, &mixhash_b, &basefee, &logsbloom); err_ != nil {
+			log.Error("[backend.go/readUnclesBatch] failed to read an uncle", "number", blocknumber_i, "error", err)
 			return nil, ErrFetchUncles
 		}
 
@@ -787,12 +794,36 @@ func (s *Ethereum) readUncles(blocknumber int) ([]*types.Header, error) {
 			uncle.BaseFee = new(big.Int).SetUint64(uint64(basefee.Int64))
 		}
 
-		log.Trace("[backend.go/readUncles] uncle fetched", "block", blocknumber, "uncleheight", uncleheight)
+		if seq != blocknumber_i {
+			result[seq] = uncles
+			seq = blocknumber_i
+			uncles = make([]*types.Header, 0)
+		}
+
+		log.Trace("[backend.go/readUnclesBatch] uncle fetched", "block", blocknumber_i, "uncleheight", uncleheight)
 
 		uncles = append(uncles, uncle)
 	}
 
-	return uncles, nil
+	return result, nil
+}
+
+// read a block from the database (hletrd)
+func (s *Ethereum) readBlock(number int) (*types.Header, error) {
+	result, err := s.readBlockBatch(number, number+1)
+	return result[0], err
+}
+
+// read txs from the database (hletrd)
+func (s *Ethereum) readTransactions(blocknumber int) ([]*types.Transaction, error) {
+	result, err := s.readTransactionsBatch(blocknumber, blocknumber+1)
+	return result[0], err
+}
+
+// read uncles from the database (hletrd)
+func (s *Ethereum) readUncles(blocknumber int) ([]*types.Header, error) {
+	result, err := s.readUnclesBatch(blocknumber, blocknumber+1)
+	return result[0], err
 }
 
 // insertChain handler for goroutine (hletrd)
