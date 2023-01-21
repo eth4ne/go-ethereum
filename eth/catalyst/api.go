@@ -595,7 +595,7 @@ func (api *ConsensusAPI) heartbeat() {
 						if lastTransitionUpdate.IsZero() {
 							log.Debug("Post-merge network, but no beacon client seen. Please launch one to follow the chain!")
 						} else {
-							log.Warn("Previously seen beacon client is offline. Please ensure it is operational to follow the chain!")
+							log.Debug("Previously seen beacon client is offline. Please ensure it is operational to follow the chain!")
 						}
 						offlineLogged = time.Now()
 					}
@@ -603,9 +603,9 @@ func (api *ConsensusAPI) heartbeat() {
 				}
 				if time.Since(offlineLogged) > beaconUpdateWarnFrequency {
 					if lastForkchoiceUpdate.IsZero() && lastNewPayloadUpdate.IsZero() {
-						log.Warn("Beacon client online, but never received consensus updates. Please ensure your beacon client is operational to follow the chain!")
+						log.Debug("Beacon client online, but never received consensus updates. Please ensure your beacon client is operational to follow the chain!")
 					} else {
-						log.Warn("Beacon client online, but no consensus updates received in a while. Please fix your beacon client to follow the chain!")
+						log.Debug("Beacon client online, but no consensus updates received in a while. Please fix your beacon client to follow the chain!")
 					}
 					offlineLogged = time.Now()
 				}
