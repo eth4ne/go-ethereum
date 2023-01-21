@@ -354,6 +354,7 @@ func (c *ChainIndexer) updateLoop() {
 					c.setValidSections(section + 1)
 					if c.storedSections == c.knownSections && updating {
 						updating = false
+						// adjusted log level from info to debug (hletrd)
 						c.log.Debug("Finished upgrading chain index")
 					}
 					c.cascadedHead = c.storedSections*c.sectionSize - 1

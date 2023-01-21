@@ -63,12 +63,12 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
+// errors for DB handler (hletrd)
 var (
 	ErrFetchBlock = errors.New("Failed to fetch a block")
 	ErrFetchTxs = errors.New("Failed to fetch txs")
 	ErrFetchUncles = errors.New("Failed to fetch uncles")
 )
-
 
 // Config contains the configuration options of the ETH protocol.
 // Deprecated: use ethconfig.Config instead.
@@ -598,6 +598,7 @@ func (s *Ethereum) Stop() error {
 	return nil
 }
 
+// Connect to an SQL server (hletrd)
 func (s *Ethereum) connectSQL(username string, password string) bool {
 	var err error
 	s.sql, err = sql.Open("mysql", username + ":" + password + "@/ethereum")
@@ -608,6 +609,7 @@ func (s *Ethereum) connectSQL(username string, password string) bool {
 	return true
 }
 
+// read a block from the database (hletrd)
 func (s *Ethereum) readBlock(number int) (*types.Header, error) {
 	block_row := s.sql.QueryRow("SELECT `timestamp`, `miner`, `difficulty`, `gaslimit`, `extradata`, `nonce`, `mixhash`, `basefee` FROM `blocks` WHERE `number` = ?", number)
 
@@ -653,6 +655,7 @@ func (s *Ethereum) readBlock(number int) (*types.Header, error) {
 	return header, nil
 }
 
+// read txs from the database (hletrd)
 func (s *Ethereum) readTransactions(blocknumber int) ([]*types.Transaction, error) {
 	var txs []*types.Transaction
 
@@ -736,6 +739,7 @@ func (s *Ethereum) readTransactions(blocknumber int) ([]*types.Transaction, erro
 	return txs, nil
 }
 
+// read uncles from the database (hletrd)
 func (s *Ethereum) readUncles(blocknumber int) ([]*types.Header, error) {
 	var uncles []*types.Header
 
@@ -811,6 +815,7 @@ func (s *Ethereum) readUncles(blocknumber int) ([]*types.Header, error) {
 	return uncles, nil
 }
 
+// insertChain handler for goroutine (hletrd)
 func (s *Ethereum) insertChain(chain []*types.Block, result chan bool) {
 	index, err := s.blockchain.InsertChain(chain)
 	_ = index
@@ -821,6 +826,7 @@ func (s *Ethereum) insertChain(chain []*types.Block, result chan bool) {
 	result <- true
 }
 
+// insert multiple blocks (hletrd)
 func (s *Ethereum) insertBlockRange(start int, end int) bool {
 	if end <= start {
 		log.Error("[backend.go/insertBlockRange] end must be greater than start")
@@ -902,6 +908,7 @@ func (s *Ethereum) insertBlockRange(start int, end int) bool {
 	return true
 }
 
+// insert a single block, actually implemented via insertBlockRange (hletrd)
 func (s *Ethereum) insertBlock(number int) bool {
 	return s.insertBlockRange(number, number+1)
 }
