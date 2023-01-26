@@ -36,6 +36,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/beacon"
 	"github.com/ethereum/go-ethereum/consensus/clique"
+	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/bloombits"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -871,7 +872,8 @@ func (s *Ethereum) readUncles(blocknumber int) ([]*types.Header, error) {
 
 // insertChain handler for goroutine (hletrd)
 func (s *Ethereum) insertChain(chain []*types.Block, result chan bool) {
-	index, err := s.blockchain.InsertChain(chain)
+	s.config.Ethash.PowMode = ethash.ModeFullFake
+	index, err := s.blockchain.InsertChainPlease(chain)
 	_ = index
 	if err != nil {
 		log.Error("[backend.go/insertChain] failed to insert blocks", "err", err)
@@ -897,7 +899,6 @@ func (s *Ethereum) insertBlockRange(start int, end int) bool {
 	batchsize := 1000
 
 	blocks := make([]*types.Block, batchsize)
-	blocks_insert := make([]*types.Block, batchsize)
 	//seq := 0
 	inserting := false
 
@@ -929,7 +930,7 @@ func (s *Ethereum) insertBlockRange(start int, end int) bool {
 			blockhash := block.Hash()
 			blocksize := block.Size()
 
-			log.Trace("[backend.go/insertBlockRange] block prepared", "block", block, "header", header, "hash", blockhash, "size", blocksize)
+			log.Trace("[backend.go/insertBlockRange] block prepared", "block", block, "header", header, "hash", blockhash, "size", blocksize, "txs", txs[i], "uncles", uncles[i])
 			blocks[i] = block
 		}
 
@@ -941,7 +942,8 @@ func (s *Ethereum) insertBlockRange(start int, end int) bool {
 				return false
 			}
 		}
-		copy(blocks_insert, blocks)
+		blocks_insert := make([]*types.Block, end_batch-number)
+		copy(blocks_insert, blocks[:end_batch-number])
 		go s.insertChain(blocks_insert, result_ch)
 		inserting = true
 	}
