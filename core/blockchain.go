@@ -1408,6 +1408,23 @@ func (bc *BlockChain) addFutureBlock(block *types.Block) error {
 	return nil
 }
 
+// Hopefully willing for the new chain to be inserted (hletrd)
+func (bc *BlockChain) InsertChainPlease(chain types.Blocks) (int, error) {
+	// Sanity check that we have something meaningful to import
+	if len(chain) == 0 {
+		return 0, nil
+	}
+	bc.blockProcFeed.Send(true)
+	defer bc.blockProcFeed.Send(false)
+
+	// bypass sanity check (hletrd)
+	if !bc.chainmu.TryLock() {
+		return 0, errChainStopped
+	}
+	defer bc.chainmu.Unlock()
+	return bc.insertChain(chain, false, true)
+}
+
 // InsertChain attempts to insert the given batch of blocks in to the canonical
 // chain or, otherwise, create a fork. If an error is returned it will return
 // the index number of the failing block as well an error describing what went
@@ -1420,23 +1437,21 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 	bc.blockProcFeed.Send(true)
 	defer bc.blockProcFeed.Send(false)
 
-	// bypass sanity check (hletrd)
 	// Do a sanity check that the provided chain is actually ordered and linked.
-	/*for i := 1; i < len(chain); i++ {
+	for i := 1; i < len(chain); i++ {
 		block, prev := chain[i], chain[i-1]
 		if block.NumberU64() != prev.NumberU64()+1 || block.ParentHash() != prev.Hash() {
-			// parenthash will be manipulated later (hletrd)
-			//log.Error("Non contiguous block insert",
-			//	"number", block.Number(),
-			//	"hash", block.Hash(),
-			//	"parent", block.ParentHash(),
-			//	"prevnumber", prev.Number(),
-			//	"prevhash", prev.Hash(),
-			//)
-			//return 0, fmt.Errorf("non contiguous insert: item %d is #%d [%x..], item %d is #%d [%x..] (parent [%x..])", i-1, prev.NumberU64(),
-			//	prev.Hash().Bytes()[:4], i, block.NumberU64(), block.Hash().Bytes()[:4], block.ParentHash().Bytes()[:4])
+			log.Error("Non contiguous block insert",
+				"number", block.Number(),
+				"hash", block.Hash(),
+				"parent", block.ParentHash(),
+				"prevnumber", prev.Number(),
+				"prevhash", prev.Hash(),
+			)
+			return 0, fmt.Errorf("non contiguous insert: item %d is #%d [%x..], item %d is #%d [%x..] (parent [%x..])", i-1, prev.NumberU64(),
+				prev.Hash().Bytes()[:4], i, block.NumberU64(), block.Hash().Bytes()[:4], block.ParentHash().Bytes()[:4])
 		}
-	}*/
+	}
 	// Pre-checks passed, start the full block imports
 	if !bc.chainmu.TryLock() {
 		return 0, errChainStopped
@@ -1481,12 +1496,10 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		seals[i] = verifySeals
 	}
 	// not to verify (hletrd)
-	//abort, results := bc.engine.VerifyHeaders(bc, headers, seals)
-	//defer close(abort)
-	results := make(chan error, len(headers))
-	for i := 0; i < len(headers); i++ {
-		results <- nil
-	}
+	results := make(<-chan error, len(headers))
+	abort := make(chan<- struct{}, 0)
+	defer close(abort)
+	abort, results = bc.engine.VerifyHeaders(bc, headers, seals)
 
 	// Peek the error for the first block to decide the directing import logic
 	it := newInsertIterator(chain, results, bc.validator)

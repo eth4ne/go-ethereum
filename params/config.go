@@ -77,7 +77,7 @@ var (
 		ArrowGlacierBlock:             big.NewInt(13_773_000),
 		GrayGlacierBlock:              big.NewInt(15_050_000),
 		TerminalTotalDifficulty:       MainnetTerminalTotalDifficulty, // 58_750_000_000_000_000_000_000
-		TerminalTotalDifficultyPassed: true,
+		TerminalTotalDifficultyPassed: false,
 		Ethash:                        new(EthashConfig),
 	}
 
