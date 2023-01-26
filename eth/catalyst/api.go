@@ -662,9 +662,9 @@ func (api *ConsensusAPI) heartbeat() {
 						}
 					}
 					if eta == 0 {
-						log.Warn(message)
+						log.Debug(message)
 					} else {
-						log.Warn(message, "eta", common.PrettyAge(time.Now().Add(-eta))) // weird hack, but duration formatted doesn't handle days
+						log.Debug(message, "eta", common.PrettyAge(time.Now().Add(-eta))) // weird hack, but duration formatted doesn't handle days
 					}
 					offlineLogged = time.Now()
 				}
