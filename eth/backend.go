@@ -36,6 +36,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/beacon"
 	"github.com/ethereum/go-ethereum/consensus/clique"
+	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/bloombits"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -671,7 +672,7 @@ func (s *Ethereum) readBlockBatch(start int, end int) ([]*types.Header, error) {
 
 // read txs as a batch (hletrd)
 func (s *Ethereum) readTransactionsBatch(start int, end int) ([][]*types.Transaction, error) {
-	tx_db, err := s.sql.Query("SELECT `blocknumber`, `to`, `gas`, `gasprice`, `input`, `nonce`, `value`, `v`, `r`, `s`, `type` FROM `transactions` WHERE `blocknumber` >= ? AND `blocknumber` < ?", start, end)
+	tx_db, err := s.sql.Query("SELECT `blocknumber`, `to`, `gas`, `gasprice`, `input`, `nonce`, `value`, `v`, `r`, `s`, `type`, `maxfeepergas`, `maxpriorityfeepergas` FROM `transactions` WHERE `blocknumber` >= ? AND `blocknumber` < ?", start, end)
 	if err != nil {
 		log.Error("[backend.go/readTransactionsBatch] failed to read txs", "start", start, "end", end)
 		return nil, ErrFetchTxs
@@ -690,13 +691,14 @@ func (s *Ethereum) readTransactionsBatch(start int, end int) ([][]*types.Transac
 	var R_b []byte; var R *big.Int
 	var S_b []byte; var S *big.Int
 	var type_b []byte; var type_ byte
+	var maxfeepergas sql.NullInt64; var maxpriorityfeepergas sql.NullInt64
 
 	result := make([][]*types.Transaction, end - start)
 	var txs []*types.Transaction
 	seq := uint64(start)
 
 	for tx_db.Next() {
-		if err := tx_db.Scan(&blocknumber_i, &to_b, &gas, &gasprice_i, &input, &nonce, &value_b, &V_b, &R_b, &S_b, &type_b); err != nil {
+		if err := tx_db.Scan(&blocknumber_i, &to_b, &gas, &gasprice_i, &input, &nonce, &value_b, &V_b, &R_b, &S_b, &type_b, &maxfeepergas, &maxpriorityfeepergas); err != nil {
 			log.Error("[backend.go/readTransactionsBatch] failed to read a tx from block", "block", blocknumber_i)
 			return nil, ErrFetchTxs
 		}
@@ -716,17 +718,50 @@ func (s *Ethereum) readTransactionsBatch(start int, end int) ([][]*types.Transac
 		S = new(big.Int).SetBytes(S_b)
 		type_ = type_b[0]
 
-		txdata := &types.LegacyTx{
-			Nonce: nonce,
-			GasPrice: gasprice,
-			Gas: gas,
-			To: to,
-			Value: value,
-			Data: input,
-			V: V,
-			R: R,
-			S: S,
+		var txdata types.TxData
+
+		switch type_ {
+		case types.LegacyTxType:
+			txdata = &types.LegacyTx{
+				Nonce: nonce,
+				GasPrice: gasprice,
+				Gas: gas,
+				To: to,
+				Value: value,
+				Data: input,
+				V: V,
+				R: R,
+				S: S,
+			}
+		case types.AccessListTxType:
+			txdata = &types.AccessListTx{
+				ChainID: s.blockchain.Config().ChainID,
+				Nonce: nonce,
+				GasPrice: gasprice,
+				Gas: gas,
+				To: to,
+				Value: value,
+				Data: input,
+				V: V,
+				R: R,
+				S: S,
+			}
+		case types.DynamicFeeTxType:
+			txdata = &types.DynamicFeeTx{
+				ChainID: s.blockchain.Config().ChainID,
+				Nonce: nonce,
+				Gas: gas,
+				GasTipCap: new(big.Int).SetInt64(maxfeepergas.Int64),
+				GasFeeCap: new(big.Int).SetInt64(maxpriorityfeepergas.Int64),
+				To: to,
+				Value: value,
+				Data: input,
+				V: V,
+				R: R,
+				S: S,
+			}
 		}
+
 
 		log.Trace("[backend.go/readTransactionsBatch] tx fetched", "tx", txdata)
 
@@ -857,7 +892,8 @@ func (s *Ethereum) readUncles(blocknumber int) ([]*types.Header, error) {
 
 // insertChain handler for goroutine (hletrd)
 func (s *Ethereum) insertChain(chain []*types.Block, result chan bool) {
-	index, err := s.blockchain.InsertChain(chain)
+	s.config.Ethash.PowMode = ethash.ModeFullFake
+	index, err := s.blockchain.InsertChainPlease(chain)
 	_ = index
 	if err != nil {
 		log.Error("[backend.go/insertChain] failed to insert blocks", "err", err)
@@ -883,7 +919,6 @@ func (s *Ethereum) insertBlockRange(start int, end int) bool {
 	batchsize := 1000
 
 	blocks := make([]*types.Block, batchsize)
-	blocks_insert := make([]*types.Block, batchsize)
 	//seq := 0
 	inserting := false
 
@@ -915,7 +950,7 @@ func (s *Ethereum) insertBlockRange(start int, end int) bool {
 			blockhash := block.Hash()
 			blocksize := block.Size()
 
-			log.Trace("[backend.go/insertBlockRange] block prepared", "block", block, "header", header, "hash", blockhash, "size", blocksize)
+			log.Trace("[backend.go/insertBlockRange] block prepared", "block", block, "header", header, "hash", blockhash, "size", blocksize, "txs", txs[i], "uncles", uncles[i])
 			blocks[i] = block
 		}
 
@@ -927,7 +962,8 @@ func (s *Ethereum) insertBlockRange(start int, end int) bool {
 				return false
 			}
 		}
-		copy(blocks_insert, blocks)
+		blocks_insert := make([]*types.Block, end_batch-number)
+		copy(blocks_insert, blocks[:end_batch-number])
 		go s.insertChain(blocks_insert, result_ch)
 		inserting = true
 	}
