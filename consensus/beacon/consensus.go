@@ -99,9 +99,17 @@ func (beacon *Beacon) VerifyHeader(chain consensus.ChainHeaderReader, header *ty
 // concurrently. The method returns a quit channel to abort the operations and
 // a results channel to retrieve the async verifications.
 // VerifyHeaders expect the headers to be ordered and continuous.
-func (beacon *Beacon) VerifyHeaders(chain consensus.ChainHeaderReader, headers []*types.Header, seals []bool) (chan<- struct{}, <-chan error) {
+func (beacon *Beacon) VerifyHeaders(chain consensus.ChainHeaderReader, headers []*types.Header, seals []bool, nonVerify bool) (chan<- struct{}, <-chan error) {
+	if nonVerify == true {
+		abort := make(chan struct{})
+		results := make(chan error, len(headers))
+		for i := 0; i < len(headers); i++ {
+			results <- nil
+		}
+		return abort, results
+	}
 	if !beacon.IsPoSHeader(headers[len(headers)-1]) {
-		return beacon.ethone.VerifyHeaders(chain, headers, seals)
+		return beacon.ethone.VerifyHeaders(chain, headers, seals, nonVerify)
 	}
 	var (
 		preHeaders  []*types.Header
@@ -144,7 +152,7 @@ func (beacon *Beacon) VerifyHeaders(chain consensus.ChainHeaderReader, headers [
 			old, new, out      = 0, len(preHeaders), 0
 			errors             = make([]error, len(headers))
 			done               = make([]bool, len(headers))
-			oldDone, oldResult = beacon.ethone.VerifyHeaders(chain, preHeaders, preSeals)
+			oldDone, oldResult = beacon.ethone.VerifyHeaders(chain, preHeaders, preSeals, nonVerify)
 			newDone, newResult = beacon.verifyHeaders(chain, postHeaders, preHeaders[len(preHeaders)-1])
 		)
 		// Verify that pre-merge headers don't overflow the TTD

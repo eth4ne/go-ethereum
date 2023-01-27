@@ -1499,7 +1499,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 	results := make(<-chan error, len(headers))
 	abort := make(chan<- struct{}, 0)
 	defer close(abort)
-	abort, results = bc.engine.VerifyHeaders(bc, headers, seals)
+	abort, results = bc.engine.VerifyHeaders(bc, headers, seals, !verifySeals)
 
 	// Peek the error for the first block to decide the directing import logic
 	it := newInsertIterator(chain, results, bc.validator)
