@@ -599,6 +599,10 @@ func inspectDatabase(diskdb ethdb.KeyValueStore) (uint64, uint64) {
 
 // inspectTrieDisk measures number and size of trie nodes in the trie (get node info from disk)
 func inspectTrieDisk(hash common.Hash) common.NodeStat {
+	// if this is empty trie, return empty NodeStat
+	if hash == emptyRoot {
+		return common.NodeStat{}
+	}
 
 	// open trie to inspect
 	trieToInsepct, err := trie.New(hash, trie.NewDatabase(diskdb))
