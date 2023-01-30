@@ -507,6 +507,21 @@ def intAddrToAddrHash(num):
     # print("addrHash:", addrHash)
     return addrHash[2:] # delete "0x"
 
+# reverse order of lines in the file
+def reverseFileLineOrder(fileName):
+    # read lines
+    file = open(fileName, "r")
+    lines = file.readlines()
+    # reversing
+    linesWithReverseOrder = reversed(lines)
+    file.close()
+
+    # overwrite reversed lines
+    file = open(fileName, "w")
+    for line in linesWithReverseOrder:
+        file.write(line)
+    file.close()
+
 # generate sample trie for test/debugging
 def generateSampleTrie():
     reset()
@@ -1421,7 +1436,8 @@ def inspectTriesEthereum(startBlockNum, endBlockNum, trieInspectIntervals):
     if os.path.exists(trieInspectsLogFilePath+trieInspectLogFileName):
         os.remove(trieInspectsLogFilePath+trieInspectLogFileName)
     trieInspectFile = open(trieInspectsLogFilePath+trieInspectLogFileName, 'a')
-    rdr = csv.reader(blockInfosFile)
+    rdr = list(csv.reader(blockInfosFile))
+    rdr = reversed(rdr) # reverse line order to query latest trie first
     blockNum = 0
     for line in rdr:
         if len(line) == 0:
@@ -1445,6 +1461,7 @@ def inspectTriesEthereum(startBlockNum, endBlockNum, trieInspectIntervals):
             trieInspectFile.write(log)
     
     trieInspectFile.close()
+    reverseFileLineOrder(trieInspectsLogFilePath+trieInspectLogFileName)
     print("create log file:", trieInspectLogFileName)
     print("total trie inspect time:", datetime.now()-totalStartTime)
 
@@ -1465,7 +1482,8 @@ def inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch,
     if os.path.exists(trieInspectsLogFilePath+trieInspectLogFileName):
         os.remove(trieInspectsLogFilePath+trieInspectLogFileName)
     trieInspectFile = open(trieInspectsLogFilePath+trieInspectLogFileName, 'a')
-    rdr = csv.reader(blockInfosFile)
+    rdr = list(csv.reader(blockInfosFile))
+    rdr = reversed(rdr) # reverse line order to query latest trie first
     blockNum = 0
     zeroNodeStat = "0 0 0 0 0 0 0 0 0 0 0 "
     for line in rdr:
@@ -1510,6 +1528,7 @@ def inspectTriesEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch,
             trieInspectFile.write(log)
 
     trieInspectFile.close()
+    reverseFileLineOrder(trieInspectsLogFilePath+trieInspectLogFileName)
     print("create log file:", trieInspectLogFileName)
     print("total trie inspect time:", datetime.now()-totalStartTime)
 
@@ -1528,7 +1547,8 @@ def inspectTriesEthanos(startBlockNum, endBlockNum, inactivateCriterion, trieIns
     if os.path.exists(trieInspectsLogFilePath+trieInspectLogFileName):
         os.remove(trieInspectsLogFilePath+trieInspectLogFileName)
     trieInspectFile = open(trieInspectsLogFilePath+trieInspectLogFileName, 'a')
-    rdr = csv.reader(blockInfosFile)
+    rdr = list(csv.reader(blockInfosFile))
+    rdr = reversed(rdr) # reverse line order to query latest trie first
     blockNum = 0
     for line in rdr:
         if len(line) == 0:
@@ -1552,6 +1572,7 @@ def inspectTriesEthanos(startBlockNum, endBlockNum, inactivateCriterion, trieIns
             trieInspectFile.write(log)
     
     trieInspectFile.close()
+    reverseFileLineOrder(trieInspectsLogFilePath+trieInspectLogFileName)
     print("create log file:", trieInspectLogFileName)
     print("total trie inspect time:", datetime.now()-totalStartTime)
 
