@@ -718,8 +718,13 @@ func (t *Trie) InspectTrie() TrieInspectResult {
 	tir.AccountBalance = map[string]big.Int{}
 
 	// fmt.Println("\n\n#################\nINSPECTATION START\n#################")
-	// t.inspectTrieNodes(t.root, &tir, &wg, 0, "state") // Inspect Start
-	t.inspectTrieNodes(t.root, &tir, &wg, 0, stateTrie, nil) // Inspect Start
+	// first call's parameter node should be hashNode
+	// TODO(jmlee): find how to convert common.Hash to trie.hashNode
+	// hash, _, _ := t.hashRoot()
+	// rootHashNode := hash.(hashNode)
+	t.Hash()
+	rootHashNode, _ := t.root.cache()
+	t.inspectTrieNodes(rootHashNode, &tir, &wg, 0, 0, stateTrie, nil) // Inspect Start
 
 	// wait for all gourtines finished
 	// timeout := 48 * time.Hour
@@ -744,13 +749,16 @@ func (t *Trie) InspectStorageTrie() TrieInspectResult {
 	tir.AddressHashTocodeHash = map[string]string{}
 	tir.StorageTrieSlotHash = map[string][]string{}
 
-	t.inspectTrieNodes(t.root, &tir, &wg, 0, storageTrie, nil)
-	// t.inspectTrieNodes(t.root, &tir, &wg, 0, "storage")
+	// first call's parameter node should be hashNode
+	// TODO(jmlee): find how to convert common.Hash to trie.hashNode
+	t.Hash()
+	rootHashNode, _ := t.root.cache()
+	t.inspectTrieNodes(rootHashNode, &tir, &wg, 0, 0, storageTrie, nil)
 	return tir
 }
 
 func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGroup, depth int, trie trieType, addressKey []byte) {
-	// func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGroup, depth int, trie string) {
+func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGroup, size, depth int, trie trieType, addressKey []byte) {
 
 	cnt += 1
 	if cnt%100000 == 0 && trie == stateTrie {
@@ -771,25 +779,17 @@ func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGro
 		// hash := common.BytesToHash(hn)
 		addressKey = append(addressKey, n.Key...)
 
-		// encoding node to measure node size (in trie/hasher.go -> hashShortNodeChildren(), shortnodeToHash())
-		h := newHasher(false)
-		defer returnHasherToPool(h)
-		collapsed, _ := n.copy(), n.copy()
-		collapsed.Key = hexToCompact(n.Key)
-		collapsed.Val, _ = h.hash(n.Val, false)
-		_, nodeSize := h.shortnodeToHash(collapsed, false)
-
 		// increase tir
 		if n.Key[len(n.Key)-1] != 16 {
 			// this is intermediate short node
-			increaseSize(nodeSize, "short", tir, depth)
+			increaseSize(size, "short", tir, depth)
 		} else {
 			// this is leaf short node
-			increaseSize(nodeSize, "value", tir, depth)
+			increaseSize(size, "value", tir, depth)
 		}
 		// increaseSize(nodeSize, "short", tir, depth)
 
-		t.inspectTrieNodes(n.Val, tir, wg, depth+1, trie, addressKey) // go child node
+		t.inspectTrieNodes(n.Val, tir, wg, 0, depth+1, trie, addressKey) // go child node
 
 	case *fullNode:
 
@@ -802,21 +802,8 @@ func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGro
 		}
 		// hash := common.BytesToHash(hn)
 
-		// encoding node to measure node size (in trie/hasher.go -> hashFullNodeChildren(), fullnodeToHash())
-		h := newHasher(false)
-		defer returnHasherToPool(h)
-		collapsed, _ := n.copy(), n.copy()
-		for i := 0; i < 16; i++ {
-			if child := n.Children[i]; child != nil {
-				collapsed.Children[i], _ = h.hash(child, false)
-			} else {
-				collapsed.Children[i] = nilValueNode
-			}
-		}
-		_, nodeSize := h.fullnodeToHash(collapsed, false)
-
 		temp_addressKey := addressKey
-		increaseSize(nodeSize, "full", tir, depth) // increase tir
+		increaseSize(size, "full", tir, depth) // increase tir
 
 		// // vanilla version
 		for i, child := range &n.Children {
@@ -826,8 +813,7 @@ func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGro
 				// fmt.Println("    Full  node: addressKey", hex.EncodeToString(addressKey), "+", nodeKeyByte[len(nodeKeyByte)-1])
 				addressKey = append(temp_addressKey, nodeKeyByte[len(nodeKeyByte)-1])
 
-				t.inspectTrieNodes(child, tir, wg, depth+1, trie, addressKey)
-				// t.inspectTrieNodes(child, tir, wg, depth+1, trie)
+				t.inspectTrieNodes(child, tir, wg, 0, depth+1, trie, addressKey)
 			}
 		}
 
@@ -842,19 +828,17 @@ func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGro
 		//          wg.Add(1)
 		//          go func(child node, tir *TrieInspectResult, wg *sync.WaitGroup, depth int, trie string) {
 		//             defer wg.Done()
-		//             t.inspectTrieNodes(child, tir, wg, depth+1, trie, addressKey)
-		//             // t.inspectTrieNodes(child, tir, wg, depth+1, trie)
+		//             t.inspectTrieNodes(child, tir, wg, 0, depth+1, trie, addressKey)
 		//          }(child, tir, wg, depth, trie)
 		//       }
 		//    }
 		// } else {
 		//    for i, child := range &n.Children {
 		//       if child != nil {
-		//          // t.inspectTrieNodes(child, tir, wg, depth+1, trie)
 		//          nodeKeyByte := common.HexToHash("0x" + indices[i])
 		//          addressKey = append(addressKey, nodeKeyByte[len(nodeKeyByte)-1])
 
-		//          t.inspectTrieNodes(child, tir, wg, depth+1, trie, addressKey)
+		//          t.inspectTrieNodes(child, tir, wg, 0, depth+1, trie, addressKey)
 		//       }
 		//    }
 		// }
@@ -867,11 +851,9 @@ func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGro
 		}
 
 		hash := common.BytesToHash([]byte(n))
-		resolvedNode := t.db.node(hash) // error
-		if resolvedNode != nil {
-			// t.inspectTrieNodes(resolvedNode, tir, wg, depth, trie)
-			t.inspectTrieNodes(resolvedNode, tir, wg, depth, trie, addressKey)
-
+		enc, _ := t.db.Node(hash)
+		if enc != nil {
+			t.inspectTrieNodes(mustDecodeNode(hash[:], enc), tir, wg, len(enc), depth, trie, addressKey)
 		} else {
 			// in normal case (ex. archive node), it will not come in here
 			fmt.Println("ERROR: cannot resolve hash node -> node hash:", hash.Hex())
