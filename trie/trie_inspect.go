@@ -757,7 +757,6 @@ func (t *Trie) InspectStorageTrie() TrieInspectResult {
 	return tir
 }
 
-func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGroup, depth int, trie trieType, addressKey []byte) {
 func (t *Trie) inspectTrieNodes(n node, tir *TrieInspectResult, wg *sync.WaitGroup, size, depth int, trie trieType, addressKey []byte) {
 
 	cnt += 1
