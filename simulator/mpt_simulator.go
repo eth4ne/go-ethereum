@@ -51,10 +51,13 @@ const (
 	// leveldb path ($ sudo chmod -R 777 /ethereum)
 	leveldbPath = "/ethereum/mptSimulator_jmlee/trieNodes/port_" + serverPort
 	// leveldb cache size (MB) (Geth default: 512) (memory leak might occur when calling reset() frequently with too big cache size)
-	leveldbCache = 20000
+	leveldbCache = 5000
 	// leveldb options
 	leveldbNamespace = "eth/db/chaindata/"
 	leveldbReadonly  = false
+
+	// trie cache size (MB)
+	trieCacheSize = 5000
 )
 
 var (
@@ -72,6 +75,9 @@ var (
 
 	// disk to store trie nodes (either leveldb or memorydb)
 	diskdb ethdb.KeyValueStore
+	// trie's database including diskdb and clean cache
+	normTrieDB    *trie.Database
+	subNormTrieDB *trie.Database
 	// normal state trie
 	normTrie *trie.Trie
 	// additional inactive trie for Ethane / cached trie for Ethanos
@@ -144,12 +150,17 @@ func reset(deleteDisk bool) {
 			fmt.Println("leveldb.New error!! ->", err)
 			os.Exit(1)
 		}
+		fmt.Println("leveldb cache size:", leveldbCache, "MB")
 	} else {
 		fmt.Println("set memorydb")
 		diskdb = memorydb.New()
 	}
-	normTrie, _ = trie.New(common.Hash{}, trie.NewDatabase(diskdb))
-	subNormTrie, _ = trie.New(common.Hash{}, trie.NewDatabase(diskdb))
+	normTrieDB = trie.NewDatabaseWithConfig(diskdb, &trie.Config{Cache: trieCacheSize})
+	subNormTrieDB = normTrieDB
+	// subNormTrieDB = trie.NewDatabaseWithConfig(diskdb, &trie.Config{Cache: trieCacheSize}) // if want to split clean caches
+	fmt.Println("trie clean cache size:", trieCacheSize, "MB")
+	normTrie, _ = trie.New(common.Hash{}, normTrieDB)
+	subNormTrie, _ = trie.New(common.Hash{}, subNormTrieDB)
 
 	// reset secure trie
 	secureTrie, _ = trie.NewSecure(common.Hash{}, trie.NewDatabase(memorydb.New()))
@@ -219,7 +230,7 @@ func rollbackUncommittedUpdates() {
 
 	// open current state trie
 	currentRoot := common.Blocks[latestBlockNum].Root
-	normTrie, _ = trie.New(currentRoot, trie.NewDatabase(diskdb))
+	normTrie, _ = trie.New(currentRoot, normTrieDB)
 
 	// rollback account nonce value
 	emptyAccount.Nonce = common.Blocks[latestBlockNum].MaxAccountNonce
@@ -324,7 +335,7 @@ func rollbackToBlock(targetBlockNum uint64) bool {
 	}
 
 	// open target block's trie
-	normTrie, _ = trie.New(common.Blocks[targetBlockNum].Root, trie.NewDatabase(diskdb))
+	normTrie, _ = trie.New(common.Blocks[targetBlockNum].Root, normTrieDB)
 
 	// set nonce value at that time
 	emptyAccount.Nonce = common.Blocks[targetBlockNum].MaxAccountNonce
@@ -963,7 +974,7 @@ func restoreAccountForEthanos(restoreAddr common.Address) {
 		// open checkpoint block's state trie
 		checkpointBlockNum := uint64((epochNum+1))*common.InactivateCriterion - 1
 		checkpointRoot := common.Blocks[checkpointBlockNum].Root
-		checkpointTrie, err := trie.New(checkpointRoot, trie.NewDatabase(diskdb))
+		checkpointTrie, err := trie.New(checkpointRoot, subNormTrieDB)
 		if err != nil {
 			fmt.Println("restoreAccountForEthanos() error 1:", err)
 			os.Exit(1)
@@ -1045,7 +1056,7 @@ func restoreAccountForEthanos(restoreAddr common.Address) {
 		// open checkpoint block's state trie
 		checkpointBlockNum := uint64((epochNum+1))*common.InactivateCriterion - 1
 		checkpointRoot := common.Blocks[checkpointBlockNum].Root
-		checkpointTrie, err := trie.New(checkpointRoot, trie.NewDatabase(diskdb))
+		checkpointTrie, err := trie.New(checkpointRoot, subNormTrieDB)
 		if err != nil {
 			fmt.Println("restoreAccountForEthanos() error 2:", err)
 			os.Exit(1)
@@ -1076,7 +1087,7 @@ func restoreAccountForEthanos(restoreAddr common.Address) {
 			if exists[i] {
 				checkpointBlockNum := uint64((i+1))*common.InactivateCriterion - 1
 				checkpointRoot := common.Blocks[checkpointBlockNum].Root
-				checkpointTrie, err := trie.New(checkpointRoot, trie.NewDatabase(diskdb))
+				checkpointTrie, err := trie.New(checkpointRoot, subNormTrieDB)
 				if err != nil {
 					fmt.Println("restoreAccountForEthanos() error 3:", err)
 					os.Exit(1)
@@ -1153,7 +1164,7 @@ func sweepStateTrie() {
 	subNormTrie = normTrie
 
 	// open new empty state trie
-	normTrie, _ = trie.New(common.Hash{}, trie.NewDatabase(diskdb))
+	normTrie, _ = trie.New(common.Hash{}, normTrieDB)
 
 	// save current bloom filter, and make new one for new epoch
 	pruner.SweepBloomFilter()
@@ -2097,7 +2108,7 @@ func connHandler(conn net.Conn) {
 					}
 
 					// open storage trie
-					storageTrie, err = trie.NewSecure(storageRoot, trie.NewDatabase(diskdb))
+					storageTrie, err = trie.NewSecure(storageRoot, normTrieDB)
 					if err != nil {
 						fmt.Println("trie.NewSecure() failed:", err)
 						fmt.Println("contractAddr:", contractAddr)
@@ -2151,7 +2162,7 @@ func connHandler(conn net.Conn) {
 					}
 
 					// open storage trie
-					storageTrie, err = trie.NewSecure(acc.Root, trie.NewDatabase(diskdb))
+					storageTrie, err = trie.NewSecure(acc.Root, normTrieDB)
 					if err != nil {
 						fmt.Println("trie.NewSecure() failed:", err)
 						fmt.Println("contractAddr:", contractAddr)
@@ -2219,7 +2230,7 @@ func connHandler(conn net.Conn) {
 					}
 
 					// open storage trie
-					storageTrie, err = trie.NewSecure(storageRoot, trie.NewDatabase(diskdb))
+					storageTrie, err = trie.NewSecure(storageRoot, normTrieDB)
 					if err != nil {
 						fmt.Println("trie.NewSecure() failed:", err)
 						fmt.Println("contractAddr:", contractAddr)
@@ -2624,7 +2635,7 @@ func connHandler(conn net.Conn) {
 				}
 
 				oldTrieRoot := common.Blocks[blockNum].Root
-				normTrie, err = trie.New(oldTrieRoot, trie.NewDatabase(diskdb))
+				normTrie, err = trie.New(oldTrieRoot, normTrieDB)
 				if err != nil {
 					fmt.Println("setHead() request err:", err)
 					fmt.Println("requested blockNum:", blockNum)
