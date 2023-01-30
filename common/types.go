@@ -162,6 +162,7 @@ var (
 	CheckpointKeys = make(map[uint64]uint64) // initial NextKeys of blocks (CheckpointKeys[blockNumber] = initialNextKeyOfTheBlock)
 
 	KeysToDelete         = make([]Hash, 0)         // store previous leaf nodes' keys to delete later
+	KeysToDeleteMap      = make(map[Hash]struct{}) // store previous leaf nodes' keys to delete later (need to inactivate accounts when delete epoch is infinite)
 	InactiveBoundaryKey  = uint64(0)               // inactive accounts have keys smaller than InactiveBoundaryKey
 	InactiveBoundaryKeys = make(map[uint64]uint64) // InactiveBoundaryKeys[blockNum] = inactiveBoundaryKey at that block (TODO(jmlee): maybe merge into BlockInfo)
 	RestoredKeys         = make([]Hash, 0)         // merkle proof keys in restore txs, need to be deleted after inactivation
