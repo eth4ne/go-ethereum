@@ -479,6 +479,7 @@ outOfRestoration: // when there is no account to restore, jump to here (joonha)
 			contract := NewContract(caller, AccountRef(addrCopy), value, gas)
 			contract.SetCallCode(&addrCopy, evm.StateDB.GetCodeHash(addrCopy), code)
 			ret, err = evm.interpreter.Run(contract, input, false)
+			err = nil // ignore returned err here (joonha)
 			gas = contract.Gas
 		}
 	}

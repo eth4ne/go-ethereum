@@ -123,7 +123,7 @@ var (
 	LocalCoinbaseNonceCounter = uint64(0)
 
 	//
-	DoInsertBlockBeforeRestoration = false
+	DoInsertBlockBeforeRestoration bool
 )
 
 // Block parameters (hletrd)

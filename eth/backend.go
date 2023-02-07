@@ -23,7 +23,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"os"
 	"runtime"
 	"strconv"
 	"sync"
@@ -689,7 +688,7 @@ func (s *Ethereum) readTransactions(blocknumber int) ([]*types.Transaction, erro
 	// (joonha)
 	// insert chain before next restoration
 	var doExist bool
-	if _, doExist = common.RestoreList[blocknumber+int(common.InactivateLeafNodeEpoch)]; doExist {
+	if _, doExist = common.RestoreList[blocknumber+1]; doExist {
 		common.DoInsertBlockBeforeRestoration = true
 	}
 
@@ -705,8 +704,8 @@ func (s *Ethereum) readTransactions(blocknumber int) ([]*types.Transaction, erro
 		// get merkle proofs for restoration
 		mmp, mperr := state.GetProof(address_to_restore)
 		if mperr != nil {
-			log.Error("[backend.go/readTransactions] failed to get merkle proofs of the restore address", "block", blocknumber)
-			os.Exit(1)
+			log.Error("[backend.go/readTransactions] failed to get merkle proofs of the restore address", "mperr", mperr, "block", blocknumber, "address_to_restore", address_to_restore)
+			// os.Exit(1)
 		}
 		bs := []byte(strconv.Itoa(blocknumber))
 		mmp = append([][]byte{bs}, mmp...)                    // blocknumber
@@ -925,6 +924,8 @@ func (s *Ethereum) insertBlockRange(start int, end int) bool {
 		// blocks[seq] = block
 		// seq++
 		blocks = append(blocks, block)
+
+		common.DoInsertBlockBeforeRestoration = true // temp to test internal transaction
 
 		// (joonha)
 		if common.DoInsertBlockBeforeRestoration {

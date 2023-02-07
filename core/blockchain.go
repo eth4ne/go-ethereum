@@ -1528,9 +1528,9 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	// 	}
 	// }
 
-	fmt.Println("\n[Ethane]\nblock number: ", block.Header().Number.Int64())
+	fmt.Println("*\nblock number: ", block.Header().Number.Int64())
 	fmt.Println("inactive trie root: ", bc.CurrentBlock().Root_inactive())
-	fmt.Println("active trie root: ", bc.CurrentBlock().Root())
+	fmt.Println("active trie root: ", bc.CurrentBlock().Root(), "\n****************************************************\n")
 
 	/* [Ethane]
 	* set flags for the next block
@@ -1900,6 +1900,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 
 		header_sealed := block.Header()
 		header_sealed.Root = statedb.IntermediateRoot(bc.chainConfig.IsEIP158(header_sealed.Number))
+		header_sealed.Root_inactive = statedb.IntermediateRoot_inactive(bc.chainConfig.IsEIP158(header_sealed.Number)) // (joonha)
 		header_sealed.UncleHash = types.CalcUncleHash(block.Uncles())
 		header_sealed.TxHash = types.DeriveSha(block.Transactions(), trie.NewStackTrie(nil))
 		header_sealed.ReceiptHash = emptyCodeHash
@@ -1937,6 +1938,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		header_sealed = block.Header()
 		header_sealed.Bloom = types.CreateBloom(receipts)
 		header_sealed.Root = statedb.IntermediateRoot(bc.chainConfig.IsEIP158(header_sealed.Number))
+		header_sealed.Root_inactive = statedb.IntermediateRoot_inactive(bc.chainConfig.IsEIP158(header_sealed.Number)) // (joonha)
 		header_sealed.ReceiptHash = types.DeriveSha(receipts, trie.NewStackTrie(nil))
 		header_sealed.GasUsed = usedGas
 
