@@ -403,6 +403,13 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 
 		// apply balance, codeHash of resAcc
 		evm.Context.Restore(evm.StateDB, inactiveAddr, resAcc.Balance, resAcc.CodeHash, resAcc.Root)
+		log.Info("[core/vm/evm.go] restoration success", "address", inactiveAddr, "balance", resAcc.Balance, "codeHash", resAcc.CodeHash, "storageRoot", resAcc.Root)
+
+		// set nonce
+		// (just for the simulation, set nonce to the highest nonce among the nonces)
+		// (this makes sense because, in Ethane simulation, we would conservatively restore all the touched accounts resulting in no crumb accounts at all)
+		log.Info("[core/vm/evm.go] restoring with the highest nonce", "new nonce", accounts[0].Nonce)
+		evm.StateDB.SetNonce(inactiveAddr, accounts[0].Nonce)
 
 		// rebuild CA's storage trie if inactive storage snapshot is on
 		if common.UsingInactiveStorageSnapshot {
