@@ -1865,6 +1865,12 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		// statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps) // --> original code
 		statedb, err := state.New_Ethane(parent.Root, parent.Root_inactive, bc.stateCache, bc.stateCache_inactive, bc.snaps, bc.snaps_inactive) // New Ethane state (joonha)
 
+		// record checkpoint key (joonha)
+		common.MapMutex.Lock()
+		common.CheckpointKeys[block.Number().Int64()] = statedb.NextKey
+		common.MapMutex.Unlock()
+		log.Info("[core/blockchain.go] record checkpoint key", "block number", block.Number().Int64(), "initial next key", statedb.NextKey)
+
 		if err != nil {
 			return it.index, err
 		}

@@ -19,7 +19,6 @@ package core
 import (
 	"fmt"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -83,8 +82,8 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 // itself. ValidateState returns a database batch if the validation was a success
 // otherwise nil and an error is returned.
 func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateDB, receipts types.Receipts, usedGas uint64) error {
-	// record checkpoint key (joonha)
-	common.CheckpointKeys[block.Number().Int64()] = statedb.NextKey
+	// // record checkpoint key (joonha)
+	// common.CheckpointKeys[block.Number().Int64()] = statedb.NextKey
 
 	return nil
 	// TODO-ethane: may need to disable validations for ethane (hletrd)
