@@ -224,6 +224,7 @@ func VerifyProof_GetAccountsAndKeys(rootHash common.Hash, proofDb common.ProofLi
 				// valid
 			} else {
 				// invalid
+				return nil, fmt.Errorf("invalid Merkle proof (3) - root is invalid"), nil
 			}
 		}
 
