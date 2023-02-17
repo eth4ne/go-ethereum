@@ -50,14 +50,14 @@ const (
 	useLeveldb = true
 	// leveldb path ($ sudo chmod -R 777 /ethereum)
 	leveldbPath = "/ethereum/mptSimulator_jmlee/trieNodes/port_" + serverPort
-	// leveldb cache size (MB) (Geth default: 512) (memory leak might occur when calling reset() frequently with too big cache size)
-	leveldbCache = 5000
+	// leveldb cache size (MB) (Geth default for mainnet: 4096 * 0.5 = 2048) (memory leak might occur when calling reset() frequently with too big cache size)
+	leveldbCache = 2048
 	// leveldb options
 	leveldbNamespace = "eth/db/chaindata/"
 	leveldbReadonly  = false
 
-	// trie cache size (MB)
-	trieCacheSize = 5000
+	// trie cache size (MB) (Geth default for archive mainnet: 4096 * 30% = 1228)
+	trieCacheSize = 1228
 )
 
 var (
