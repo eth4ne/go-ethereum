@@ -17,6 +17,22 @@
 // Package eth implements the Ethereum protocol.
 package eth
 
+/*
+#include <pthread.h>
+#include <time.h>
+#include <stdio.h>
+
+static unsigned long long int getCPUTimeNs() {
+	struct timespec t;
+	if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &t)) {
+		perror("clock_gettime");
+		return 0;
+	}
+	return t.tv_sec * 1000000000LL + t.tv_nsec;
+}
+*/
+import "C"
+
 import (
 	"database/sql"
 	"encoding/binary"
@@ -113,6 +129,20 @@ type Ethereum struct {
 	shutdownTracker *shutdowncheck.ShutdownTracker // Tracks if and when the node has shutdown ungracefully
 
 	sql *sql.DB
+
+	timer_cpu_insert uint64
+	timer_cpu_db uint64
+	timer_cpu_db_block uint64
+	timer_cpu_db_tx uint64
+	timer_cpu_db_accesslist uint64
+	timer_cpu_db_uncle uint64
+
+	timer_insert uint64
+	timer_db uint64
+	timer_db_block uint64
+	timer_db_tx uint64
+	timer_db_accesslist uint64
+	timer_db_uncle uint64
 }
 
 // New creates a new Ethereum object (including the
@@ -587,11 +617,28 @@ func (s *Ethereum) connectSQL(username string, password string) bool {
 		log.Error("[backend.go/connectSQL] connection failed")
 		return false
 	}
+
+	s.timer_cpu_insert = 0
+	s.timer_cpu_db = 0
+	s.timer_cpu_db_block = 0
+	s.timer_cpu_db_tx = 0
+	s.timer_cpu_db_accesslist = 0
+	s.timer_cpu_db_uncle = 0
+
+	s.timer_insert = 0
+	s.timer_db = 0
+	s.timer_db_block = 0
+	s.timer_db_tx = 0
+	s.timer_db_accesslist = 0
+	s.timer_db_uncle = 0
+
 	return true
 }
 
 // read blocks as a batch (hletrd)
 func (s *Ethereum) readBlockBatch(start int, end int) ([]*types.Header, error) {
+	timer_cpu_db_start := C.getCPUTimeNs()
+
 	block_db, err := s.sql.Query("SELECT `number`, `timestamp`, `miner`, `difficulty`, `gaslimit`, `extradata`, `nonce`, `mixhash`, `basefee` FROM `blocks` WHERE `number` >= ? AND `number` < ?", start, end)
 	if err != nil {
 		log.Error("[backend.go/readBlockBatch] failed to read blocks", "start", start, "end", end)
@@ -647,11 +694,18 @@ func (s *Ethereum) readBlockBatch(start int, end int) ([]*types.Header, error) {
 		seq++
 	}
 
+	timer_cpu_db_end := C.getCPUTimeNs()
+	cputime := (uint64(timer_cpu_db_end) - uint64(timer_cpu_db_start))
+	s.timer_cpu_db += cputime
+	s.timer_cpu_db_block += cputime
+
 	return result, nil
 }
 
 // read txs as a batch (hletrd)
 func (s *Ethereum) readTransactionsBatch(start int, end int) ([][]*types.Transaction, error) {
+	timer_cpu_db_start := C.getCPUTimeNs()
+
 	tx_db, err := s.sql.Query("SELECT `blocknumber`, `to`, `gas`, `gasprice`, `input`, `nonce`, `value`, `v`, `r`, `s`, `type`, `maxfeepergas`, `maxpriorityfeepergas` FROM `transactions` WHERE `blocknumber` >= ? AND `blocknumber` < ?", start, end)
 	if err != nil {
 		log.Error("[backend.go/readTransactionsBatch] failed to read txs", "start", start, "end", end)
@@ -742,6 +796,10 @@ func (s *Ethereum) readTransactionsBatch(start int, end int) ([][]*types.Transac
 			}
 		}
 
+		if type_ == types.AccessListTxType || type_ == types.DynamicFeeTxType {
+			//TODO: handle accesslisttxs
+		}
+
 
 		log.Trace("[backend.go/readTransactionsBatch] tx fetched", "tx", txdata)
 
@@ -759,11 +817,18 @@ func (s *Ethereum) readTransactionsBatch(start int, end int) ([][]*types.Transac
 		result[blocknumber_i-uint64(start)] = txs
 	}
 
+	timer_cpu_db_end := C.getCPUTimeNs()
+	cputime := (uint64(timer_cpu_db_end) - uint64(timer_cpu_db_start))
+	s.timer_cpu_db += cputime
+	s.timer_cpu_db_tx += cputime
+
 	return result, nil
 }
 
 // read uncles as a batch (hletrd)
 func (s *Ethereum) readUnclesBatch(start int, end int) ([][]*types.Header, error) {
+	timer_cpu_db_start := C.getCPUTimeNs()
+
 	uncle_db, err := s.sql.Query("SELECT `blocknumber`, `uncleheight`, `timestamp`, `miner`, `difficulty`, `gasused`, `gaslimit`, `extradata`, `parenthash`, `sha3uncles`, `stateroot`, `nonce`, `receiptsroot`, `transactionsroot`, `mixhash`, `basefee`, `logsbloom` FROM `uncles` WHERE `blocknumber` >= ? AND `blocknumber` < ?", start, end)
 	if err != nil {
 		log.Error("[backend.go/readUnclesBatch] failed to fetch an uncle")
@@ -849,6 +914,11 @@ func (s *Ethereum) readUnclesBatch(start int, end int) ([][]*types.Header, error
 		result[blocknumber_i-uint64(start)] = uncles
 	}
 
+	timer_cpu_db_end := C.getCPUTimeNs()
+	cputime := (uint64(timer_cpu_db_end) - uint64(timer_cpu_db_start))
+	s.timer_cpu_db += cputime
+	s.timer_cpu_db_uncle += cputime
+
 	return result, nil
 }
 
@@ -872,14 +942,23 @@ func (s *Ethereum) readUncles(blocknumber int) ([]*types.Header, error) {
 
 // insertChain handler for goroutine (hletrd)
 func (s *Ethereum) insertChain(chain []*types.Block, result chan bool) {
+	// TODO: check if this cgocall is thread-safe and work properly
+	timer_cpu_insert_start := C.getCPUTimeNs()
+
 	s.config.Ethash.PowMode = ethash.ModeFullFake
-	index, err := s.blockchain.InsertChainPlease(chain)
+	index, err := s.blockchain.InsertChainPlease(chain, s.config.Ethash.TxMetrics, s.config.Ethash.TxMetricsPath)
 	_ = index
+	s.config.Ethash.PowMode = ethash.ModeNormal
 	if err != nil {
 		log.Error("[backend.go/insertChain] failed to insert blocks", "err", err)
 		result <- false
+		return
 	}
 	result <- true
+
+	timer_cpu_insert_end := C.getCPUTimeNs()
+	cputime := (uint64(timer_cpu_insert_end) - uint64(timer_cpu_insert_start))
+	s.timer_cpu_insert += cputime
 }
 
 // insert multiple blocks (hletrd)

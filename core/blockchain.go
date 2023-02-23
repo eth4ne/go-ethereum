@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"os"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -213,6 +214,10 @@ type BlockChain struct {
 	processor  Processor // Block transaction processor interface
 	forker     *ForkChoice
 	vmConfig   vm.Config
+
+	//string
+	TxMetrics bool
+	TxMetricsPath string
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -249,6 +254,8 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		futureBlocks:  futureBlocks,
 		engine:        engine,
 		vmConfig:      vmConfig,
+		TxMetrics: false,
+		TxMetricsPath: "",
 	}
 	bc.forker = NewForkChoice(bc, shouldPreserve)
 	bc.validator = NewBlockValidator(chainConfig, bc, engine)
@@ -1409,13 +1416,16 @@ func (bc *BlockChain) addFutureBlock(block *types.Block) error {
 }
 
 // Hopefully willing for the new chain to be inserted (hletrd)
-func (bc *BlockChain) InsertChainPlease(chain types.Blocks) (int, error) {
+func (bc *BlockChain) InsertChainPlease(chain types.Blocks, txMetrics bool, txMetricsPath string) (int, error) {
 	// Sanity check that we have something meaningful to import
 	if len(chain) == 0 {
 		return 0, nil
 	}
 	bc.blockProcFeed.Send(true)
 	defer bc.blockProcFeed.Send(false)
+
+	bc.TxMetrics = txMetrics
+	bc.TxMetricsPath = txMetricsPath
 
 	// bypass sanity check (hletrd)
 	if !bc.chainmu.TryLock() {
@@ -1699,7 +1709,20 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 
 		// Process block using the parent state as reference point
 		substart := time.Now()
-		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig)
+		receipts, logs, usedGas, timer, err := bc.processor.Process(block, statedb, bc.vmConfig)
+		
+		if bc.TxMetrics {
+			f, _ := os.OpenFile(bc.TxMetricsPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			defer f.Close()
+			
+			f.WriteString(block.Number().String())
+			f.WriteString(",")
+			for i := range timer {
+				f.WriteString(fmt.Sprintf("%d,", timer[i]))
+			}
+			f.WriteString("\n")
+		}
+
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)
