@@ -149,13 +149,23 @@ func (beacon *Beacon) splitHeaders(chain consensus.ChainHeaderReader, headers []
 // concurrently. The method returns a quit channel to abort the operations and
 // a results channel to retrieve the async verifications.
 // VerifyHeaders expect the headers to be ordered and continuous.
-func (beacon *Beacon) VerifyHeaders(chain consensus.ChainHeaderReader, headers []*types.Header, seals []bool) (chan<- struct{}, <-chan error) {
+// add nonverify flag (hletrd)
+func (beacon *Beacon) VerifyHeaders(chain consensus.ChainHeaderReader, headers []*types.Header, seals []bool, nonVerify bool) (chan<- struct{}, <-chan error) {
+	if nonVerify == true {
+		abort := make(chan struct{})
+		results := make(chan error, len(headers))
+		for i := 0; i < len(headers); i++ {
+			results <- nil
+		}
+		return abort, results
+	}
 	preHeaders, postHeaders, err := beacon.splitHeaders(chain, headers)
 	if err != nil {
 		return make(chan struct{}), errOut(len(headers), err)
 	}
 	if len(postHeaders) == 0 {
-		return beacon.ethone.VerifyHeaders(chain, headers, seals)
+		// add nonverify flag (hletrd)
+		return beacon.ethone.VerifyHeaders(chain, headers, seals, nonVerify)
 	}
 	if len(preHeaders) == 0 {
 		return beacon.verifyHeaders(chain, headers, nil)
@@ -171,7 +181,7 @@ func (beacon *Beacon) VerifyHeaders(chain consensus.ChainHeaderReader, headers [
 			old, new, out      = 0, len(preHeaders), 0
 			errors             = make([]error, len(headers))
 			done               = make([]bool, len(headers))
-			oldDone, oldResult = beacon.ethone.VerifyHeaders(chain, preHeaders, seals[:len(preHeaders)])
+			oldDone, oldResult = beacon.ethone.VerifyHeaders(chain, preHeaders, seals[:len(preHeaders)], nonVerify)
 			newDone, newResult = beacon.verifyHeaders(chain, postHeaders, preHeaders[len(preHeaders)-1])
 		)
 		// Collect the results

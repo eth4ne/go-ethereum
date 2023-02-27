@@ -643,6 +643,18 @@ var (
 	}
 
 	// Logging and debug settings
+	// hletrd
+	TxMetricsFlag = &cli.BoolFlag{
+		Name:     "txmetrics",
+		Usage:    "Enables tx performance metrics",
+		Category: flags.MiscCategory,
+	}
+	TxMetricsPathFlag = &cli.StringFlag{
+		Name:     "txmetricspath",
+		Usage:    "Path for transaction metrics to be written (default = metrics.txt)",
+		Value:    "metrics.txt",
+		Category: flags.MiscCategory,
+	}
 	EthStatsURLFlag = &cli.StringFlag{
 		Name:     "ethstats",
 		Usage:    "Reporting URL of a ethstats service (nodename:secret@host:port)",
@@ -1629,6 +1641,13 @@ func setEthash(ctx *cli.Context, cfg *ethconfig.Config) {
 	if ctx.IsSet(EthashDatasetsLockMmapFlag.Name) {
 		cfg.Ethash.DatasetsLockMmap = ctx.Bool(EthashDatasetsLockMmapFlag.Name)
 	}
+
+	// hletrd
+	if ctx.Bool(TxMetricsFlag.Name) {
+		log.Info("[flags.go/MakeChain] enable tx metrics", "path", ctx.String(TxMetricsPathFlag.Name))
+		cfg.Ethash.TxMetrics = true
+	}
+	cfg.Ethash.TxMetricsPath = ctx.String(TxMetricsPathFlag.Name)
 }
 
 func setMiner(ctx *cli.Context, cfg *miner.Config) {

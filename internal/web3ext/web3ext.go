@@ -605,6 +605,22 @@ web3._extend({
 			call: 'eth_getLogs',
 			params: 1,
 		}),
+		// (hletrd)
+		new web3._extend.Method({
+			name: 'connectSQL',
+			call: 'eth_connectSQL',
+			params: 2
+		}),
+		new web3._extend.Method({
+			name: 'insertBlock',
+			call: 'eth_insertBlock',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'insertBlockRange',
+			call: 'eth_insertBlockRange',
+			params: 2
+		}),
 		new web3._extend.Method({
 			name: 'call',
 			call: 'eth_call',

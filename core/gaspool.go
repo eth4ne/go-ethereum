@@ -36,6 +36,7 @@ func (gp *GasPool) AddGas(amount uint64) *GasPool {
 
 // SubGas deducts the given amount from the pool if enough gas is
 // available and returns an error otherwise.
+// TODO-ethane: may need to ignore gas limit (hletrd)
 func (gp *GasPool) SubGas(amount uint64) error {
 	if uint64(*gp) < amount {
 		return ErrGasLimitReached
