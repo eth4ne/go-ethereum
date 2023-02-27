@@ -22,13 +22,14 @@ package eth
 #include <time.h>
 #include <stdio.h>
 
-static unsigned long long int getCPUTimeNs() {
+static unsigned long long getCPUTimeNs() {
 	struct timespec t;
-	if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &t)) {
+	if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &t)) {
 		perror("clock_gettime");
 		return 0;
 	}
-	return t.tv_sec * 1000000000LL + t.tv_nsec;
+	//Probably cause some trouble if POSIX epoch passes n * 1000000000
+	return t.tv_sec * 1000000000ULL + t.tv_nsec;
 }
 */
 import "C"
