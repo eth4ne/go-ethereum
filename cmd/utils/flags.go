@@ -519,6 +519,16 @@ var (
 		Value: ethconfig.Defaults.RPCTxFeeCap,
 	}
 	// Logging and debug settings
+	// hletrd
+	TxMetricsFlag = &cli.BoolFlag{
+		Name:     "txmetrics",
+		Usage:    "Enables tx performance metrics",
+	}
+	TxMetricsPathFlag = &cli.StringFlag{
+		Name:     "txmetricspath",
+		Usage:    "Path for transaction metrics to be written (default = metrics.xt)",
+		Value:    "metrics.txt",
+	}
 	EthStatsURLFlag = cli.StringFlag{
 		Name:  "ethstats",
 		Usage: "Reporting URL of a ethstats service (nodename:secret@host:port)",
@@ -1377,6 +1387,13 @@ func setEthash(ctx *cli.Context, cfg *ethconfig.Config) {
 	if ctx.GlobalIsSet(EthashDatasetsLockMmapFlag.Name) {
 		cfg.Ethash.DatasetsLockMmap = ctx.GlobalBool(EthashDatasetsLockMmapFlag.Name)
 	}
+
+		// hletrd
+	if ctx.Bool(TxMetricsFlag.Name) {
+		log.Info("[flags.go/MakeChain] enable tx metrics", "path", ctx.String(TxMetricsPathFlag.Name))
+		cfg.Ethash.TxMetrics = true
+	}
+	cfg.Ethash.TxMetricsPath = ctx.String(TxMetricsPathFlag.Name)
 }
 
 func setMiner(ctx *cli.Context, cfg *miner.Config) {

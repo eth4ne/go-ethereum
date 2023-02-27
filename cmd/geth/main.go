@@ -148,6 +148,9 @@ var (
 		utils.GoerliFlag,
 		utils.VMEnableDebugFlag,
 		utils.NetworkIdFlag,
+		//hletrd
+		utils.TxMetricsFlag,
+		utils.TxMetricsPathFlag,
 		utils.EthStatsURLFlag,
 		utils.FakePoWFlag,
 		utils.NoCompactionFlag,
