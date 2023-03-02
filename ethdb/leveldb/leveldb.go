@@ -368,7 +368,7 @@ func (db *Database) meter(refresh time.Duration) {
 		// warnings will be withheld for one minute not to overwhelm the user.
 		if paused && delayN-delaystats[0] == 0 && duration.Nanoseconds()-delaystats[1] == 0 &&
 			time.Now().After(lastWritePaused.Add(degradationWarnInterval)) {
-			db.log.Warn("Database compacting, degraded performance")
+			db.log.Debug("Database compacting, degraded performance")
 			lastWritePaused = time.Now()
 		}
 		delaystats[0], delaystats[1] = delayN, duration.Nanoseconds()
