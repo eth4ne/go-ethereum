@@ -17,7 +17,26 @@
 // Package eth implements the Ethereum protocol.
 package eth
 
+/*
+#include <pthread.h>
+#include <time.h>
+#include <stdio.h>
+
+static unsigned long long getCPUTimeNs() {
+	struct timespec t;
+	if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &t)) {
+		perror("clock_gettime");
+		return 0;
+	}
+	//Probably cause some trouble if POSIX epoch passes n * 1000000000
+	return t.tv_sec * 1000000000ULL + t.tv_nsec;
+}
+*/
+import "C"
+
 import (
+	"database/sql"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/big"
@@ -25,12 +44,15 @@ import (
 	"sync"
 	"sync/atomic"
 
+	_ "github.com/go-sql-driver/mysql"
+
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/beacon"
 	"github.com/ethereum/go-ethereum/consensus/clique"
+	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/bloombits"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -56,6 +78,13 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
+)
+
+// errors for DB handler (hletrd)
+var (
+	ErrFetchBlock = errors.New("Failed to fetch a block")
+	ErrFetchTxs = errors.New("Failed to fetch txs")
+	ErrFetchUncles = errors.New("Failed to fetch uncles")
 )
 
 // Config contains the configuration options of the ETH protocol.
@@ -99,6 +128,22 @@ type Ethereum struct {
 	lock sync.RWMutex // Protects the variadic fields (e.g. gas price and etherbase)
 
 	shutdownTracker *shutdowncheck.ShutdownTracker // Tracks if and when the node has shutdown ungracefully
+
+	sql *sql.DB
+
+	timer_cpu_insert uint64
+	timer_cpu_db uint64
+	timer_cpu_db_block uint64
+	timer_cpu_db_tx uint64
+	timer_cpu_db_accesslist uint64
+	timer_cpu_db_uncle uint64
+
+	timer_insert uint64
+	timer_db uint64
+	timer_db_block uint64
+	timer_db_tx uint64
+	timer_db_accesslist uint64
+	timer_db_uncle uint64
 }
 
 // New creates a new Ethereum object (including the
@@ -541,4 +586,439 @@ func (s *Ethereum) Stop() error {
 	s.eventMux.Stop()
 
 	return nil
+}
+
+// Connect to an SQL server (hletrd)
+func (s *Ethereum) connectSQL(username string, password string) bool {
+	var err error
+	s.sql, err = sql.Open("mysql", username + ":" + password + "@/ethereum")
+	if err != nil {
+		log.Error("[backend.go/connectSQL] connection failed")
+		return false
+	}
+
+	s.timer_cpu_insert = 0
+	s.timer_cpu_db = 0
+	s.timer_cpu_db_block = 0
+	s.timer_cpu_db_tx = 0
+	s.timer_cpu_db_accesslist = 0
+	s.timer_cpu_db_uncle = 0
+
+	s.timer_insert = 0
+	s.timer_db = 0
+	s.timer_db_block = 0
+	s.timer_db_tx = 0
+	s.timer_db_accesslist = 0
+	s.timer_db_uncle = 0
+
+	return true
+}
+
+// read blocks as a batch (hletrd)
+func (s *Ethereum) readBlockBatch(start int, end int) ([]*types.Header, error) {
+	timer_cpu_db_start := C.getCPUTimeNs()
+
+	block_db, err := s.sql.Query("SELECT `number`, `timestamp`, `miner`, `difficulty`, `gaslimit`, `extradata`, `nonce`, `mixhash`, `basefee` FROM `blocks` WHERE `number` >= ? AND `number` < ?", start, end)
+	if err != nil {
+		log.Error("[backend.go/readBlockBatch] failed to read blocks", "start", start, "end", end)
+		return nil, ErrFetchTxs
+	}
+	defer block_db.Close()
+
+	var blocknumber_i uint64; var blocknumber *big.Int
+	var timestamp uint64
+	var miner_b []byte; var miner common.Address
+	var difficulty_i uint64; var difficulty *big.Int
+	var gaslimit uint64
+	var extradata []byte
+	var nonce_b []byte; var nonce types.BlockNonce
+	var mixhash_b []byte; var mixhash common.Hash
+	var basefee sql.NullInt64
+
+	result := make([]*types.Header, end - start)
+	seq := 0
+
+	for block_db.Next() {
+		err := block_db.Scan(&blocknumber_i, &timestamp, &miner_b, &difficulty_i, &gaslimit, &extradata, &nonce_b, &mixhash_b, &basefee)
+
+		_ = mixhash
+
+		if err != nil {
+			log.Error("[backend.go/readBlockBatch] failed to read a block", "number", blocknumber_i, "err", err);
+			return nil, ErrFetchBlock
+		}
+
+		miner = common.BytesToAddress(miner_b)
+		difficulty = new(big.Int).SetUint64(difficulty_i)
+		blocknumber = new(big.Int).SetUint64(blocknumber_i)
+		mixhash = common.BytesToHash(mixhash_b)
+		nonce = types.EncodeNonce(binary.BigEndian.Uint64(nonce_b))
+
+		header := &types.Header{
+			Coinbase: miner,
+			Difficulty: difficulty,
+			Number: blocknumber,
+			GasLimit: gaslimit,
+			Time: timestamp,
+			Extra: extradata,
+			MixDigest: mixhash,
+			Nonce: nonce,
+			BaseFee: nil,
+		}
+
+		if basefee.Valid {
+			header.BaseFee = new(big.Int).SetUint64(uint64(basefee.Int64))
+		}
+		result[seq] = header
+		seq++
+	}
+
+	timer_cpu_db_end := C.getCPUTimeNs()
+	cputime := (uint64(timer_cpu_db_end) - uint64(timer_cpu_db_start))
+	s.timer_cpu_db += cputime
+	s.timer_cpu_db_block += cputime
+
+	return result, nil
+}
+
+// read txs as a batch (hletrd)
+func (s *Ethereum) readTransactionsBatch(start int, end int) ([][]*types.Transaction, error) {
+	timer_cpu_db_start := C.getCPUTimeNs()
+
+	tx_db, err := s.sql.Query("SELECT `blocknumber`, `to`, `gas`, `gasprice`, `input`, `nonce`, `value`, `v`, `r`, `s`, `type`, `maxfeepergas`, `maxpriorityfeepergas` FROM `transactions` WHERE `blocknumber` >= ? AND `blocknumber` < ?", start, end)
+	if err != nil {
+		log.Error("[backend.go/readTransactionsBatch] failed to read txs", "start", start, "end", end)
+		return nil, ErrFetchTxs
+	}
+	defer tx_db.Close()
+
+	blocknumber_i := uint64(start)
+	var to_b sql.NullString; var to *common.Address
+	var gas uint64
+	var gasprice_i uint64
+	var gasprice *big.Int
+	var input []byte
+	var nonce uint64
+	var value_b []byte; var value *big.Int
+	var V_b []byte; var V *big.Int
+	var R_b []byte; var R *big.Int
+	var S_b []byte; var S *big.Int
+	var type_b []byte; var type_ byte
+	var maxfeepergas sql.NullInt64; var maxpriorityfeepergas sql.NullInt64
+
+	result := make([][]*types.Transaction, end - start)
+	var txs []*types.Transaction
+	seq := uint64(start)
+
+	for tx_db.Next() {
+		if err := tx_db.Scan(&blocknumber_i, &to_b, &gas, &gasprice_i, &input, &nonce, &value_b, &V_b, &R_b, &S_b, &type_b, &maxfeepergas, &maxpriorityfeepergas); err != nil {
+			log.Error("[backend.go/readTransactionsBatch] failed to read a tx from block", "block", blocknumber_i)
+			return nil, ErrFetchTxs
+		}
+		_ = type_
+
+		if to_b.Valid {
+			to_addr := common.BytesToAddress([]byte(to_b.String))
+			to = &to_addr
+		} else {
+			to = nil
+		}
+
+		gasprice = new(big.Int).SetUint64(gasprice_i)
+		value, _ = new(big.Int).SetString(string(value_b[:]), 10)
+		V = new(big.Int).SetBytes(V_b)
+		R = new(big.Int).SetBytes(R_b)
+		S = new(big.Int).SetBytes(S_b)
+		type_ = type_b[0]
+
+		var txdata types.TxData
+
+		switch type_ {
+		case types.LegacyTxType:
+			txdata = &types.LegacyTx{
+				Nonce: nonce,
+				GasPrice: gasprice,
+				Gas: gas,
+				To: to,
+				Value: value,
+				Data: input,
+				V: V,
+				R: R,
+				S: S,
+			}
+		case types.AccessListTxType:
+			txdata = &types.AccessListTx{
+				ChainID: s.blockchain.Config().ChainID,
+				Nonce: nonce,
+				GasPrice: gasprice,
+				Gas: gas,
+				To: to,
+				Value: value,
+				Data: input,
+				V: V,
+				R: R,
+				S: S,
+			}
+		case types.DynamicFeeTxType:
+			txdata = &types.DynamicFeeTx{
+				ChainID: s.blockchain.Config().ChainID,
+				Nonce: nonce,
+				Gas: gas,
+				GasTipCap: new(big.Int).SetInt64(maxfeepergas.Int64),
+				GasFeeCap: new(big.Int).SetInt64(maxpriorityfeepergas.Int64),
+				To: to,
+				Value: value,
+				Data: input,
+				V: V,
+				R: R,
+				S: S,
+			}
+		}
+
+		if type_ == types.AccessListTxType || type_ == types.DynamicFeeTxType {
+			//TODO: handle accesslisttxs
+		}
+
+
+		log.Trace("[backend.go/readTransactionsBatch] tx fetched", "tx", txdata)
+
+		if seq != blocknumber_i {
+			result[seq-uint64(start)] = txs
+			seq = blocknumber_i
+			txs = make([]*types.Transaction, 0)
+		}
+
+		tx := types.NewTx(txdata)
+		txs = append(txs, tx)
+	}
+
+	if len(txs) > 0 {
+		result[blocknumber_i-uint64(start)] = txs
+	}
+
+	timer_cpu_db_end := C.getCPUTimeNs()
+	cputime := (uint64(timer_cpu_db_end) - uint64(timer_cpu_db_start))
+	s.timer_cpu_db += cputime
+	s.timer_cpu_db_tx += cputime
+
+	return result, nil
+}
+
+// read uncles as a batch (hletrd)
+func (s *Ethereum) readUnclesBatch(start int, end int) ([][]*types.Header, error) {
+	timer_cpu_db_start := C.getCPUTimeNs()
+
+	uncle_db, err := s.sql.Query("SELECT `blocknumber`, `uncleheight`, `timestamp`, `miner`, `difficulty`, `gasused`, `gaslimit`, `extradata`, `parenthash`, `sha3uncles`, `stateroot`, `nonce`, `receiptsroot`, `transactionsroot`, `mixhash`, `basefee`, `logsbloom` FROM `uncles` WHERE `blocknumber` >= ? AND `blocknumber` < ?", start, end)
+	if err != nil {
+		log.Error("[backend.go/readUnclesBatch] failed to fetch an uncle")
+		return nil, ErrFetchUncles
+	}
+	defer uncle_db.Close()
+
+	result := make([][]*types.Header, end - start)
+	var uncles []*types.Header
+	seq := uint64(start)
+
+	blocknumber_i := uint64(start)
+	var uncleheight_i uint64; var uncleheight *big.Int
+	var timestamp uint64
+	var miner_b []byte; var miner common.Address
+	var difficulty_i uint64; var difficulty *big.Int
+	var gasused uint64
+	var gaslimit uint64
+	var extradata []byte
+	var parenthash_b []byte; var parenthash common.Hash
+	var sha3uncles_b []byte; var sha3uncles common.Hash
+	var stateroot_b []byte; var stateroot common.Hash
+	var nonce_b []byte; var nonce types.BlockNonce
+	var receiptsroot_b []byte; var receiptsroot common.Hash
+	var transactionsroot_b []byte; var transactionsroot common.Hash
+	var mixhash_b []byte; var mixhash common.Hash
+	var basefee sql.NullInt64
+	var logsbloom []byte
+
+	for uncle_db.Next() {
+
+		if err_ := uncle_db.Scan(&blocknumber_i, &uncleheight_i, &timestamp, &miner_b, &difficulty_i, &gasused, &gaslimit, &extradata, &parenthash_b, &sha3uncles_b, &stateroot_b, &nonce_b, &receiptsroot_b, &transactionsroot_b, &mixhash_b, &basefee, &logsbloom); err_ != nil {
+			log.Error("[backend.go/readUnclesBatch] failed to read an uncle", "number", blocknumber_i, "error", err)
+			return nil, ErrFetchUncles
+		}
+
+		uncleheight = new(big.Int).SetUint64(uncleheight_i)
+		miner = common.BytesToAddress(miner_b)
+		difficulty = new(big.Int).SetUint64(difficulty_i)
+		parenthash = common.BytesToHash(parenthash_b)
+		sha3uncles = common.BytesToHash(sha3uncles_b)
+		stateroot = common.BytesToHash(stateroot_b)
+		nonce = types.EncodeNonce(binary.BigEndian.Uint64(nonce_b))
+		receiptsroot = common.BytesToHash(receiptsroot_b)
+		transactionsroot = common.BytesToHash(transactionsroot_b)
+		mixhash = common.BytesToHash(mixhash_b)
+
+		uncle := &types.Header{
+			ParentHash: parenthash,
+			UncleHash: sha3uncles,
+			Coinbase: miner,
+			Root: stateroot,
+			TxHash: transactionsroot,
+			ReceiptHash: receiptsroot,
+			Bloom: types.BytesToBloom(logsbloom),
+			Difficulty: difficulty,
+			Number: uncleheight,
+			GasLimit: gaslimit,
+			GasUsed: gasused,
+			Time: timestamp,
+			Extra: extradata,
+			MixDigest: mixhash,
+			Nonce: nonce,
+			BaseFee: nil,
+		}
+
+		if basefee.Valid {
+			uncle.BaseFee = new(big.Int).SetUint64(uint64(basefee.Int64))
+		}
+
+		log.Trace("[backend.go/readUnclesBatch] uncle fetched", "block", blocknumber_i, "uncleheight", uncleheight)
+
+		if seq != blocknumber_i {
+			result[seq-uint64(start)] = uncles
+			seq = blocknumber_i
+			uncles = make([]*types.Header, 0)
+		}
+
+		uncles = append(uncles, uncle)
+	}
+
+	if len(uncles) > 0 {
+		result[blocknumber_i-uint64(start)] = uncles
+	}
+
+	timer_cpu_db_end := C.getCPUTimeNs()
+	cputime := (uint64(timer_cpu_db_end) - uint64(timer_cpu_db_start))
+	s.timer_cpu_db += cputime
+	s.timer_cpu_db_uncle += cputime
+
+	return result, nil
+}
+
+// read a block from the database (hletrd)
+func (s *Ethereum) readBlock(number int) (*types.Header, error) {
+	result, err := s.readBlockBatch(number, number+1)
+	return result[0], err
+}
+
+// read txs from the database (hletrd)
+func (s *Ethereum) readTransactions(blocknumber int) ([]*types.Transaction, error) {
+	result, err := s.readTransactionsBatch(blocknumber, blocknumber+1)
+	return result[0], err
+}
+
+// read uncles from the database (hletrd)
+func (s *Ethereum) readUncles(blocknumber int) ([]*types.Header, error) {
+	result, err := s.readUnclesBatch(blocknumber, blocknumber+1)
+	return result[0], err
+}
+
+// insertChain handler for goroutine (hletrd)
+func (s *Ethereum) insertChain(chain []*types.Block, result chan bool) {
+	// TODO: check if this cgocall is thread-safe and work properly
+	timer_cpu_insert_start := C.getCPUTimeNs()
+
+	s.config.Ethash.PowMode = ethash.ModeFullFake
+	index, err := s.blockchain.InsertChainPlease(chain, s.config.Ethash.TxMetrics, s.config.Ethash.TxMetricsPath)
+	_ = index
+	s.config.Ethash.PowMode = ethash.ModeNormal
+	if err != nil {
+		log.Error("[backend.go/insertChain] failed to insert blocks", "err", err)
+		result <- false
+		return
+	}
+	result <- true
+
+	timer_cpu_insert_end := C.getCPUTimeNs()
+	cputime := (uint64(timer_cpu_insert_end) - uint64(timer_cpu_insert_start))
+	s.timer_cpu_insert += cputime
+}
+
+// insert multiple blocks (hletrd)
+func (s *Ethereum) insertBlockRange(start int, end int) bool {
+	if end <= start {
+		log.Error("[backend.go/insertBlockRange] end must be greater than start")
+		return false
+	}
+
+	s.handler.downloader.Cancel()
+
+	if s.sql == nil {
+		log.Error("[backend.go/insertBlockRange] not connected to an SQL server")
+		return false
+	}
+
+	batchsize := 1000
+
+	blocks := make([]*types.Block, batchsize)
+	//seq := 0
+	inserting := false
+
+	result_ch := make(chan bool)
+
+	for number := start; number < end; number+=batchsize {
+		end_batch := number+batchsize
+		if end_batch > end {
+			end_batch = end
+		}
+
+		header, err := s.readBlockBatch(number, end_batch)
+		if err != nil {
+			return false
+		}
+
+		txs, err := s.readTransactionsBatch(number, end_batch)
+		if err != nil {
+			return false
+		}
+
+		uncles, err := s.readUnclesBatch(number, end_batch)
+		if err != nil {
+			return false
+		}
+
+		for i := 0; i < end_batch-number; i++ {
+			block := types.NewBlockWithHeader(header[i]).WithBody(txs[i], uncles[i])
+			blockhash := block.Hash()
+			blocksize := block.Size()
+
+			log.Trace("[backend.go/insertBlockRange] block prepared", "block", block, "header", header, "hash", blockhash, "size", blocksize, "txs", txs[i], "uncles", uncles[i])
+			blocks[i] = block
+		}
+
+		log.Trace("[backend.go/insertBlockRange] block insert")
+		if inserting == true {
+			result := <- result_ch
+			if result == false {
+				log.Error("[backend.go/insertBlockRange] insert failed")
+				return false
+			}
+		}
+		blocks_insert := make([]*types.Block, end_batch-number)
+		copy(blocks_insert, blocks[:end_batch-number])
+		go s.insertChain(blocks_insert, result_ch)
+		inserting = true
+	}
+
+	if inserting == true {
+		result := <- result_ch
+		if result == false {
+			log.Error("[backend.go/insertBlockRange] insert failed")
+			return false
+		}
+	}
+
+	log.Trace("[backend.go/insertBlockRange] inserted blocks", "start", start, "end", end)
+	return true
+}
+
+// insert a single block, actually implemented via insertBlockRange (hletrd)
+func (s *Ethereum) insertBlock(number int) bool {
+	return s.insertBlockRange(number, number+1)
 }
