@@ -918,9 +918,9 @@ func updateStorageTrie(storageTrie *trie.SecureTrie, key, value common.Hash) err
 		return err
 	}
 
-		// Encoding []byte cannot fail, ok to ignore the error.
+	// Encoding []byte cannot fail, ok to ignore the error.
 	v, _ := rlp.EncodeToBytes(common.TrimLeftZeroes(value[:]))
-		// fmt.Println("slot:", key, "/ slotValue:", v)
+	// fmt.Println("slot:", key, "/ slotValue:", v)
 	err := storageTrie.TryUpdate(key[:], v)
 
 	return err
