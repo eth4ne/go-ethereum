@@ -2152,15 +2152,21 @@ func connHandler(conn net.Conn) {
 				}
 
 				// update storage trie
-				storageRootBeforeUpdate := storageTrie.Hash()
+				storageRootBeforeUpdate := storageTrie.Hash().Hex()
 				err := updateStorageTrie(storageTrie, slot, value)
+				storageRootAfterUpdate := storageTrie.Hash().Hex()
 				if err != nil {
 					fmt.Println("updateStorageTrie() error:", err)
 					fmt.Println("contractAddr:", contractAddr)
 					fmt.Println("slot:", slot)
 					fmt.Println("value:", value)
-					fmt.Println("storage trie before update:", storageRootBeforeUpdate.Hex())
-					fmt.Println("storage trie after update :", storageTrie.Hash().Hex())
+					fmt.Println("storage trie before update:", storageRootBeforeUpdate)
+					fmt.Println("storage trie after update :", storageRootAfterUpdate)
+				}
+				if storageRootBeforeUpdate == storageRootAfterUpdate {
+					fmt.Println("updateStorageTrie() did not changed storage trie root")
+					fmt.Println("storage trie before update:", storageRootBeforeUpdate)
+					fmt.Println("storage trie after update :", storageRootAfterUpdate)
 				}
 
 				response = []byte(storageTrie.Hash().Hex())
