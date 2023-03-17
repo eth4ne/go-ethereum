@@ -913,18 +913,17 @@ func updateTrie(key, value []byte) error {
 
 func updateStorageTrie(storageTrie *trie.SecureTrie, key, value common.Hash) error {
 
-	var v []byte
 	if (value == common.Hash{}) {
-		storageTrie.TryDelete(key[:])
-	} else {
-		// Encoding []byte cannot fail, ok to ignore the error.
-		v, _ = rlp.EncodeToBytes(common.TrimLeftZeroes(value[:]))
-		// fmt.Println("slot:", key, "/ slotValue:", v)
-		storageTrie.TryUpdate(key[:], v)
+		err := storageTrie.TryDelete(key[:])
+		return err
 	}
 
-	// TODO(jmlee): return error
-	return nil
+		// Encoding []byte cannot fail, ok to ignore the error.
+	v, _ := rlp.EncodeToBytes(common.TrimLeftZeroes(value[:]))
+		// fmt.Println("slot:", key, "/ slotValue:", v)
+	err := storageTrie.TryUpdate(key[:], v)
+
+	return err
 }
 
 //
@@ -2153,7 +2152,16 @@ func connHandler(conn net.Conn) {
 				}
 
 				// update storage trie
-				updateStorageTrie(storageTrie, slot, value)
+				storageRootBeforeUpdate := storageTrie.Hash()
+				err := updateStorageTrie(storageTrie, slot, value)
+				if err != nil {
+					fmt.Println("updateStorageTrie() error:", err)
+					fmt.Println("contractAddr:", contractAddr)
+					fmt.Println("slot:", slot)
+					fmt.Println("value:", value)
+					fmt.Println("storage trie before update:", storageRootBeforeUpdate.Hex())
+					fmt.Println("storage trie after update :", storageTrie.Hash().Hex())
+				}
 
 				response = []byte(storageTrie.Hash().Hex())
 
@@ -2656,6 +2664,7 @@ func connHandler(conn net.Conn) {
 
 				response = []byte("success")
 
+			// TODO(jmlee): also support Ethane and Ethanos mode
 			case "setHead":
 				// get params
 				// fmt.Println("execute setHead()")
@@ -2676,6 +2685,9 @@ func connHandler(conn net.Conn) {
 				}
 				fmt.Println("open new norm trie:", normTrie.Hash().Hex())
 				common.NextBlockNum = blockNum + 1
+
+				// reset dirty storage tries
+				dirtyStorageTries = make(map[common.Address]*trie.SecureTrie)
 
 				response = []byte("success")
 
