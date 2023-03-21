@@ -1,3 +1,40 @@
+## MPT Simulator
+
+A simulator for efficiently replaying Ethereum transactions with various modes
+
+### Requirements
+
+* Go (version 1.19 or later)
+* Python (version 3.10 or later)
+* MariaDB (version 10.10 or later)
+* PyMySQL (version 1.0.2 or later)
+
+### Prepare data
+
+* [Get ethereum tx data](https://github.com/eth4ne/go-ethereum/tree/TxSubstate)
+
+* [Create database](https://github.com/eth4ne/eth-analysis)
+
+* [Make restore lists](https://github.com/eth4ne/light-restore-list)
+
+### How to run simulator
+
+Set options in simulator/mpt_simulator.go (e.g., `serverPort`, `leveldbPath`), then:
+
+```shell
+$ go run mpt_simulator.go
+```
+
+Other detailed options can be found at common/types.go
+
+### How to run client
+
+After running the simulator, set options in build/bin/ethaneSimulation.py (e.g., `simulationMode`, `startBlockNum`, `endBlockNum`), then:
+
+```shell
+$ python3 ethaneSimulation.py
+```
+
 ## Go Ethereum
 
 Official Golang implementation of the Ethereum protocol.
