@@ -672,7 +672,7 @@ func (db *Database) Commit(node common.Hash, report bool) error {
 	memcacheCommitSizeMeter.Mark(int64(storage - db.dirtiesSize))
 	memcacheCommitNodesMeter.Mark(int64(nodes - len(db.dirties)))
 
-	logger := log.Info
+	logger := log.Debug
 	if !report {
 		logger = log.Debug
 	}
