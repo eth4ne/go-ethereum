@@ -2097,3 +2097,15 @@ func toHexSlice(b [][]byte) []string {
 	}
 	return r
 }
+
+func (api *EthereumAPI) ConnectSQL(username string, password string) bool {
+	return api.b.ConnectSQL(username, password)
+}
+
+func (api *EthereumAPI) InsertBlock(number int) bool {
+	return api.b.InsertBlock(number)
+}
+
+func (api *EthereumAPI) InsertBlockRange(start int, end int) bool {
+	return api.b.InsertBlockRange(start, end)
+}
