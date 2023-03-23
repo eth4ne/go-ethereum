@@ -403,6 +403,16 @@ func (b *EthAPIBackend) ConnectSQL(username string, password string) bool {
 	return b.eth.connectSQL(username, password)
 }
 
+// set block batch size (hletrd)
+func (b *EthAPIBackend) SetBatchSize(batchsize int) error {
+	return b.eth.setBatchSize(batchsize)
+}
+
+// get block batch size (hletrd)
+func (b *EthAPIBackend) GetBatchSize() int {
+	return b.eth.getBatchSize()
+}
+
 // create and insert a block (hletrd)
 func (b *EthAPIBackend) InsertBlock(number int) bool {
 	return b.eth.insertBlock(number)

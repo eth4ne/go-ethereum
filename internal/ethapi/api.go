@@ -2102,6 +2102,14 @@ func (api *EthereumAPI) ConnectSQL(username string, password string) bool {
 	return api.b.ConnectSQL(username, password)
 }
 
+func (api *EthereumAPI) SetBatchSize(batchsize int) error {
+	return api.b.SetBatchSize(batchsize)
+}
+
+func (api *EthereumAPI) GetBatchSize() int {
+	return api.b.GetBatchSize()
+}
+
 func (api *EthereumAPI) InsertBlock(number int) bool {
 	return api.b.InsertBlock(number)
 }

@@ -144,6 +144,8 @@ type Ethereum struct {
 	timer_db_tx uint64
 	timer_db_accesslist uint64
 	timer_db_uncle uint64
+
+	batchsize int
 }
 
 // New creates a new Ethereum object (including the
@@ -203,6 +205,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		bloomIndexer:      core.NewBloomIndexer(chainDb, params.BloomBitsBlocks, params.BloomConfirms),
 		p2pServer:         stack.Server(),
 		shutdownTracker:   shutdowncheck.NewShutdownTracker(chainDb),
+		batchsize:         1000,
 	}
 
 	bcVersion := rawdb.ReadDatabaseVersion(chainDb)
@@ -614,6 +617,15 @@ func (s *Ethereum) connectSQL(username string, password string) bool {
 	return true
 }
 
+func (s *Ethereum) setBatchSize(batchsize int) error {
+	s.batchsize = batchsize
+	return nil
+}
+
+func (s *Ethereum) getBatchSize() int {
+	return s.batchsize
+}
+
 // read blocks as a batch (hletrd)
 func (s *Ethereum) readBlockBatch(start int, end int) ([]*types.Header, error) {
 	timer_cpu_db_start := C.getCPUTimeNs()
@@ -954,7 +966,7 @@ func (s *Ethereum) insertBlockRange(start int, end int) bool {
 		return false
 	}
 
-	batchsize := 1000
+	batchsize := s.batchsize
 
 	blocks := make([]*types.Block, batchsize)
 	//seq := 0
