@@ -655,6 +655,17 @@ var (
 		Value:    "metrics.txt",
 		Category: flags.MiscCategory,
 	}
+	TxFineMetricsFlag = &cli.BoolFlag{
+		Name:     "txfinemetrics",
+		Usage:    "Enables fine tx performance metrics (per tx), only works if --txmetrics flag is set",
+		Category: flags.MiscCategory,
+	}
+	TxFineMetricsPathFlag = &cli.StringFlag{
+		Name:     "txfinemetricspath",
+		Usage:    "Path for fine transaction metrics to be written (default = finemetrics.txt)",
+		Value:    "finemetrics.txt",
+		Category: flags.MiscCategory,
+	}
 	EthStatsURLFlag = &cli.StringFlag{
 		Name:     "ethstats",
 		Usage:    "Reporting URL of a ethstats service (nodename:secret@host:port)",
@@ -1648,6 +1659,12 @@ func setEthash(ctx *cli.Context, cfg *ethconfig.Config) {
 		cfg.Ethash.TxMetrics = true
 	}
 	cfg.Ethash.TxMetricsPath = ctx.String(TxMetricsPathFlag.Name)
+
+	if ctx.Bool(TxFineMetricsFlag.Name) {
+		log.Info("[flags.go/MakeChain] enable fine tx metrics", "path", ctx.String(TxFineMetricsPathFlag.Name))
+		cfg.Ethash.TxFineMetrics = true
+	}
+	cfg.Ethash.TxFineMetricsPath = ctx.String(TxFineMetricsPathFlag.Name)
 }
 
 func setMiner(ctx *cli.Context, cfg *miner.Config) {
