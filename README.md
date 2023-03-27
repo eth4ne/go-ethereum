@@ -1,5 +1,5 @@
 ## Deprecated!
-* Deprecated version.
+* Deprecated version. Please use the most recent version.
 
 ## Go Ethereum
 
