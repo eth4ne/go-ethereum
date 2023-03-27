@@ -73,6 +73,8 @@ type Backend interface {
 	SubscribeChainSideEvent(ch chan<- core.ChainSideEvent) event.Subscription
 
 	ConnectSQL(username string, password string) bool
+	SetBatchSize(batchsize int) error
+	GetBatchSize() int
 	InsertBlock(number int) bool
 	InsertBlockRange(start int, end int) bool
 

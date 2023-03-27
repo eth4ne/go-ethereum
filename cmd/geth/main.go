@@ -151,6 +151,8 @@ var (
 		//hletrd
 		utils.TxMetricsFlag,
 		utils.TxMetricsPathFlag,
+		utils.TxFineMetricsFlag,
+		utils.TxFineMetricsPathFlag,
 		utils.EthStatsURLFlag,
 		utils.FakePoWFlag,
 		utils.NoCompactionFlag,

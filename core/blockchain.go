@@ -18,6 +18,7 @@
 package core
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
@@ -214,6 +215,8 @@ type BlockChain struct {
 	//string
 	TxMetrics bool
 	TxMetricsPath string
+	TxFineMetrics bool
+	TxFineMetricsPath string
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -252,6 +255,8 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		vmConfig:      vmConfig,
 		TxMetrics: false,
 		TxMetricsPath: "",
+		TxFineMetrics: false,
+		TxFineMetricsPath: "",
 	}
 	bc.forker = NewForkChoice(bc, shouldPreserve)
 	bc.validator = NewBlockValidator(chainConfig, bc, engine)
@@ -1340,7 +1345,7 @@ func (bc *BlockChain) addFutureBlock(block *types.Block) error {
 }
 
 // Hopefully willing for the new chain to be inserted (hletrd)
-func (bc *BlockChain) InsertChainPlease(chain types.Blocks, txMetrics bool, txMetricsPath string) (int, error) {
+func (bc *BlockChain) InsertChainPlease(chain types.Blocks, txMetrics bool, txMetricsPath string, txFineMetrics bool, txFineMetricsPath string) (int, error) {
 	// Sanity check that we have something meaningful to import
 	if len(chain) == 0 {
 		return 0, nil
@@ -1350,6 +1355,8 @@ func (bc *BlockChain) InsertChainPlease(chain types.Blocks, txMetrics bool, txMe
 
 	bc.TxMetrics = txMetrics
 	bc.TxMetricsPath = txMetricsPath
+	bc.TxFineMetrics = txFineMetrics
+	bc.TxFineMetricsPath = txFineMetricsPath
 
 	// bypass sanity check (hletrd)
 	if !bc.chainmu.TryLock() {
@@ -1632,18 +1639,37 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 
 		// Process block using the parent state as reference point
 		substart := time.Now()
-		receipts, logs, usedGas, timer, err := bc.processor.Process(block, statedb, bc.vmConfig)
+		receipts, logs, usedGas, timer, timer_per_tx, err := bc.processor.Process(block, statedb, bc.vmConfig)
 
+		// write metrics (hletrd)
 		if bc.TxMetrics {
 			f, _ := os.OpenFile(bc.TxMetricsPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			defer f.Close()
+			bufwriter := bufio.NewWriter(f)
 
-			f.WriteString(block.Number().String())
-			f.WriteString(",")
+			bufwriter.WriteString(block.Number().String())
+			bufwriter.WriteString(",")
 			for i := range timer {
-				f.WriteString(fmt.Sprintf("%d,", timer[i]))
+				bufwriter.WriteString(fmt.Sprintf("%d,", timer[i]))
 			}
-			f.WriteString("\n")
+			bufwriter.WriteString("\n")
+
+		if bc.TxFineMetrics {
+				ffine, _ := os.OpenFile(bc.TxFineMetricsPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+				defer ffine.Close()
+				bufwriter_per_tx := bufio.NewWriter(ffine)
+
+				for i := 0; i < block.Transactions().Len(); i++ {
+					bufwriter_per_tx.WriteString(block.Number().String())
+					bufwriter_per_tx.WriteString(",")
+					bufwriter_per_tx.WriteString(fmt.Sprintf("%d,%d,%d,", i, timer_per_tx[2*i], timer_per_tx[2*i+1]))
+					bufwriter_per_tx.WriteString("\n")
+				}
+
+				bufwriter_per_tx.Flush()
+			}
+
+			bufwriter.Flush()
 		}
 
 		if err != nil {

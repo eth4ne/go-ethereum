@@ -337,6 +337,16 @@ func (b *LesApiBackend) ConnectSQL(username string, password string) bool {
 	return false
 }
 
+func (b *LesApiBackend) SetBatchSize(batchsize int) error {
+	//does nothing
+	return errors.New("Not implemented in LES")
+}
+
+func (b *LesApiBackend) GetBatchSize() int {
+	//invalid
+	return -1
+}
+
 func (b *LesApiBackend) InsertBlock(number int) bool {
 	//does nothing
 	return false

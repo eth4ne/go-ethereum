@@ -5454,7 +5454,19 @@ var methods = function () {
         call: 'eth_connectSQL',
         params: 2
     });
-    
+
+    var setBatchSize = new Method({
+        name: 'setBatchSize',
+        call: 'eth_setBatchSize',
+        params: 1
+    });
+
+    var getBatchSize = new Method({
+        name: 'getBatchSize',
+        call: 'eth_getBatchSize',
+        params: 0
+    });
+
     var insertBlock = new Method({
         name: 'insertBlock',
         call: 'eth_insertBlock',
@@ -5493,6 +5505,8 @@ var methods = function () {
         getWork,
         // (hletrd)
         connectSQL,
+        setBatchSize,
+        getBatchSize,
         insertBlock,
         insertBlockRange,
     ];

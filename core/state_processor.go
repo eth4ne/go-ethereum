@@ -21,14 +21,14 @@ package core
 #include <time.h>
 #include <stdio.h>
 
-static unsigned long long getCPUTimeNs() {
+static long long getCPUTimeNs() {
 	struct timespec t;
 	if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &t)) {
 		perror("clock_gettime");
 		return 0;
 	}
 	//Probably cause some trouble if POSIX epoch passes n * 1000000000
-	return t.tv_sec * 1000000000ULL + t.tv_nsec;
+	return t.tv_sec * 1000000000LL + t.tv_nsec;
 }
 */
 import "C"
@@ -74,7 +74,7 @@ func NewStateProcessor(config *params.ChainConfig, bc *BlockChain, engine consen
 // Process returns the receipts and logs accumulated during the process and
 // returns the amount of gas that was used in the process. If any of the
 // transactions failed to execute due to insufficient gas it will return an error.
-func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, []uint64, error) {
+func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, []int64, []int64, error) {
 	var (
 		receipts    types.Receipts
 		usedGas     = new(uint64)
@@ -84,7 +84,14 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		allLogs     []*types.Log
 		gp          = new(GasPool).AddGas(block.GasLimit())
 	)
-	timer := []uint64{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ,0}
+	var timer []int64
+	var timer_per_tx []int64
+	if p.bc.TxMetrics {
+		timer = []int64{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ,0}
+		if p.bc.TxFineMetrics {
+			timer_per_tx = make([]int64, block.Transactions().Len()*2)
+		}
+	}
 	// Mutate the block and state according to any hard-fork specs
 	if p.config.DAOForkSupport && p.config.DAOForkBlock != nil && p.config.DAOForkBlock.Cmp(block.Number()) == 0 {
 		misc.ApplyDAOHardFork(statedb)
@@ -95,52 +102,56 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	for i, tx := range block.Transactions() {
 		msg, err := tx.AsMessage(types.MakeSigner(p.config, header.Number), header.BaseFee)
 		if err != nil {
-			return nil, nil, 0, nil, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
+			return nil, nil, 0, nil, nil, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
 		statedb.Prepare(tx.Hash(), i)
 
 		// hletrd
 		var (
 			timer_start time.Time
-			timer_cpu_start uint64
-			timer_cpu_end uint64
+			timer_cpu_start int64
+			timer_cpu_end int64
 			time_elapsed time.Duration
-			time_elapsed_cpu uint64
+			time_elapsed_cpu int64
 		)
 		if p.bc.TxMetrics {
 			timer_start = time.Now()
-			timer_cpu_start = uint64(C.getCPUTimeNs())
+			timer_cpu_start = int64(C.getCPUTimeNs())
 		}
 		receipt, err := applyTransaction(msg, p.config, p.bc, nil, gp, statedb, blockNumber, blockHash, tx, usedGas, vmenv)
 		if p.bc.TxMetrics {
-			timer_cpu_end = uint64(C.getCPUTimeNs())
+			timer_cpu_end = int64(C.getCPUTimeNs())
 			time_elapsed = time.Since(timer_start)
 			time_elapsed_cpu = timer_cpu_end - timer_cpu_start
+			if p.bc.TxFineMetrics {
+				timer_per_tx[2*i] = time_elapsed.Nanoseconds()
+				timer_per_tx[2*i+1] = time_elapsed_cpu
+			}
 			if msg.To() == nil {
 				// contract deploy
 				timer[4] += time_elapsed_cpu
-				timer[8] += uint64(time_elapsed.Nanoseconds())
+				timer[8] += int64(time_elapsed.Nanoseconds())
 				timer[0] += 1
 			} else if statedb.GetCodeHash(*msg.To()) == emptyCodeHash {
 				// transfer to EoA
 				timer[5] += time_elapsed_cpu
-				timer[9] += uint64(time_elapsed.Nanoseconds())
+				timer[9] += int64(time_elapsed.Nanoseconds())
 				timer[1] += 1
 			} else if len(msg.Data()) == 0 {
 				// transfer to contract
 				timer[6] += time_elapsed_cpu
-				timer[10] += uint64(time_elapsed.Nanoseconds())
+				timer[10] += int64(time_elapsed.Nanoseconds())
 				timer[2] += 1
 			} else {
 				// contract call
 				timer[7] += time_elapsed_cpu
-				timer[11] += uint64(time_elapsed.Nanoseconds())
+				timer[11] += int64(time_elapsed.Nanoseconds())
 				timer[3] += 1
 			}
 		}
 
 		if err != nil {
-			return nil, nil, 0, nil, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
+			return nil, nil, 0, nil, nil, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
 		receipts = append(receipts, receipt)
 		allLogs = append(allLogs, receipt.Logs...)
@@ -148,7 +159,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles())
 
-	return receipts, allLogs, *usedGas, timer, nil
+	return receipts, allLogs, *usedGas, timer, timer_per_tx, nil
 }
 
 func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM) (*types.Receipt, error) {

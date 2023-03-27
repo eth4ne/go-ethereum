@@ -588,6 +588,16 @@ web3._extend({
 			params: 2
 		}),
 		new web3._extend.Method({
+			name: 'setBatchSize',
+			call: 'eth_setBatchSize',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'getBatchSize',
+			call: 'eth_getBatchSize',
+			params: 0
+		}),
+		new web3._extend.Method({
 			name: 'insertBlock',
 			call: 'eth_insertBlock',
 			params: 1
