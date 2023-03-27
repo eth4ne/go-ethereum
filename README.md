@@ -1,3 +1,6 @@
+## Deprecated!
+* Deprecated version.
+
 ## Go Ethereum
 
 Official Golang execution layer implementation of the Ethereum protocol.
