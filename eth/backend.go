@@ -22,14 +22,14 @@ package eth
 #include <time.h>
 #include <stdio.h>
 
-static unsigned long long getCPUTimeNs() {
+static long long getCPUTimeNs() {
 	struct timespec t;
 	if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &t)) {
 		perror("clock_gettime");
 		return 0;
 	}
 	//Probably cause some trouble if POSIX epoch passes n * 1000000000
-	return t.tv_sec * 1000000000ULL + t.tv_nsec;
+	return t.tv_sec * 1000000000LL + t.tv_nsec;
 }
 */
 import "C"
@@ -131,19 +131,21 @@ type Ethereum struct {
 
 	sql *sql.DB
 
-	timer_cpu_insert uint64
-	timer_cpu_db uint64
-	timer_cpu_db_block uint64
-	timer_cpu_db_tx uint64
-	timer_cpu_db_accesslist uint64
-	timer_cpu_db_uncle uint64
+	timer_cpu_insert int64
+	timer_cpu_db int64
+	timer_cpu_db_block int64
+	timer_cpu_db_tx int64
+	timer_cpu_db_accesslist int64
+	timer_cpu_db_uncle int64
 
-	timer_insert uint64
-	timer_db uint64
-	timer_db_block uint64
-	timer_db_tx uint64
-	timer_db_accesslist uint64
-	timer_db_uncle uint64
+	timer_insert int64
+	timer_db int64
+	timer_db_block int64
+	timer_db_tx int64
+	timer_db_accesslist int64
+	timer_db_uncle int64
+
+	batchsize int
 }
 
 // New creates a new Ethereum object (including the
@@ -203,6 +205,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		bloomIndexer:      core.NewBloomIndexer(chainDb, params.BloomBitsBlocks, params.BloomConfirms),
 		p2pServer:         stack.Server(),
 		shutdownTracker:   shutdowncheck.NewShutdownTracker(chainDb),
+		batchsize:         1000,
 	}
 
 	bcVersion := rawdb.ReadDatabaseVersion(chainDb)
@@ -614,9 +617,18 @@ func (s *Ethereum) connectSQL(username string, password string) bool {
 	return true
 }
 
+func (s *Ethereum) setBatchSize(batchsize int) error {
+	s.batchsize = batchsize
+	return nil
+}
+
+func (s *Ethereum) getBatchSize() int {
+	return s.batchsize
+}
+
 // read blocks as a batch (hletrd)
 func (s *Ethereum) readBlockBatch(start int, end int) ([]*types.Header, error) {
-	timer_cpu_db_start := C.getCPUTimeNs()
+	timer_cpu_db_start := int64(C.getCPUTimeNs())
 
 	block_db, err := s.sql.Query("SELECT `number`, `timestamp`, `miner`, `difficulty`, `gaslimit`, `extradata`, `nonce`, `mixhash`, `basefee` FROM `blocks` WHERE `number` >= ? AND `number` < ?", start, end)
 	if err != nil {
@@ -673,8 +685,8 @@ func (s *Ethereum) readBlockBatch(start int, end int) ([]*types.Header, error) {
 		seq++
 	}
 
-	timer_cpu_db_end := C.getCPUTimeNs()
-	cputime := (uint64(timer_cpu_db_end) - uint64(timer_cpu_db_start))
+	timer_cpu_db_end := int64(C.getCPUTimeNs())
+	cputime := (timer_cpu_db_end - timer_cpu_db_start)
 	s.timer_cpu_db += cputime
 	s.timer_cpu_db_block += cputime
 
@@ -683,7 +695,7 @@ func (s *Ethereum) readBlockBatch(start int, end int) ([]*types.Header, error) {
 
 // read txs as a batch (hletrd)
 func (s *Ethereum) readTransactionsBatch(start int, end int) ([][]*types.Transaction, error) {
-	timer_cpu_db_start := C.getCPUTimeNs()
+	timer_cpu_db_start := int64(C.getCPUTimeNs())
 
 	tx_db, err := s.sql.Query("SELECT `blocknumber`, `to`, `gas`, `gasprice`, `input`, `nonce`, `value`, `v`, `r`, `s`, `type`, `maxfeepergas`, `maxpriorityfeepergas` FROM `transactions` WHERE `blocknumber` >= ? AND `blocknumber` < ?", start, end)
 	if err != nil {
@@ -796,8 +808,8 @@ func (s *Ethereum) readTransactionsBatch(start int, end int) ([][]*types.Transac
 		result[blocknumber_i-uint64(start)] = txs
 	}
 
-	timer_cpu_db_end := C.getCPUTimeNs()
-	cputime := (uint64(timer_cpu_db_end) - uint64(timer_cpu_db_start))
+	timer_cpu_db_end := int64(C.getCPUTimeNs())
+	cputime := (timer_cpu_db_end - timer_cpu_db_start)
 	s.timer_cpu_db += cputime
 	s.timer_cpu_db_tx += cputime
 
@@ -806,7 +818,7 @@ func (s *Ethereum) readTransactionsBatch(start int, end int) ([][]*types.Transac
 
 // read uncles as a batch (hletrd)
 func (s *Ethereum) readUnclesBatch(start int, end int) ([][]*types.Header, error) {
-	timer_cpu_db_start := C.getCPUTimeNs()
+	timer_cpu_db_start := int64(C.getCPUTimeNs())
 
 	uncle_db, err := s.sql.Query("SELECT `blocknumber`, `uncleheight`, `timestamp`, `miner`, `difficulty`, `gasused`, `gaslimit`, `extradata`, `parenthash`, `sha3uncles`, `stateroot`, `nonce`, `receiptsroot`, `transactionsroot`, `mixhash`, `basefee`, `logsbloom` FROM `uncles` WHERE `blocknumber` >= ? AND `blocknumber` < ?", start, end)
 	if err != nil {
@@ -893,8 +905,8 @@ func (s *Ethereum) readUnclesBatch(start int, end int) ([][]*types.Header, error
 		result[blocknumber_i-uint64(start)] = uncles
 	}
 
-	timer_cpu_db_end := C.getCPUTimeNs()
-	cputime := (uint64(timer_cpu_db_end) - uint64(timer_cpu_db_start))
+	timer_cpu_db_end := int64(C.getCPUTimeNs())
+	cputime := (timer_cpu_db_end - timer_cpu_db_start)
 	s.timer_cpu_db += cputime
 	s.timer_cpu_db_uncle += cputime
 
@@ -922,10 +934,10 @@ func (s *Ethereum) readUncles(blocknumber int) ([]*types.Header, error) {
 // insertChain handler for goroutine (hletrd)
 func (s *Ethereum) insertChain(chain []*types.Block, result chan bool) {
 	// TODO: check if this cgocall is thread-safe and work properly
-	timer_cpu_insert_start := C.getCPUTimeNs()
+	timer_cpu_insert_start := int64(C.getCPUTimeNs())
 
 	s.config.Ethash.PowMode = ethash.ModeFullFake
-	index, err := s.blockchain.InsertChainPlease(chain, s.config.Ethash.TxMetrics, s.config.Ethash.TxMetricsPath)
+	index, err := s.blockchain.InsertChainPlease(chain, s.config.Ethash.TxMetrics, s.config.Ethash.TxMetricsPath, s.config.Ethash.TxFineMetrics, s.config.Ethash.TxFineMetricsPath)
 	_ = index
 	s.config.Ethash.PowMode = ethash.ModeNormal
 	if err != nil {
@@ -935,8 +947,8 @@ func (s *Ethereum) insertChain(chain []*types.Block, result chan bool) {
 	}
 	result <- true
 
-	timer_cpu_insert_end := C.getCPUTimeNs()
-	cputime := (uint64(timer_cpu_insert_end) - uint64(timer_cpu_insert_start))
+	timer_cpu_insert_end := int64(C.getCPUTimeNs())
+	cputime := (timer_cpu_insert_end - timer_cpu_insert_start)
 	s.timer_cpu_insert += cputime
 }
 
@@ -954,7 +966,7 @@ func (s *Ethereum) insertBlockRange(start int, end int) bool {
 		return false
 	}
 
-	batchsize := 1000
+	batchsize := s.batchsize
 
 	blocks := make([]*types.Block, batchsize)
 	//seq := 0
