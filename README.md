@@ -11,7 +11,7 @@ A simulator for efficiently replaying Ethereum transactions with various modes
 
 ### Prepare data
 
-* [Get ethereum tx data](https://github.com/eth4ne/go-ethereum/tree/TxSubstate)
+* [Get ethereum tx data](https://github.com/eth4ne/go-ethereum/tree/TxSubstate_snap)
 
 * [Create database](https://github.com/eth4ne/eth-analysis)
 
