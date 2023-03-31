@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"math/big"
 	"sync"
+	"os"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -345,6 +346,16 @@ func (t *Trie) insert(n node, prefix, key []byte, value node) (bool, node, error
 		return true, &shortNode{key, value, t.newFlag()}, nil
 
 	case hashNode:
+
+		// if this is zero hash node, this should be treated as nil
+		// but there is no case to insert data at zeroHashNode in Ethane (jmlee)
+		// if needed, comment out these codes
+		// if IsZeroHashNode(n) {
+		// 	fmt.Println("at insert(), come to zero hash node -> prefix:", prefix)
+		// 	fmt.Println("  key:", key)
+		// 	return true, &shortNode{key, value, t.newFlag()}, nil
+		// }
+
 		// We've hit a part of the trie that isn't loaded yet. Load
 		// the node and insert into it. This leaves all child nodes on
 		// the path to the value in the trie.
@@ -755,4 +766,162 @@ func getShortnodeSize(n shortNode) int {
 		panic("encode error: " + err.Error())
 	}
 	return len(h.tmp)
+}
+
+// TryDeleteLeft removes leftmost account if its key is less than or equal to endKey (for Ethane's inactivation)
+// If a node was not found in the database, a MissingNodeError is returned.
+func (t *Trie) TryDeleteLeft(endKey []byte) (error, []byte) {
+	t.unhashed++
+	dirty, n, err, enc := t.deleteLeft(t.root, nil, keybytesToHex(endKey))
+	if !dirty || err != nil {
+		// did not delete leftmost leaf node
+		return err, nil
+	}
+
+	// delete leftmost leaf node
+	t.root = n
+	return nil, enc
+}
+
+// deleteLeft returns the new root of the trie with key deleted.
+// It reduces the trie to minimal form by simplifying
+// nodes on the way up after deleting recursively.
+func (t *Trie) deleteLeft(n node, prefix, endKey []byte) (bool, node, error, []byte) {
+	switch n := n.(type) {
+	case *shortNode:
+		prefix = append(prefix, n.Key...)
+		// if n.Val == nil {
+		// 	fmt.Println("short node value is nil")
+		// }
+		dirty, child, err, enc := t.deleteLeft(n.Val, prefix, endKey)
+		if !dirty || err != nil {
+			// fmt.Println("d1")
+			return false, n, err, nil
+		}
+
+		switch child := child.(type) {
+		case *shortNode:
+			// Deleting from the subtrie reduced it to another
+			// short node. Merge the nodes to avoid creating a
+			// shortNode{..., shortNode{...}}. Use concat (which
+			// always creates a new slice) instead of append to
+			// avoid modifying n.Key since it might be shared with
+			// other nodes.
+			return true, &shortNode{concat(n.Key, child.Key...), child.Val, t.newFlag()}, nil, enc
+		case nil:
+			return true, nil, nil, enc // remove n entirely for whole matches
+		default:
+			return true, &shortNode{n.Key, child, t.newFlag()}, nil, enc
+		}
+
+	case *fullNode:
+		// find leftmost node in this fullNode
+		for i, childNode := range &n.Children {
+			if childNode != nil {
+				indexToByte := common.HexToHash("0x" + indices[i])
+				prefix := append(prefix, indexToByte[len(indexToByte)-1])
+				dirty, nn, err, enc := t.deleteLeft(childNode, prefix, endKey)
+				if !dirty || err != nil {
+					// fmt.Println("d2")
+					return false, n, err, nil
+				}
+				n = n.copy()
+				n.flags = t.newFlag()
+				n.Children[i] = nn
+
+				// Because n is a full node, it must've contained at least two children
+				// before the delete operation. If the new child value is non-nil, n still
+				// has at least two children after the deletion, and cannot be reduced to
+				// a short node.
+				if nn != nil {
+					return true, n, nil, enc
+				}
+				// Reduction:
+				// Check how many non-nil entries are left after deleting and
+				// reduce the full node to a short node if only one entry is
+				// left. Since n must've contained at least two children
+				// before deletion (otherwise it would not be a full node) n
+				// can never be reduced to nil.
+				//
+				// When the loop is done, pos contains the index of the single
+				// value that is left in n or -2 if n contains at least two
+				// values.
+				pos := -1
+				for i, cld := range &n.Children {
+					if cld != nil {
+						if pos == -1 {
+							pos = i
+						} else {
+							pos = -2
+							break
+						}
+					}
+				}
+				if pos >= 0 {
+					if pos != 16 {
+						// If the remaining entry is a short node, it replaces
+						// n and its key gets the missing nibble tacked to the
+						// front. This avoids creating an invalid
+						// shortNode{..., shortNode{...}}.  Since the entry
+						// might not be loaded yet, resolve it just for this
+						// check.
+						cnode, err := t.resolve(n.Children[pos], prefix)
+						if err != nil {
+							// fmt.Println("d3")
+							return false, nil, err, nil
+						}
+						if cnode, ok := cnode.(*shortNode); ok {
+							k := append([]byte{byte(pos)}, cnode.Key...)
+							return true, &shortNode{k, cnode.Val, t.newFlag()}, nil, enc
+						}
+					}
+					// Otherwise, n is replaced by a one-nibble short node
+					// containing the child.
+					return true, &shortNode{[]byte{byte(pos)}, n.Children[pos], t.newFlag()}, nil, enc
+				}
+				// n still contains at least two values and cannot be reduced.
+				return true, n, nil, enc
+			}
+		}
+
+		// should not reach here
+		os.Exit(1)
+		return false, n, nil, nil
+
+	case valueNode:
+		// fmt.Println("prefix:", prefix)
+		// fmt.Println("endKey:", endKey)
+		if bytes.Compare(prefix, endKey) <= 0 {
+			// if prefix <= endKey, delete this leaf node and return this valueNode
+			// fmt.Println("do delete")
+			return true, nil, nil, n
+		} else {
+			// this leaf node is out of range, do not this node
+			// fmt.Println("not delete")
+			return false, nil, nil, nil
+		}
+
+	case nil:
+		// fmt.Println("d4")
+		return false, nil, nil, nil
+
+	case hashNode:
+		// We've hit a part of the trie that isn't loaded yet. Load
+		// the node and delete from it. This leaves all child nodes on
+		// the path to the value in the trie.
+		rn, err := t.resolveHash(n, prefix)
+		if err != nil {
+			// fmt.Println("d5")
+			return false, nil, err, nil
+		}
+		dirty, nn, err, enc := t.deleteLeft(rn, prefix, endKey)
+		if !dirty || err != nil {
+			// fmt.Println("d6")
+			return false, rn, err, enc
+		}
+		return true, nn, nil, enc
+
+	default:
+		panic(fmt.Sprintf("%T: invalid node: %v (%v)", n, n, endKey))
+	}
 }

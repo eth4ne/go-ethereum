@@ -1349,65 +1349,99 @@ func inactivateLeafNodes(firstKeyToCheck, lastKeyToCheck common.Hash) {
 	// fmt.Println("last key of inactive trie:", inactiveTrie.GetLastKey())
 	// fmt.Println("do inactivation -> firstKey:", firstKeyToCheck.Big().Int64(), "lastKey:", lastKeyToCheck.Big().Int64())
 
-	// find accounts to inactivate (i.e., all leaf nodes in the range after delete prev leaf nodes)
-	accountsToInactivate, keysToInactivate, _ := normTrie.FindLeafNodes(firstKeyToCheck[:], lastKeyToCheck[:])
+	if common.DoNewInactivation {
+		// new inactivate method
 
-	// should not inactivate previous accounts when delete epoch is infinite
-	isDeleteEpochInfinite := (common.DeleteEpoch == common.InfiniteEpoch)
-	inacKeyNum := 0     // inactivate old accounts
-	skipInacKeyNum := 0 // skip previous accounts
+		inacNum := 0
+		for {
+			// try to delete the leftmost account (whose key should be less than last key to check)
+			err, enc := normTrie.TryDeleteLeft(lastKeyToCheck[:])
+			if enc != nil {
+				// success delete, then move the account to inactive trie
+				// insert inactive account to right
+				keyToInsert := common.Uint64ToHash(common.InactiveBoundaryKey)
+				common.InactiveBoundaryKey++
+				err = inactiveTrie.TryUpdate(keyToInsert[:], enc)
+				if err != nil {
+					fmt.Println("inactivateLeafNodes insert error:", err)
+					os.Exit(1)
+				}
+				inacNum++
 
-	// move inactive leaf nodes to left
-	for index, keyToInactivate := range keysToInactivate {
+				// update AddrToKey (active & inactive)
+				addr := common.BytesToAddress(enc) // BytesToAddress() turns last 20 bytes into addr
+				delete(common.AddrToKeyActive, addr)
+				common.AddrToKeyInactive[addr] = append(common.AddrToKeyInactive[addr], keyToInsert)
 
-		// check the key is included in KeysToDelete when delete epoch is infinite
-		if isDeleteEpochInfinite {
-			if _, exist := common.KeysToDeleteMap[keyToInactivate]; exist {
-				// do not inactivate this account (i.e., skip),
-				// and remove this key from KeysToDeleteMap as if this is deleted
-				skipInacKeyNum++
-				delete(common.KeysToDeleteMap, keyToInactivate)
-				continue
+				// delete from restored & crumb addresses if exist
+				delete(common.RestoredAddresses, addr)
+				delete(common.CrumbAddresses, addr)
+			} else {
+				// fmt.Println("enc:", enc, "stop inactivation")
+				// inactivation finished, stop delete leaf node
+				break
 			}
 		}
+	} else {
+		// old inactivate method
 
-		// fmt.Println("inac key:", key.Hex())
-		inacKeyNum++
+		// find accounts to inactivate (i.e., all leaf nodes in the range after delete prev leaf nodes)
+		accountsToInactivate, keysToInactivate, _ := normTrie.FindLeafNodes(firstKeyToCheck[:], lastKeyToCheck[:])
 
-		addr := common.BytesToAddress(accountsToInactivate[index]) // BytesToAddress() turns last 20 bytes into addr
+		// should not inactivate previous accounts when delete epoch is infinite
+		isDeleteEpochInfinite := (common.DeleteEpoch == common.InfiniteEpoch)
+		inacKeyNum := 0     // inactivate old accounts
+		skipInacKeyNum := 0 // skip previous accounts
 
-		// delete inactive account from right
-		// fmt.Println("(Inactivate)delete -> key:", keyToInactivate.Hex())
-		err := normTrie.TryUpdate(keyToInactivate[:], nil)
-		if err != nil {
-			fmt.Println("inactivateLeafNodes delete error:", err)
-			os.Exit(1)
+		// move inactive leaf nodes to left
+		for index, keyToInactivate := range keysToInactivate {
+
+			// check the key is included in KeysToDelete when delete epoch is infinite
+			if isDeleteEpochInfinite {
+				if _, exist := common.KeysToDeleteMap[keyToInactivate]; exist {
+					// do not inactivate this account (i.e., skip),
+					// and remove this key from KeysToDeleteMap as if this is deleted
+					skipInacKeyNum++
+					delete(common.KeysToDeleteMap, keyToInactivate)
+					continue
+				}
+			}
+
+			// fmt.Println("inac key:", key.Hex())
+			inacKeyNum++
+
+			addr := common.BytesToAddress(accountsToInactivate[index]) // BytesToAddress() turns last 20 bytes into addr
+
+			// delete inactive account from right
+			// fmt.Println("(Inactivate)delete -> key:", keyToInactivate.Hex())
+			err := normTrie.TryUpdate(keyToInactivate[:], nil)
+			if err != nil {
+				fmt.Println("inactivateLeafNodes delete error:", err)
+				os.Exit(1)
+			}
+
+			// insert inactive account to left
+			keyToInsert := common.Uint64ToHash(common.InactiveBoundaryKey)
+			common.InactiveBoundaryKey++
+			// fmt.Println("(Inactivate)insert -> key:", keyToInsert.Hex())
+			err = inactiveTrie.TryUpdate(keyToInsert[:], accountsToInactivate[index])
+			if err != nil {
+				fmt.Println("inactivateLeafNodes insert error:", err)
+				os.Exit(1)
+			}
+
+			// update AddrToKey (active & inactive)
+			delete(common.AddrToKeyActive, addr)
+			common.AddrToKeyInactive[addr] = append(common.AddrToKeyInactive[addr], keyToInsert)
+
+			// delete from restored & crumb addresses if exist
+			delete(common.RestoredAddresses, addr)
+			delete(common.CrumbAddresses, addr)
 		}
 
-		// insert inactive account to left
-		keyToInsert := common.Uint64ToHash(common.InactiveBoundaryKey)
-		common.InactiveBoundaryKey++
-		// fmt.Println("(Inactivate)insert -> key:", keyToInsert.Hex())
-		err = inactiveTrie.TryUpdate(keyToInsert[:], accountsToInactivate[index])
-		if err != nil {
-			fmt.Println("inactivateLeafNodes insert error:", err)
-			os.Exit(1)
-		}
-
-		// update AddrToKey (active & inactive)
-		delete(common.AddrToKeyActive, addr)
-		common.AddrToKeyInactive[addr] = append(common.AddrToKeyInactive[addr], keyToInsert)
-
-		// delete from restored & crumb addresses if exist
-		delete(common.RestoredAddresses, addr)
-		delete(common.CrumbAddresses, addr)
+		// fmt.Println("inac num:", inacKeyNum, "/ skip num:", skipInacKeyNum)
 	}
 
-	// fmt.Println("inac num:", inacKeyNum, "/ skip num:", skipInacKeyNum)
-	if len(keysToInactivate) != inacKeyNum+skipInacKeyNum {
-		fmt.Println("not matched!")
-		os.Exit(1)
-	}
 }
 
 // restore all inactive accounts of given address (for Ethane)
@@ -1721,6 +1755,21 @@ func printEthaneState() {
 }
 
 func setEthaneOptions(deleteEpoch, inactivateEpoch, inactivateCriterion uint64, fromLevel uint) {
+
+	if deleteEpoch != common.InfiniteEpoch && inactivateEpoch != common.InfiniteEpoch && inactivateEpoch%deleteEpoch != 0 {
+		fmt.Println("inactivate epoch should be multiple of delete epoch")
+		fmt.Println("or change KeysToDelete from list to map")
+		os.Exit(1)
+	}
+
+	if deleteEpoch == common.InfiniteEpoch && inactivateEpoch != common.InfiniteEpoch {
+		if common.DoNewInactivation {
+			fmt.Println("cannot use the new inactivation method with infinite delete epoch")
+			fmt.Println("please set common.DoNewInactivation = false, and do not measure time metrics for inactivation")
+			os.Exit(1)
+		}
+	}
+
 	common.DeleteEpoch = deleteEpoch
 	common.InactivateEpoch = inactivateEpoch
 	common.InactivateCriterion = inactivateCriterion

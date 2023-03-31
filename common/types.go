@@ -127,6 +127,10 @@ var (
 	// this is not an option, but a flag
 	// for Ethane's light inactive trie delete (jmlee)
 	DeletingInactiveTrieFlag = false
+	// adopt new inactivation method which is faster than the old method
+	// but must set this false when DeleteEpoch = INF && InactivateEpoch != INF
+	// (or add additional feature in the new method)
+	DoNewInactivation = true
 
 	// TODO(jmlee): implement this
 	// option: forcely stop simulation when error occurs or not
