@@ -13,6 +13,7 @@ from statistics import median
 # file paths
 blockInfosLogFilePath = "./blockInfos/"
 trieInspectsLogFilePath = "./trieInspects/"
+txExecutionTimeLogFilePath = "./blockInfos/"
 graphPath = "./graphs/"
 
 # options
@@ -511,15 +512,14 @@ def drawGraphsForBlockInfosCompare(startBlockNum, endBlockNum, deleteEpoch, inac
                 q1 = np.percentile(myList, 25)
                 # med = median(myList)
                 if restoreNums[index] != 0:
-                    med = merkleProofSizes[index]/restoreNums[index]
+                    avg = merkleProofSizes[index]/restoreNums[index]
                 else:
-                    med = 0
+                    avg = 0
                 q3 = np.percentile(myList, 75)
                 iqr = q3 - q1
                 # max = np.percentile(myList, 100)
                 max = maxProofSizes[index]
                 
-
                 myListWithoutOutliers = [x for x in myList if x >= q1 - 1.5*iqr]
                 myListWithoutOutliers.sort()
                 lowerWhisker = myListWithoutOutliers[0]
@@ -531,11 +531,12 @@ def drawGraphsForBlockInfosCompare(startBlockNum, endBlockNum, deleteEpoch, inac
                 print("\t\\addplot+ [boxplot prepared={")
                 # print("\t\tlower whisker=", round(min/divScale, 2), ", lower quartile=", round(q1/divScale, 2), \
                 #     ", median=", round(med/divScale, 2), ", upper quartile=", round(q3/divScale, 2), ", upper whisker=", round(max/divScale, 2))
-                print("\t\tlower whisker=", round(min/divScale, 2), ", lower quartile=", round(med/divScale, 2)-0.01, \
-                    ", median=", round(med/divScale, 2), ", upper quartile=", round(med/divScale, 2)+0.01, ", upper whisker=", round(max/divScale, 2))
+                print("\t\tlower whisker=", round(min/divScale, 2), ", lower quartile=", round(avg/divScale, 2)-0.01, \
+                    ", median=", round(avg/divScale, 2), ", upper quartile=", round(avg/divScale, 2)+0.01, ", upper whisker=", round(max/divScale, 2))
                 print("\t}] coordinates {};")
                 print("\t% => lower whisker:", round(lowerWhisker/divScale, 2), "/ upper whisker:", round(upperWhisker/divScale, 2))
                 print("\t% => min:", round(min/divScale, 2), "/ max:", round(max/divScale, 2))
+                print("\t% => # of restoration in this epoch:", restoreNums[index])
                 print("\t% => bn with max proof:", maxProofBlockNums[index])
                 if index == 1:
                     print("\t% => void Merkle Proof Num At Max Proof:", voidMerkleProofNumAtMaxProof)
@@ -572,6 +573,76 @@ def drawGraphsForBlockInfosCompare(startBlockNum, endBlockNum, deleteEpoch, inac
     
     print("total restore num ethane:", totalRestorationNumEthane)
     print("total restore num ethanos:", totalRestorationNumEthanos)
+
+
+
+# draw graphs for execution time of ethane's deletion/inactivation
+def drawGraphsForEthaneDeletionInactivationTime(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion):
+
+    # parse block infos logs
+    blockInfosLog = parseBlockInfos(1, startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
+
+    deleteTimes = []
+    inactivateTimes = []
+    epochNum = 1
+    drawTukeyStyle = False # remove outliers following Tukey style box plot
+    removeExtremeOutliers = True # remove outliers over 99%th
+    if drawTukeyStyle and removeExtremeOutliers:
+        print("do not set both options true")
+        sys.exit()
+
+    # endBlockNum=9000000
+
+    blockNums = list(range(startBlockNum,endBlockNum+1))
+    for bn in blockNums:
+        deleteTime = blockInfosLog[33][bn]
+        inactivateTime = blockInfosLog[34][bn]
+
+        if (bn+1) % deleteEpoch == 0:
+            deleteTimes.append(deleteTime)
+        if (bn+1) % inactivateEpoch == 0:
+            inactivateTimes.append(inactivateTime)
+
+        # show statistics
+        if (bn+1) % inactivateCriterion == 0:
+            # print("\nat epoch", epochNum)
+            divScale = 1000000 # (10^0: nanosecond, 10^3: microsecond, 10^6: millisecond, 10^9: second)
+
+            # tex code to draw box plot
+            print("\t% at epoch", epochNum)
+            listsToDrawBoxPlot = [inactivateTimes, deleteTimes]
+            for myList in listsToDrawBoxPlot:
+
+                q1 = np.percentile(myList, 25)
+                med = median(myList)
+                q3 = np.percentile(myList, 75)
+                iqr = q3 - q1
+
+                # remove outliters ()
+                myList.sort()
+                myListLenWithOutliers = len(myList)
+                if drawTukeyStyle:
+                    myList = [x for x in myList if x >= q1 - 1.5*iqr and x <= q3 + 1.5*iqr]
+                elif removeExtremeOutliers:
+                    outlierNum = int(len(myList)*1/100)
+                    myList = myList[0:-outlierNum]
+                print("\t% outliers num:", myListLenWithOutliers - len(myList))
+                lowerWhisker = myList[0]
+                upperWhisker = myList[-1]
+
+                print("\t\\addplot+ [boxplot prepared={")
+                print("\t\tlower whisker=", round(lowerWhisker/divScale, 2), ", lower quartile=", round(q1/divScale, 2), \
+                    ", median=", round(med/divScale, 2), ", upper quartile=", round(q3/divScale, 2), ", upper whisker=", round(upperWhisker/divScale, 2))
+                print("\t}] coordinates {};")
+            print("\t\\addplot+ [boxplot prepared={}] coordinates {};")
+            print("")
+
+            # go to next epoch
+            epochNum += 1
+            deleteTimes = []
+            inactivateTimes = []
+
+
 
 # draw graphs for block infos log file
 def drawGraphsForTrieInspects(simulMode, startBlockNum, endBlockNum, deleteEpoch=0, inactivateEpoch=0, inactivateCriterion=0):
@@ -795,6 +866,217 @@ def drawGraphsForEthaneBlockInfosCompare(startBlockNum, endBlockNum, deleteEpoch
 
 
 
+def analyzeTxExecuteTime(startBlockNum, endBlockNum):
+    print("reading tx execute time logs...")
+
+    # parse blockInfos log file
+    txExecuteTimeLogFileName = "tx_execute_time_" + str(startBlockNum) + "_" + str(endBlockNum) + "_castor.txt"
+    f = open(txExecutionTimeLogFilePath+txExecuteTimeLogFileName, 'r')
+    rdr = csv.reader(f)
+
+    # genesis block has no tx, so just put 0s
+    blockTxNums = [0]
+    blockTxExecuteTimes_CpuTime = [0]
+    blockTxExecuteTimes_NowSince = [0]
+
+    for params in rdr:
+        # params: [blockNumber, 
+        #   txNums -> deploy, transferEoA, transferCA, contractCall, 
+        #   txExecutionTime_CpuTime -> deploy, transferEoA, transferCA, contractCall, 
+        #   txExecutionTime_NowSince -> deploy, transferEoA, transferCA, contractCall]
+
+        params = params[:-1]
+        params = [int(x) for x in params]
+
+        blockNum = params[0]
+        blockTxNum = params[1] + params[2] + params[3] + params[4]
+        blockTxExecuteTime_CpuTime = params[5] + params[6] + params[7] + params[8]
+        blockTxExecuteTime_NowSince = params[9] + params[10] + params[11] + params[12]
+        # print("blockNum:", blockNum)
+        # print("blockTxNum:", blockTxNum)
+        # print("blockTxExecuteTime_CpuTime:", blockTxExecuteTime_CpuTime)
+        # print("blockTxExecuteTime_NowSince:", blockTxExecuteTime_NowSince)
+        # print("")
+
+        blockTxNums.append(blockTxNum)
+        blockTxExecuteTimes_CpuTime.append(blockTxExecuteTime_CpuTime)
+        blockTxExecuteTimes_NowSince.append(blockTxExecuteTime_NowSince)
+    
+    return blockTxExecuteTimes_NowSince
+
+
+
+# compare restore proof size of Ethane and Ethanos, showing min, avg, max (ignore q1, q3)
+def drawGraphsForRestorationOverhead(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion):
+
+    #
+    # Restore stats (Ethane vs Ethanos)
+    #
+    
+    ethaneBlockInfosLog = parseBlockInfos(1, startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
+    ethanosBlockInfosLog = parseBlockInfos(2, startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
+
+    # get statistics
+    avgProofSizesEthane = []
+    avgProofSizesEthanos = []
+    restoredAccountNum = 0
+    bloomFilterNum = 0
+    merkleProofNum = 0
+    MAX_PROOF_SIZE = 99999999999
+    minProofSizeEthane = MAX_PROOF_SIZE
+    minProofSizeEthanos = MAX_PROOF_SIZE
+    maxProofSizeEthane = 0
+    maxProofSizeEthanos = 0
+    maxProofBlockNumEthane = 0
+    maxProofBlockNumEthanos = 0
+    restorationNumEthane = 0
+    restorationNumEthanos = 0
+    totalRestorationNumEthane = 0
+    totalRestorationNumEthanos = 0
+    merkleProofSizeEthane = 0
+    merkleProofSizeEthanos = 0
+
+    voidMerkleProofNumAtMaxProof = 0
+    firstEpochNumAtMaxProof = 0
+
+    epochNum = 1
+
+    for bn in list(range(startBlockNum,endBlockNum+1)):
+
+        # get avg restore proof size per block
+        if (bn+1) % inactivateCriterion != 0:
+            # for Ethane
+            restorationNum = ethaneBlockInfosLog[35][bn]
+            restorationNumEthane += restorationNum
+            merkleProofsSize = ethaneBlockInfosLog[39][bn]
+            merkleProofSizeEthane += merkleProofsSize
+            minProofSize = ethaneBlockInfosLog[48][bn]
+            maxProofSize = ethaneBlockInfosLog[49][bn]
+            if restorationNum != 0:
+                avgProofSize = int(merkleProofsSize/restorationNum)
+                avgProofSizesEthane.append(avgProofSize)
+                if minProofSizeEthane > minProofSize:
+                    minProofSizeEthane = minProofSize
+                if maxProofSizeEthane < maxProofSize:
+                    maxProofSizeEthane = maxProofSize
+                    maxProofBlockNumEthane = bn
+
+            # for Ethanos
+            restorationNum = ethanosBlockInfosLog[35][bn]
+            restorationNumEthanos += restorationNum
+            merkleProofsSize = ethanosBlockInfosLog[39][bn]
+            merkleProofSizeEthanos += merkleProofsSize
+            minProofSize = ethanosBlockInfosLog[48][bn]
+            maxProofSize = ethanosBlockInfosLog[49][bn]
+            if restorationNum != 0:
+                avgProofSize = int(merkleProofsSize/restorationNum)
+                avgProofSizesEthanos.append(avgProofSize)
+
+                restoredAccountNum += ethanosBlockInfosLog[36][bn]
+                bloomFilterNum += ethanosBlockInfosLog[37][bn]
+                merkleProofNum += ethanosBlockInfosLog[38][bn]
+                if minProofSizeEthanos > minProofSize:
+                    minProofSizeEthanos = minProofSize
+                if maxProofSizeEthanos < maxProofSize:
+                    maxProofSizeEthanos = maxProofSize
+                    maxProofBlockNumEthanos = bn
+                    voidMerkleProofNumAtMaxProof = ethanosBlockInfosLog[50][bn]
+                    firstEpochNumAtMaxProof = ethanosBlockInfosLog[51][bn]
+
+        # show statistics
+        else:
+            # print("\nat epoch", epochNum)
+            divScale = 1000 # (10^3: KB, 10^6: MB, 10^9: GB)
+
+            # tex code to draw box plot
+            print("\t% at epoch", epochNum)
+            listsToDrawBoxPlot = [avgProofSizesEthane, avgProofSizesEthanos]
+            if minProofSizeEthane == MAX_PROOF_SIZE:
+                minProofSizeEthane = 0
+            if minProofSizeEthanos == MAX_PROOF_SIZE:
+                minProofSizeEthanos = 0
+            minProofSizes = [minProofSizeEthane, minProofSizeEthanos]
+            maxProofSizes = [maxProofSizeEthane, maxProofSizeEthanos]
+            restoreNums = [restorationNumEthane, restorationNumEthanos]
+            totalRestorationNumEthane += restorationNumEthane
+            totalRestorationNumEthanos += restorationNumEthanos
+            merkleProofSizes = [merkleProofSizeEthane, merkleProofSizeEthanos]
+            maxProofBlockNums = [maxProofBlockNumEthane, maxProofBlockNumEthanos]
+            index = 0
+            digitsNum = 3
+            for myList in listsToDrawBoxPlot:
+
+                if len(myList) == 0:
+                    myList = [0]
+                
+                # min = np.percentile(myList, 0)
+                min = minProofSizes[index]
+                q1 = np.percentile(myList, 25)
+                med = median(myList)
+                if restoreNums[index] != 0:
+                    avg = merkleProofSizes[index]/restoreNums[index]
+                else:
+                    avg = 0
+                q3 = np.percentile(myList, 75)
+                iqr = q3 - q1
+                # max = np.percentile(myList, 100)
+                max = maxProofSizes[index]
+
+                myListWithoutOutliers = [x for x in myList if x >= q1 - 1.5*iqr]
+                myListWithoutOutliers.sort()
+                lowerWhisker = myListWithoutOutliers[0]
+
+                myListWithoutOutliers = [x for x in myList if x <= q3 + 1.5*iqr]
+                myListWithoutOutliers.sort()
+                upperWhisker = myListWithoutOutliers[-1]
+
+                print("\t\\addplot+ [boxplot prepared={")
+                print("\t\tlower whisker=", round(min/divScale, digitsNum), ", lower quartile=", round(avg/divScale - 0.001, digitsNum), \
+                    ", median=", round(avg/divScale, digitsNum), ", upper quartile=", round(avg/divScale + 0.001, digitsNum), ", upper whisker=", round(max/divScale, digitsNum))
+                print("\t}] coordinates {};")
+                print("\t% => min:", round(min/divScale, digitsNum), "/ avg:", round(avg/divScale, digitsNum), "/ med:", round(med/divScale, digitsNum), "/ max:", round(max/divScale, digitsNum))
+                print("\t% => lower whisker:", round(lowerWhisker/divScale, digitsNum), "/ upper whisker:", round(upperWhisker/divScale, digitsNum))
+                print("\t% => # of restoration in this epoch:", restoreNums[index])
+                print("\t% => block number having max proof:", maxProofBlockNums[index])
+                if index == 1:
+                    print("\t% => (for Ethanos)")
+                    print("\t% => void Merkle Proof Num At Max Proof:", voidMerkleProofNumAtMaxProof)
+                    print("\t% => first Epoch Num At Max Proof:", firstEpochNumAtMaxProof)
+                index += 1
+
+            # Ethanos void proof ratio: bloom filter vs merkle proof
+            voidMerkleProofNum = merkleProofNum - restoredAccountNum
+            if bloomFilterNum != 0 or voidMerkleProofNum != 0:
+                print("\t% => bloom filter num:", bloomFilterNum, "/ void merkle proof num:", voidMerkleProofNum, "(", round(bloomFilterNum/(bloomFilterNum+voidMerkleProofNum)*100, 2), "% )")
+            else:
+                print("\t% => bloom filter num:", bloomFilterNum, "/ void merkle proof num:", voidMerkleProofNum, "(no void proof)")
+
+            print("")
+            # go to next epoch
+            epochNum += 1
+            avgProofSizesEthane = []
+            avgProofSizesEthanos = []
+            restoredAccountNum = 0
+            bloomFilterNum = 0
+            merkleProofNum = 0
+            minProofSizeEthane = MAX_PROOF_SIZE
+            minProofSizeEthanos = MAX_PROOF_SIZE
+            maxProofSizeEthane = 0
+            maxProofSizeEthanos = 0
+            maxProofBlockNumEthane = 0
+            maxProofBlockNumEthanos = 0
+            restorationNumEthane = 0
+            restorationNumEthanos = 0
+            merkleProofSizeEthane = 0
+            merkleProofSizeEthanos = 0
+            voidMerkleProofNumAtMaxProof = 0
+            firstEpochNumAtMaxProof = 0
+
+    print("total restore num ethane:", totalRestorationNumEthane)
+    print("total restore num ethanos:", totalRestorationNumEthanos)
+
+
+
 if __name__ == "__main__":
     print("start")
     startTime = datetime.now()
@@ -807,6 +1089,10 @@ if __name__ == "__main__":
     deleteEpoch = 100
     inactivateEpoch = 100
     inactivateCriterion = 50000
+
+    # drawGraphsForEthaneDeletionInactivationTime(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
+    # analyzeTxExecuteTime(startBlockNum, endBlockNum)
+    # drawGraphsForRestorationOverhead(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
 
     # drawGraphsForBlockInfosCompare(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
     # drawGraphsForTrieInspectsCompare(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
