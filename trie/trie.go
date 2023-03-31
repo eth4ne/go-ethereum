@@ -468,14 +468,16 @@ func (t *Trie) delete(n node, prefix, key []byte) (bool, node, error) {
 					// if single child node is zeroHashNode, delete full node n as a whole
 					hn, ok := n.Children[pos].(hashNode)
 					if ok && IsZeroHashNode(hn) {
-						fmt.Println("in trie.delete(): single child is zeroHashNode, delete the full node")
+						// fmt.Println("in trie.delete(): single child is zeroHashNode, delete the full node")
+						common.DeletedZeroHashNodeNum++
 						return true, nil, nil
 					}
 					// else, mark deleted child node as a zeroHashNode
-					fmt.Println("in trie.delete(): leave zeroHashNode")
+					// fmt.Println("in trie.delete(): leave zeroHashNode")
 					n = n.copy()
 					n.flags = t.newFlag()
 					n.Children[key[0]] = ZeroHashNode
+					common.ZeroHashNodeNum++
 					return true, n, nil
 				}
 

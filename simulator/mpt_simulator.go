@@ -209,6 +209,8 @@ func reset(deleteDisk bool) {
 	common.DeletedActiveNodeNum = uint64(0)
 	common.DeletedInactiveNodeNum = uint64(0)
 	common.InactiveCornerCaseNum = uint64(0)
+	common.ZeroHashNodeNum = uint64(0)
+	common.DeletedZeroHashNodeNum = uint64(0)
 
 	// TODO(jmlee): init for Ethanos
 	// reset Ethanos related vars
@@ -1702,6 +1704,14 @@ func printEthaneState() {
 
 	fmt.Println("deleted nodes in inactive trie:", common.DeletedInactiveNodeNum)
 	fmt.Println("deleted nodes in active trie:", common.DeletedActiveNodeNum)
+
+	// corner cases in inactive trie
+	fmt.Println("InactiveCornerCaseNum:", common.InactiveCornerCaseNum)
+	fmt.Println("LastCornerCaseBlockNum:", common.LastCornerCaseBlockNum)
+
+	// zero hash nodes in inactive trie
+	fmt.Println("ZeroHashNodeNum:", common.ZeroHashNodeNum)
+	fmt.Println("DeletedZeroHashNodeNum:", common.DeletedZeroHashNodeNum)
 
 	// print total/active/inactive trie stats (size, node num, node types, depths)
 	// inspectEthaneTries(latestBlockNum)
