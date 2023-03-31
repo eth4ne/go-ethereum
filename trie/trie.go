@@ -22,8 +22,8 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"sync"
 	"os"
+	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -659,8 +659,8 @@ func (t *Trie) getLastKey(origNode node, lastKey []byte) *big.Int {
 	case valueNode:
 		hexToInt := new(big.Int)
 		hexToInt.SetString(common.BytesToHash(hexToKeybytes(lastKey)).Hex()[2:], 16)
-		fmt.Println("lastkey:", lastKey, "len:", len(lastKey))
-		fmt.Println("hexToKeybytes(lastKey):", hexToKeybytes(lastKey), "len:", len(hexToKeybytes(lastKey)))
+		// fmt.Println("lastkey:", lastKey, "len:", len(lastKey))
+		// fmt.Println("hexToKeybytes(lastKey):", hexToKeybytes(lastKey), "len:", len(hexToKeybytes(lastKey)))
 		return hexToInt
 	case *shortNode:
 		lastKey = append(lastKey, n.Key...)
@@ -670,6 +670,8 @@ func (t *Trie) getLastKey(origNode node, lastKey []byte) *big.Int {
 		last := 0
 		for i, node := range &n.Children {
 			if node != nil {
+				// find last child index
+				// this cannot be zeroHashNode since we deal with the corner case in the inactive trie
 				last = i
 			}
 		}

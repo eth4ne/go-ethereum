@@ -1459,6 +1459,8 @@ func restoreAccountForEthane(restoreAddr common.Address) {
 		if common.StopWhenErrorOccurs {
 			os.Exit(1)
 		}
+
+		// TODO(jmlee): error logging
 		return
 	}
 
