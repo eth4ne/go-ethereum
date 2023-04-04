@@ -2758,6 +2758,27 @@ func connHandler(conn net.Conn) {
 
 				response = []byte("success")
 
+			// TODO(jmlee): also support Ethane and Ethanos mode
+			case "setHeadWithHash":
+				// get params
+				// fmt.Println("execute setHeadWithHash()")
+				blockNum, _ := strconv.ParseUint(params[1], 10, 64)
+				stateRoot := common.HexToHash(params[2])
+				
+				normTrie, err = trie.New(stateRoot, normTrieDB)
+				if err != nil {
+					fmt.Println("setHeadWithHash() request err:", err)
+					fmt.Println("requested rootHash:", stateRoot.Hex())
+					os.Exit(1)
+				}
+				fmt.Println("open new norm trie:", normTrie.Hash().Hex())
+				common.NextBlockNum = blockNum + 1
+
+				// reset dirty storage tries
+				dirtyStorageTries = make(map[common.Address]*trie.SecureTrie)
+
+				response = []byte("success")
+
 			case "convertEthaneToEthereum":
 				// convert Ethane's state as Ethereum's (to check simulation correctness)
 
