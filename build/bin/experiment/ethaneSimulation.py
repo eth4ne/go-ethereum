@@ -330,6 +330,8 @@ def updateTrieDelete(addr):
 
 # set old block as current block (for debugging)
 # ex. restart simulation from safe block
+# this cannot be used after restarting simulator
+# (deleteDisk, doReset must be False)
 # setHead(safeBlockNum)
 # simulateEthereum(safeBlockNum+1, endBlockNum)
 def setHead(blockNum):
@@ -339,11 +341,30 @@ def setHead(blockNum):
     client_socket.send(cmd.encode())
     data = client_socket.recv(1024)
     setHeadResult = data.decode()
-    print("setHeadResult result:", setHeadResult)
+    print("setHeadResult:", setHeadResult)
     if setHeadResult == "fail":
         print("setHead ERROR: cannot setHead with future block")
         sys.exit()
     return setHeadResult
+
+# set old block as current block (for debugging)
+# ex. restart simulation from safe block
+# this can be used after restarting simulator
+# blockNum can be arbitrary number (but stateRoot must be correct)
+# (deleteDisk, doReset must be False)
+# setHeadWithHash(safeBlockNum, stateRoot)
+# simulateEthereum(safeBlockNum+1, endBlockNum)
+def setHeadWithHash(blockNum, stateRoot):
+    cmd = str("setHeadWithHash")
+    cmd += str(",")
+    cmd += str(blockNum)
+    cmd += str(",")
+    cmd += str(stateRoot)
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    setHeadWithHashResult = data.decode()
+    print("setHeadWithHashResult:", setHeadWithHashResult)
+    return setHeadWithHashResult
 
 # delete account of this address for Ethane
 def updateTrieDeleteForEthane(addr):
