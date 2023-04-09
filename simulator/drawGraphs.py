@@ -1084,6 +1084,147 @@ def drawGraphsForRestorationOverhead(startBlockNum, endBlockNum, deleteEpoch, in
 
 
 
+# draw tex grasph for restore proof size of Ethane or Ethanos, showing min, avg, max (ignore q1, q3)
+def drawGraphsForRestorationOverheadOfMode(simulationMode, startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion):
+
+    #
+    # Restore stats for Ethane or Ethanos
+    #
+
+    blockInfosLog = parseBlockInfos(simulationMode, startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
+
+    #
+    # get statistics (*Epoch: stat of current epoch, *Total: stat of total blocks)
+    #
+    # # of restorations
+    restorationNumEpoch = 0
+    restorationNumTotal = 0
+    # # of restored accounts
+    restoredAccountNumEpoch = 0
+    restoredAccountNumTotal = 0
+    # # of bloom filters
+    bloomFilterNumEpoch = 0
+    bloomFilterNumTotal = 0
+    # # of merkle proofs
+    merkleProofNumEpoch = 0
+    merkleProofNumTotal = 0
+    # min restore proof size
+    MAX_PROOF_SIZE = 99999999999 # constant representing initial min value
+    minProofSizeEpoch = MAX_PROOF_SIZE
+    # max restore proof stats (size, when it appeared, void merkle proofs num, first epoch num to restore)
+    maxProofSizeEpoch = 0
+    maxProofBlockNumEpoch = 0
+    voidMerkleProofNumAtMaxProof = 0
+    firstEpochNumAtMaxProof = 0
+    # merkle proof size (including both membership and non-membership Merkle proofs)
+    merkleProofSizeEpoch = 0
+    merkleProofSizeTotal = 0
+    # # of non-membership Merkle proofs
+    voidMerkleProofNumEpoch = 0
+    voidMerkleProofNumTotal = 0
+
+    epochNum = 1
+
+    for bn in list(range(startBlockNum,endBlockNum+1)):
+
+        # for Ethane or Ethanos
+        restorationNum = blockInfosLog[35][bn]
+        if restorationNum != 0:
+            restorationNumEpoch += restorationNum
+
+            merkleProofsSize = blockInfosLog[39][bn]
+            merkleProofSizeEpoch += merkleProofsSize
+            minProofSize = blockInfosLog[48][bn]
+            maxProofSize = blockInfosLog[49][bn]
+
+            restoredAccountNumEpoch += blockInfosLog[36][bn]
+            bloomFilterNumEpoch += blockInfosLog[37][bn]
+            merkleProofNumEpoch += blockInfosLog[38][bn]
+            if minProofSizeEpoch > minProofSize:
+                minProofSizeEpoch = minProofSize
+            if maxProofSizeEpoch < maxProofSize:
+                maxProofSizeEpoch = maxProofSize
+                maxProofBlockNumEpoch = bn
+                voidMerkleProofNumAtMaxProof = blockInfosLog[50][bn]
+                firstEpochNumAtMaxProof = blockInfosLog[51][bn]
+
+
+
+        # show statistics of this epoch
+        if (bn+1) % inactivateCriterion == 0:
+
+            # min, avg, max
+            if minProofSizeEpoch == MAX_PROOF_SIZE:
+                minProofSizeEpoch = 0
+            min = minProofSizeEpoch
+            if restorationNumEpoch != 0:
+                avg = merkleProofSizeEpoch/restorationNumEpoch
+            else:
+                avg = 0
+            max = maxProofSizeEpoch
+
+            # tex code to draw box plot
+            digitsNum = 3
+            divScale = 1000 # (10^3: KB, 10^6: MB, 10^9: GB)
+            print("\t% at epoch", epochNum)
+            print("\t\\addplot+ [boxplot prepared={")
+            print("\t\tlower whisker=", round(min/divScale, digitsNum), ", lower quartile=", round(avg/divScale - 0.001, digitsNum), \
+                ", median=", round(avg/divScale, digitsNum), ", upper quartile=", round(avg/divScale + 0.001, digitsNum), ", upper whisker=", round(max/divScale, digitsNum))
+            print("\t}] coordinates {};")
+            print("\t% => min:", round(min/divScale, digitsNum), "/ avg:", round(avg/divScale, digitsNum), "/ max:", round(max/divScale, digitsNum))
+            print("\t% => # of restoration in this epoch:", restorationNumEpoch)
+            print("\t% => block number having max proof:", maxProofBlockNumEpoch)
+            if simulationMode == 2:
+                # Ethanos void proof ratio: bloom filter vs non-membership merkle proof
+                print("\t% => void Merkle Proof Num At Max Proof:", voidMerkleProofNumAtMaxProof)
+                print("\t% => first Epoch Num At Max Proof (epoch starts from 1):", firstEpochNumAtMaxProof+1) # (epochNums in log files start from 0, but roundNums in latex graphs start from 1)
+                voidMerkleProofNumEpoch = merkleProofNumEpoch - restoredAccountNumEpoch
+                if bloomFilterNumEpoch != 0 or voidMerkleProofNumEpoch != 0:
+                    print("\t% => bloom filter num:", bloomFilterNumEpoch, "/ void merkle proof num:", voidMerkleProofNumEpoch, "(", round(bloomFilterNumEpoch/(bloomFilterNumEpoch+voidMerkleProofNumEpoch)*100, 2), "% )")
+                else:
+                    print("\t% => bloom filter num:", bloomFilterNumEpoch, "/ void merkle proof num:", voidMerkleProofNumEpoch, "(no void proof)")
+            print("")
+
+            # update total stats
+            restorationNumTotal += restorationNumEpoch
+            restoredAccountNumTotal += restoredAccountNumEpoch
+            bloomFilterNumTotal += bloomFilterNumEpoch
+            merkleProofNumTotal += merkleProofNumEpoch
+            merkleProofSizeTotal += merkleProofSizeEpoch
+            voidMerkleProofNumTotal += voidMerkleProofNumEpoch
+
+            # go to next epoch & init epoch stats
+            epochNum += 1
+            avgProofSizesEthanos = []
+            restoredAccountNumEpoch = 0
+            bloomFilterNumEpoch = 0
+            merkleProofNumEpoch = 0
+            minProofSizeEpoch = MAX_PROOF_SIZE
+            maxProofSizeEpoch = 0
+            maxProofBlockNumEpoch = 0
+            restorationNumEpoch = 0
+            merkleProofSizeEpoch = 0
+            voidMerkleProofNumAtMaxProof = 0
+            firstEpochNumAtMaxProof = 0
+
+    print("print total stats")
+    print("total restore num:", restorationNumTotal)
+    print("total restored accs:", restoredAccountNumTotal)
+    print("total merkle proofs num:", merkleProofNumTotal)
+    print("total merkle proofs size:", merkleProofSizeTotal)
+    if simulationMode == 2:
+        print("total bloom filters num:", bloomFilterNumTotal)
+        print("total non-membership Merkle proofs num:", voidMerkleProofNumTotal)
+        print("  => bloom filter's false positive prob:", round(voidMerkleProofNumTotal/(bloomFilterNumTotal+voidMerkleProofNumTotal)*100, 2), "%")
+
+    # check correctness
+    if restorationNumTotal != restoredAccountNumTotal:
+        print("ERROR: this cannot happen in conservative restoration")
+    if merkleProofNumTotal != restoredAccountNumTotal+voidMerkleProofNumTotal:
+        print("ERROR: Merkle proofs num is weird")
+
+
+
 if __name__ == "__main__":
     print("start")
     startTime = datetime.now()
@@ -1100,6 +1241,7 @@ if __name__ == "__main__":
     # drawGraphsForEthaneDeletionInactivationTime(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
     # analyzeTxExecuteTime(startBlockNum, endBlockNum)
     # drawGraphsForRestorationOverhead(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
+    # drawGraphsForRestorationOverheadOfMode(simulationMode, startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
 
     # drawGraphsForBlockInfosCompare(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
     # drawGraphsForTrieInspectsCompare(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion)
