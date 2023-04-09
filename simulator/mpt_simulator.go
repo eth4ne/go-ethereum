@@ -595,10 +595,13 @@ func getDiskUsage() uint64 {
 // (use this function when common.CollectNodeInfos, common.CollectNodeHashes are both false
 // else, just get db stats from common.TotalNodeStat, common.TotalStorageNodeStat)
 func inspectDatabase(diskdb ethdb.KeyValueStore) (uint64, uint64) {
+	fmt.Println("inspectDatabase() started")
 	// iterate db
 	it := diskdb.NewIterator(nil, nil)
 	totalNodes := uint64(0)
 	totalSize := common.StorageSize(0)
+	cnt := 0
+	printInterval := 100000000
 	for it.Next() {
 		var (
 			key  = it.Key()
@@ -611,8 +614,13 @@ func inspectDatabase(diskdb ethdb.KeyValueStore) (uint64, uint64) {
 			totalNodes++
 			totalSize += size
 		}
+
+		cnt++
+		if cnt%printInterval == 0 {
+			fmt.Println("intermediate result -> total nodes:", totalNodes, "/ total size:", totalSize, "(", uint64(totalSize), "B )")
+		}
 	}
-	fmt.Println("total nodes:", totalNodes, "/ total size:", totalSize, "(", uint64(totalSize), "B )")
+	fmt.Println("\nfinal result -> total nodes:", totalNodes, "/ total size:", totalSize, "(", uint64(totalSize), "B )")
 	return totalNodes, uint64(totalSize)
 }
 
