@@ -264,9 +264,12 @@ type BlockInfo struct {
 	NewInactiveNodeStat   NodeStat // stats for newly flushed inactive trie nodes in this block
 	TotalInactiveNodeStat NodeStat // stats for total inactive trie data until this block
 
-	TimeToFlush      int64 // time to generate block (including delete & inactivate in Ethane)
-	TimeToDelete     int64 // time to delete previous leaf nodes in Ethane
-	TimeToInactivate int64 // time to inactivate old leaf nodes in Ethane
+	BlockInterval       int64 // time to generate block
+	TimeToDelete        int64 // time to delete previous leaf nodes in Ethane
+	TimeToInactivate    int64 // time to inactivate old leaf nodes in Ethane
+	TimeToFlushActive   int64 // time to flush active/state trie nodes
+	TimeToFlushInactive int64 // time to flush inactive trie nodes
+	TimeToFlushStorage  int64 // time to flush storage trie nodes
 
 	BlockRestoreStat RestoreStat // stats for all restoration in this block
 

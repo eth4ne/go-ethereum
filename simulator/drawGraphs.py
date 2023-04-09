@@ -54,7 +54,7 @@ def parseBlockInfos(simulMode, startBlockNum, endBlockNum, deleteEpoch, inactiva
     # logs[16~23][blockNum] = TotalNodeStat.ToString()
     # logs[24~31][blockNum] = TotalStorageNodeStat.ToString()
 
-    # logs[32][blockNum] = TimeToFlush (ns)
+    # logs[32][blockNum] = BlockInterval (ns)
     # logs[33][blockNum] = TimeToDelete (ns)
     # logs[34][blockNum] = TimeToInactivate (ns)
 
@@ -77,6 +77,13 @@ def parseBlockInfos(simulMode, startBlockNum, endBlockNum, deleteEpoch, inactiva
 
     # TODO(jmlee): add this later, this is temply has wrong values
     # logs[52][blockNum] = BlockRestoreStat.MaxVoidMerkleProofNum
+
+    # logs[53~60][blockNum] = NewInactiveNodeStat.ToString()
+    # logs[61~68][blockNum] = TotalInactiveNodeStat.ToString()
+
+    # logs[69][blockNum] = TimeToFlushActive
+    # logs[70][blockNum] = TimeToFlushInactive
+    # logs[71][blockNum] = TimeToFlushStorage
 
     columnNum = 100 # big enough value
     logs = TwoD(endBlockNum-startBlockNum+1, columnNum, True)
@@ -293,7 +300,7 @@ def drawGraphsForBlockInfosCompare(startBlockNum, endBlockNum, deleteEpoch, inac
     epochNum = 1
 
     for bn in blockNums:
-        flushTime = blockInfosLogs[1][32][bn]
+        blockInterval = blockInfosLogs[1][32][bn]
         deleteTime = blockInfosLogs[1][33][bn]
         inactivateTime = blockInfosLogs[1][34][bn]
 
@@ -301,9 +308,9 @@ def drawGraphsForBlockInfosCompare(startBlockNum, endBlockNum, deleteEpoch, inac
             deleteTimes.append(deleteTime)
             inactivateTimes.append(inactivateTime)
             if deleteEpoch == 1:
-                flushTimes.append(flushTime - deleteTime - inactivateTime)
+                flushTimes.append(blockInterval - deleteTime - inactivateTime)
         else:
-            flushTimes.append(flushTime)
+            flushTimes.append(blockInterval)
         
         # show statistics
         if (bn+1) % inactivateCriterion == 0:

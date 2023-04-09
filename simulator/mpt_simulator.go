@@ -92,8 +92,8 @@ var (
 	// same as SecureTrie.hashKeyBuf (to mimic SecureTrie)
 	hashKeyBuf = make([]byte, common.HashLength)
 
-	// timer to measure block process time
-	flushStartTime time.Time
+	// timer to measure block interval
+	blockIntervalTimer time.Time
 )
 
 // for Merkle proof (from core/state/statedb.go)
@@ -217,7 +217,7 @@ func reset(deleteDisk bool) {
 	pruner.InitBloomFilters()
 
 	// set block flush timer
-	flushStartTime = time.Now()
+	blockIntervalTimer = time.Now()
 }
 
 // rollbackUncommittedUpdates goes back to latest flushed trie (i.e., undo all uncommitted trie updates)
@@ -453,12 +453,16 @@ func flushTrieNodes() {
 	if common.NextBlockNum%common.FlushInterval == 0 || (common.SimulationMode == 2 && (common.NextBlockNum+1)%common.InactivateCriterion == 0) {
 		// fmt.Println("flush at block", common.NextBlockNum)
 		common.FlushStorageTries = false
+		timeToFlushActive := time.Now()
 		normTrie.Commit(nil)
 		normTrie.TrieDB().Commit(normTrie.Hash(), false, nil)
+		blockInfo.TimeToFlushActive = time.Since(timeToFlushActive).Nanoseconds()
 		if common.SimulationMode == 1 && common.InactiveTrieExist {
 			common.FlushInactiveTrie = true
+			timeToFlushInactive := time.Now()
 			subNormTrie.Commit(nil)
 			subNormTrie.TrieDB().Commit(subNormTrie.Hash(), false, nil)
+			blockInfo.TimeToFlushInactive = time.Since(timeToFlushInactive).Nanoseconds()
 			blockInfo.InactiveRoot = subNormTrie.Hash()
 			common.FlushInactiveTrie = false
 		}
@@ -469,10 +473,12 @@ func flushTrieNodes() {
 
 		// flush storage trie nodes
 		common.FlushStorageTries = true
+		timeToFlushStorage := time.Now()
 		for _, storageTrie := range dirtyStorageTries {
 			storageTrie.Commit(nil)
 			storageTrie.TrieDB().Commit(storageTrie.Hash(), false, nil)
 		}
+		blockInfo.TimeToFlushStorage = time.Since(timeToFlushStorage).Nanoseconds()
 		// reset dirty storage tries after flush
 		dirtyStorageTries = make(map[common.Address]*trie.SecureTrie)
 
@@ -480,10 +486,10 @@ func flushTrieNodes() {
 		common.TrieNodeInfosDirty = make(map[common.Hash]common.NodeInfo)
 	}
 
-	// logging flush time
-	blockInfo.TimeToFlush = time.Since(flushStartTime).Nanoseconds()
-	flushStartTime = time.Now()
-	// fmt.Println("time to flush:", blockInfo.TimeToFlush, "ns")
+	// logging block interval
+	blockInfo.BlockInterval = time.Since(blockIntervalTimer).Nanoseconds()
+	blockIntervalTimer = time.Now()
+	// fmt.Println("block interval:", blockInfo.BlockInterval, "ns")
 
 	// update block info (to be able to rollback to this state later)
 	// fmt.Println("new trie root after flush:", normTrie.Hash().Hex())
@@ -1810,7 +1816,7 @@ func saveBlockInfos(fileName string, startBlockNum, endBlockNum uint64) {
 		log += blockInfo.TotalNodeStat.ToString(delimiter)
 		log += blockInfo.TotalStorageNodeStat.ToString(delimiter)
 
-		log += strconv.FormatInt(blockInfo.TimeToFlush, 10) + delimiter
+		log += strconv.FormatInt(blockInfo.BlockInterval, 10) + delimiter
 		log += strconv.FormatInt(blockInfo.TimeToDelete, 10) + delimiter
 		log += strconv.FormatInt(blockInfo.TimeToInactivate, 10) + delimiter
 
@@ -1835,6 +1841,11 @@ func saveBlockInfos(fileName string, startBlockNum, endBlockNum uint64) {
 		// TODO(jmlee): move position later to be with other NodeStats
 		log += blockInfo.NewInactiveNodeStat.ToString(delimiter)
 		log += blockInfo.TotalInactiveNodeStat.ToString(delimiter)
+
+		// TODO(jmlee): move position later to be with other times (TimeTo...)
+		log += strconv.FormatInt(blockInfo.TimeToFlushActive, 10) + delimiter
+		log += strconv.FormatInt(blockInfo.TimeToFlushInactive, 10) + delimiter
+		log += strconv.FormatInt(blockInfo.TimeToFlushStorage, 10) + delimiter
 
 		// fmt.Println("log at block", blockNum, ":", log)
 
