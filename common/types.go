@@ -182,7 +182,7 @@ var (
 	LastCornerCaseBlockNum = uint64(0)
 
 	// how many zero hash nodes are needed in inactive trie
-	ZeroHashNodeNum = uint64(0)
+	ZeroHashNodeNum        = uint64(0)
 	DeletedZeroHashNodeNum = uint64(0) // deleted zero hash nodes with full node
 
 	// very large key which will not be reached forever
