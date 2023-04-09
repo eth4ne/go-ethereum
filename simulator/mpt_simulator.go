@@ -576,6 +576,21 @@ func hashKey(key []byte) []byte {
 	return hashKeyBuf[:]
 }
 
+// call "du -b leveldbPath" and return db size
+func getDiskUsage() uint64 {
+	cmd := exec.Command("du", "-b", leveldbPath)
+	// cmd := exec.Command("du", "-b", "/ethereum/mptSimulator_jmlee/trieNodes/port_1111")
+	stdout, err := cmd.Output()
+	if err != nil {
+		fmt.Println("getDiskUsage error:", err)
+		os.Exit(1)
+	}
+	outputs := strings.Split(string(stdout), "\t")
+	fmt.Println("du result -> disk size:", outputs[0], "bytes")
+	dbSizeInBytes, _ := strconv.ParseUint(outputs[0], 10, 64)
+	return dbSizeInBytes
+}
+
 // inspectDatabase iterates db and returns # of total trie nodes and their size
 // (use this function when common.CollectNodeInfos, common.CollectNodeHashes are both false
 // else, just get db stats from common.TotalNodeStat, common.TotalStorageNodeStat)
