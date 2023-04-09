@@ -947,7 +947,8 @@ func updateTrieForEthanos(addr common.Address, key, value []byte) error {
 	}
 
 	// update bloom filter with address
-	pruner.LatestBloomFilter.Add(addr.Bytes())
+	pruner.LatestBloomFilter.Add(key) // key: addrHash
+
 
 	return nil
 }
@@ -1048,7 +1049,8 @@ func restoreAccountForEthanos(restoreAddr common.Address) {
 	trie.RestoreProofHashes = make(map[common.Hash]int) // reset multi proof
 	for ; epochNum < currentEpochNum-1; epochNum++ {
 		// check bloom filter first
-		exist, _ := pruner.BloomFilters[epochNum].Contain(restoreAddr.Bytes())
+		exist, _ := pruner.BloomFilters[epochNum].Contain(addrHash.Bytes())
+
 		if !exist {
 			// bloom filter can be void proof
 			// fmt.Println("at epoch", epochNum, ": bloom")
