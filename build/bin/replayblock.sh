@@ -3,7 +3,8 @@ cd ../..
 make geth
 cd build/bin
 
-DataDir="/ethereum/geth-full-v1.10.16"
+#DataDir="/ethereum/geth-full-v1.10.16"
+DataDir="/ethereum/geth"
 
 
 if [ -z "$2" ]

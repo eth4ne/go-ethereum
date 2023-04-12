@@ -1317,38 +1317,66 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		fmt.Println("Done! /blockNumber", common.GlobalBlockNumber)
 
 		// free memory and reset TxDetail, TxReadList, TxWriteList, Miner&Uncles list, and Txlist
+		for k := range common.TxDetail {
+			delete(common.TxDetail, k)
+		}
 		common.TxDetail = make(map[common.Hash]*common.TxInformation)
-		common.TxReadList = make(map[common.Hash]map[common.Address]struct{})
-
-		for k, v := range common.TxWriteList {
-			for _, vv := range v {
-				vv.Storage = nil
-			}
-			delete(common.TxWriteList, k)
-		}
-		common.TxWriteList = make(map[common.Hash]map[common.Address]*common.SubstateAccount)
-		common.BlockMinerList = make(map[int]common.SimpleAccount)
-
-		for k := range common.BlockUncleList {
-			delete(common.BlockUncleList, k)
-		}
-		common.BlockUncleList = make(map[int][]common.SimpleAccount)
 
 		for k := range common.BlockTxList {
 			delete(common.BlockTxList, k)
 		}
 		common.BlockTxList = make(map[int][]common.Hash)
+
+		for k, v := range common.TxReadList {
+			for kk, vv := range v {
+				for kkk := range vv.Storage {
+					delete(vv.Storage, kkk)
+				}
+				delete(v, kk)
+			}
+
+			delete(common.TxReadList, k)
+		}
+		// common.TxReadList = make(map[common.Hash]map[common.Address]struct{})
+		common.TxReadList = make(map[common.Hash]map[common.Address]*common.SubstateAccount)
+
+		for k, v := range common.TxWriteList {
+			for kk, vv := range v {
+				vv.Storage = nil
+				delete(v, kk)
+			}
+			delete(common.TxWriteList, k)
+		}
+		common.TxWriteList = make(map[common.Hash]map[common.Address]*common.SubstateAccount)
+
+		for i := common.GlobalBlockNumber - epoch; i < common.GlobalBlockNumber; i++ {
+			delete(common.BlockMinerList, i)
+		}
+		common.BlockMinerList = make(map[int]map[common.Address]common.SubstateAccount)
+
+		for k, v := range common.BlockUncleList {
+			for kk, _ := range v {
+				delete(v, kk)
+			}
+			delete(common.BlockUncleList, k)
+		}
+		common.BlockUncleList = make(map[int]map[common.Address]common.SubstateAccount)
+
 		common.HardFork = make(map[common.Address]*common.SubstateAccount)
 	}
 
-	// jhkim: inspect leveldb for every 1 million blocks
+	// // jhkim: inspect leveldb for every 1 million blocks
 	// if common.GlobalBlockNumber != 0 && common.GlobalBlockNumber%1000000 == 0 {
 	// 	rawdb.MyInspectDatabase(bc.db, nil, nil)
 	// 	// os.Exit(0)
 	// }
-	if common.GlobalBlockNumber == 2000001 {
-		panic(0)
-	}
+	// if common.GlobalBlockNumber == 1150001 {
+	// 	panic(0)
+	// }
+	// if common.GlobalBlockNumber == 4371003 {
+	// 	panic(0)
+	// }
+	// panic(0)
 	return status, nil
 }
 

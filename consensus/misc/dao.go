@@ -20,7 +20,9 @@ import (
 	"bytes"
 	"errors"
 	"math/big"
+	"sort"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
@@ -40,10 +42,11 @@ var (
 // ensure it conforms to DAO hard-fork rules.
 //
 // DAO hard-fork extension to the header validity:
-//   a) if the node is no-fork, do not accept blocks in the [fork, fork+10) range
-//      with the fork specific extra-data set
-//   b) if the node is pro-fork, require blocks in the specific range to have the
-//      unique extra-data set.
+//
+//	a) if the node is no-fork, do not accept blocks in the [fork, fork+10) range
+//	   with the fork specific extra-data set
+//	b) if the node is pro-fork, require blocks in the specific range to have the
+//	   unique extra-data set.
 func VerifyDAOHeaderExtraData(config *params.ChainConfig, header *types.Header) error {
 	// Short circuit validation if the node doesn't care about the DAO fork
 	if config.DAOForkBlock == nil {
@@ -78,7 +81,15 @@ func ApplyDAOHardFork(statedb *state.StateDB) {
 	}
 
 	// Move every DAO account and extra-balance account funds into the refund contract
+	keys := make([]string, 0, len(params.DAODrainList()))
 	for _, addr := range params.DAODrainList() {
+		keys = append(keys, addr.String())
+	}
+	sort.Strings(keys)
+
+	// for _, addr := range params.DAODrainList() {
+	for _, key := range keys {
+		addr := common.HexToAddress(key)
 		statedb.AddBalance(params.DAORefundContract, statedb.GetBalance(addr))
 		statedb.SetBalance(addr, new(big.Int))
 	}

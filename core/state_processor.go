@@ -67,41 +67,52 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		allLogs     []*types.Log
 		gp          = new(GasPool).AddGas(block.GasLimit())
 	)
+	common.GlobalTxHash = common.HexToHash("0x0")          // default set for hardfork state update
+	common.GlobalBlockNumber = int(block.Number().Int64()) //jhkim
+	blocknumber := common.GlobalBlockNumber
 	// Mutate the block and state according to any hard-fork specs
 	if p.config.DAOForkSupport && p.config.DAOForkBlock != nil && p.config.DAOForkBlock.Cmp(block.Number()) == 0 {
 		misc.ApplyDAOHardFork(statedb)
 
-		if config := p.config; config.IsByzantium(header.Number) { // jhkim: 437만 블록 이후
-			statedb.Finalise(true)
-		} else {
-			statedb.Finalise(config.IsEIP158(header.Number)) // jhkim: 267.5만 ~ 437만 블록
-		}
+		// 여기 왜 하는거였지?
+		// if config := p.config; config.IsByzantium(header.Number) { // jhkim: 437만 블록 이후
+		// 	statedb.Finalise(true)
+		// } else {
+		// 	statedb.Finalise(config.IsEIP158(header.Number)) // jhkim: 267.5만 ~ 437만 블록
+		// }
 	}
+	statedb.IntermediateRoot(p.config.IsEIP158(big.NewInt(int64(blocknumber))))
 	blockContext := NewEVMBlockContext(header, p.bc, nil)
 	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, p.config, cfg)
 
 	// jhkim: nil map check
 	if common.TxReadList == nil {
-		common.TxReadList = make(map[common.Hash]map[common.Address]struct{})
+		// common.TxReadList = make(map[common.Hash]map[common.Address]struct{})
+		common.TxReadList = make(map[common.Hash]map[common.Address]*common.SubstateAccount)
 		common.TxWriteList = make(map[common.Hash]map[common.Address]*common.SubstateAccount)
-		common.BlockMinerList = make(map[int]common.SimpleAccount)
-		common.BlockUncleList = make(map[int][]common.SimpleAccount)
+		common.BlockMinerList = make(map[int]map[common.Address]common.SubstateAccount)
+		common.BlockUncleList = make(map[int]map[common.Address]common.SubstateAccount)
 		common.BlockTxList = make(map[int][]common.Hash)
 		common.HardFork = make(map[common.Address]*common.SubstateAccount)
 
 	}
+	common.GlobalBlockMiner = block.Coinbase()
+	for _, uncle := range block.Uncles() {
+		common.GlobalBlockUncles = append(common.GlobalBlockUncles, uncle.Coinbase)
+	}
 
 	// jhkim: Init common.Global varables for ethane before transactions processing
-	common.GlobalBlockNumber = int(block.Number().Int64()) //jhkim
-	blocknumber := common.GlobalBlockNumber
+
 	if common.BlockTxList[blocknumber] == nil {
 		common.BlockTxList[blocknumber] = make([]common.Hash, 0)
 	}
-
+	if common.GlobalBlockNumber == 1920000 {
+		fmt.Println("192000block start txs")
+	}
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
-
-		common.TxReadList[tx.Hash()] = map[common.Address]struct{}{}
+		// common.TxReadList[tx.Hash()] = map[common.Address]struct{}{}
+		common.TxReadList[tx.Hash()] = map[common.Address]*common.SubstateAccount{}
 		common.TxWriteList[tx.Hash()] = map[common.Address]*common.SubstateAccount{}
 		common.BlockTxList[blocknumber] = append(common.BlockTxList[blocknumber], tx.Hash())
 		common.GlobalTxHash = tx.Hash()
@@ -117,34 +128,40 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		}
 		receipts = append(receipts, receipt)
 		allLogs = append(allLogs, receipt.Logs...)
-
 		//jhkim: reset global variables after process each transaction
 		common.GlobalTxTo = common.Address{}
 		common.GlobalTxFrom = common.Address{}
 		common.GlobalTxHash = common.HexToHash("0x0")
 
 	}
+	common.BlockMinerList[blocknumber] = make(map[common.Address]common.SubstateAccount)
+	common.BlockUncleList[blocknumber] = make(map[common.Address]common.SubstateAccount)
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles())
 
-	common.BlockMinerList[blocknumber] = common.SimpleAccount{
-		Addr:        block.Coinbase(),
+	tmp := common.SubstateAccount{
+
 		Balance:     statedb.GetBalance(block.Coinbase()),
 		Nonce:       statedb.GetNonce(block.Coinbase()),
-		Codehash:    statedb.GetCodeHash(block.Coinbase()),
+		CodeHash:    statedb.GetCodeHash(block.Coinbase()),
 		StorageRoot: statedb.GetStorageTrieHash(block.Coinbase()),
+		Code:        statedb.GetCode(block.Coinbase()),
+		// Storage: statedb.get
 	}
+
+	common.BlockMinerList[blocknumber][block.Coinbase()] = tmp
 
 	for _, uncle := range block.Uncles() {
 
-		tmp := common.SimpleAccount{
-			Addr:        uncle.Coinbase,
+		tmp := common.SubstateAccount{
+
 			Balance:     statedb.GetBalance(uncle.Coinbase),
 			Nonce:       statedb.GetNonce(uncle.Coinbase),
-			Codehash:    statedb.GetCodeHash(uncle.Coinbase),
+			CodeHash:    statedb.GetCodeHash(uncle.Coinbase),
 			StorageRoot: statedb.GetStorageTrieHash(uncle.Coinbase),
+			Code:        statedb.GetCode(block.Coinbase()),
 		}
-		common.BlockUncleList[blocknumber] = append(common.BlockUncleList[blocknumber], tmp)
+		common.BlockUncleList[blocknumber][uncle.Coinbase] = tmp
 	}
 
 	return receipts, allLogs, *usedGas, nil
@@ -154,7 +171,7 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	// Create a new context to be used in the EVM environment.
 	txContext := NewEVMTxContext(msg)
 	evm.Reset(txContext, statedb)
-
+	// fmt.Println("applyTransaction", tx.Hash())
 	// jhkim: write TxDetail befor applymessage for test
 	if _, ok := common.TxDetail[tx.Hash()]; !ok {
 		WriteTxDetail(tx, msg, blockNumber, statedb)
@@ -171,12 +188,18 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 
 	// Update the state with pending changes.
 	var root []byte
+	// root = statedb.IntermediateRoot(config.IsEIP158(blockNumber)).Bytes()
+	// //jhkim: test for txs after 4370000
 	if config.IsByzantium(blockNumber) {
-		statedb.Finalise(true)
+		// statedb.Finalise(true)
+		statedb.IntermediateRoot(config.IsEIP158(blockNumber)).Bytes()
 	} else {
 		root = statedb.IntermediateRoot(config.IsEIP158(blockNumber)).Bytes()
 	}
 	*usedGas += result.UsedGas
+	// 원래는 밑에서 receipt를 만들때 post state 의 root를 만드는데,
+	// 비잔티움 이전에는 intermediateroot를 계속 실행하기때문에 계속 바뀌고
+	// 이후에는 마지막에만 하니까 일정할거야. 그래서 로직을 바꿔주려면 여기를 수정해야한다
 
 	// Create a new receipt for the transaction, storing the intermediate root and gas used
 	// by the tx.

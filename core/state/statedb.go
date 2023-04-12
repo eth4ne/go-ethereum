@@ -484,13 +484,14 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 	if s.snap != nil {
 		s.snapAccounts[obj.addrHash] = snapshot.SlimAccountRLP(obj.data.Nonce, obj.data.Balance, obj.data.Root, obj.data.CodeHash)
 	}
-	// jhkim
+	// jhkim: account의 state가 변할 때 writelist에 추가
 	if common.GlobalBlockNumber > 0 && common.GlobalTxHash != common.HexToHash("0x0") {
 		addr = obj.Address()
 		substateacc := common.TxWriteList[common.GlobalTxHash][addr]
 		if substateacc == nil {
 			substateacc = common.NewSubstateAccount(obj.data.Nonce, obj.data.Balance, obj.code, s.GetStorageTrieHash(addr))
 		} else {
+			// 이미 있다는건, storage trie update에서 먼저 넣었다는거
 			if substateacc.Balance != obj.data.Balance {
 				substateacc.Balance = obj.data.Balance
 			}
@@ -505,23 +506,42 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 		common.TxWriteList[common.GlobalTxHash][addr] = substateacc
 		// common.TxWriteList[common.GlobalTxHash][addr].CodeHash = s.GetCodeHash(addr)
 		// common.TxWriteList[common.GlobalTxHash][addr].StorageRoot = s.GetStorageTrieHash(addr)
-
-		// jhkim
-		// if len(common.TxWriteList[common.GlobalTxHash][addr].Storage) != 0 {
-		// 	fmt.Println()
-		// 	fmt.Println("updateStateobject: block#", common.GlobalBlockNumber, "txhash", common.GlobalTxHash)
-		// 	fmt.Println("  update stateobj/address:", addr, "storageroot", s.GetStorageTrieHash(addr))
-
-		// 	if addr == common.HexToAddress("0x61C5E2A298f40DBB2adEE3b27C584AdAD6833BaC") {
-		// 		// fmt.Println("  Storage:", common.TxWriteList[common.GlobalTxHash][addr].Storage)
-		// 		for k, v := range common.TxWriteList[common.GlobalTxHash][addr].Storage {
-		// 			fmt.Println("    slot:", k, "val:", v)
-		// 		}
-		// 	}
-		// 	fmt.Println()
-		// 	fmt.Println()
-		// }
 		common.PrettyTxWritePrint(common.GlobalTxHash, addr)
+	} else if common.GlobalBlockNumber > 0 && common.GlobalBlockNumber < 4370000 && common.GlobalTxHash == common.HexToHash("0x0") { // 192만블록의 하드포크 경우
+		// 그런데 437만 블록 이후에는 매 tx마다 intermediateroot를 하여 update state object를 하는게 아니라, 모든 applytransaction 후에 finalize에서 수행하기 때문에
+		// common.globaltxHash가 0x0이다. 따라서 이렇게 걸러내면 문제가 생긴다.
+		// 그러니까 437만 이전이랑 이후랑은 나눠야하나
+
+		// 437만 이전에는 이대로 해도 되는데 437만 이후에는 여기서는 카운트를 하면 안된다?
+		if common.GlobalBlockMiner != obj.Address() && !common.ContainsAddress(obj.Address(), common.GlobalBlockUncles) {
+
+			if common.GlobalBlockNumber == 1920000 {
+				fmt.Println("  hardfork:", obj.Address())
+			} else {
+				fmt.Println("  Not in 1920000 block, but nil txhash stateupdate", common.GlobalBlockNumber, obj.Address())
+				fmt.Println(common.GlobalBlockMiner)
+				fmt.Println(common.GlobalBlockUncles)
+				panic(0)
+			}
+
+			addr = obj.Address()
+			substateacc := common.HardFork[addr]
+			if substateacc == nil {
+				substateacc = common.NewSubstateAccount(obj.data.Nonce, obj.data.Balance, obj.code, s.GetStorageTrieHash(addr))
+			} else {
+				if substateacc.Balance != obj.data.Balance {
+					substateacc.Balance = obj.data.Balance
+				}
+				if substateacc.Nonce != obj.data.Nonce {
+					substateacc.Nonce = obj.data.Nonce
+				}
+			}
+			substateacc.CodeHash = s.GetCodeHash(addr)
+			substateacc.Code = s.GetCode(addr)
+			substateacc.StorageRoot = s.GetStorageTrieHash(addr)
+
+			common.HardFork[addr] = substateacc
+		}
 	}
 }
 
@@ -542,6 +562,15 @@ func (s *StateDB) deleteStateObject(obj *stateObject) {
 // the object is not found or was deleted in this execution context. If you need
 // to differentiate between non-existent/just-deleted, use getDeletedStateObject.
 func (s *StateDB) getStateObject(addr common.Address) *stateObject {
+	// if addr == common.HexToAddress("0xD3273EBa07248020bf98A8B560ec1576a612102F") {
+	// 	fmt.Println(addr)
+	// 	obj := s.getDeletedStateObject(addr)
+	// 	if obj == nil {
+	// 		fmt.Println("nil object")
+	// 	} else {
+	// 		fmt.Println("not nil object/ obj.deleted:", obj.deleted)
+	// 	}
+	// }
 	if obj := s.getDeletedStateObject(addr); obj != nil && !obj.deleted {
 		return obj
 	}
@@ -556,8 +585,9 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 	// jhkim: write TxReadList
 	if common.GlobalBlockNumber > 0 && common.GlobalTxHash != common.HexToHash("0x0") {
 		if _, exist := common.TxReadList[common.GlobalTxHash][addr]; !exist {
-			common.TxReadList[common.GlobalTxHash][addr] = struct{}{}
-			// common.TxReadList[common.GlobalTxHash][addr] = common.SubstateAccount // if you want to archive reading slots
+			// common.TxReadList[common.GlobalTxHash][addr] = struct{}{}
+			common.TxReadList[common.GlobalTxHash][addr] = common.NewSubstateAccount(0, common.Big0, common.Hex2Bytes("0x0"), common.HexToHash("0x0"))
+
 		}
 	}
 	// Prefer live objects if any is available
@@ -651,8 +681,6 @@ func (s *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) 
 
 	if common.GlobalBlockNumber > 0 && common.GlobalTxHash != common.HexToHash("0x0") {
 
-		// fmt.Println("createobject", addr)
-
 		common.TxWriteList[common.GlobalTxHash][addr] = common.NewSubstateAccount(newobj.data.Nonce, newobj.data.Balance, newobj.code, s.GetStorageTrieHash(addr))
 	}
 
@@ -676,6 +704,7 @@ func (s *StateDB) CreateAccount(addr common.Address) {
 	newObj, prev := s.createObject(addr)
 	if prev != nil {
 		newObj.setBalance(prev.data.Balance)
+
 	}
 }
 
@@ -842,7 +871,16 @@ func (s *StateDB) GetRefund() uint64 {
 // into the tries just yet. Only IntermediateRoot or Commit will do that.
 func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 	addressesToPrefetch := make([][]byte, 0, len(s.journal.dirties))
+	// jhkim: sort updates of stateobjects
+	keys := make([]string, 0, len(s.journal.dirties))
 	for addr := range s.journal.dirties {
+		keys = append(keys, addr.String())
+	}
+	sort.Strings(keys)
+
+	for _, key := range keys {
+		addr := common.HexToAddress(key)
+		// for addr := range s.journal.dirties {
 		obj, exist := s.stateObjects[addr]
 		if !exist {
 			// ripeMD is 'touched' at block 1714175, in tx 0x1237f737031e40bcde4a8b7e717b2d15e3ecadfe49bb1bbc71ee9deb09c6fcf2
@@ -864,16 +902,73 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 				s.snapDestructs[obj.addrHash] = struct{}{} // We need to maintain account deletions explicitly (will remain set indefinitely)
 				delete(s.snapAccounts, obj.addrHash)       // Clear out any previously updated account data (may be recreated via a ressurrect)
 				delete(s.snapStorage, obj.addrHash)        // Clear out any previously updated storage data (may be recreated via a ressurrect)
+			}
+			if common.GlobalTxHash != common.HexToHash("0x0") {
 
-				if common.GlobalTxHash != common.HexToHash("0x0") {
+				// fmt.Println("deleteobject", common.GlobalBlockNumber, common.GlobalTxHash, obj.Address())
+				// if common.TxDetail[common.GlobalTxHash].DeletedAddress == nil {
+				// 	common.TxDetail[common.GlobalTxHash].DeletedAddress = make([]common.Address, 0)
+				// }
+				common.TxDetail[common.GlobalTxHash].DeletedAddress = append(common.TxDetail[common.GlobalTxHash].DeletedAddress, obj.Address())
+				delete(common.TxWriteList[common.GlobalTxHash], obj.Address())
 
-					// fmt.Println("deleteobject", common.GlobalBlockNumber, common.GlobalTxHash, obj.Address())
-
-					delete(common.TxWriteList[common.GlobalTxHash], obj.Address())
-
-				}
 			}
 		} else {
+
+			// jhkim: account의 state가 변할 때 writelist에 추가
+			// jhkim: byzantium부터는 Intermediate가 아닌 finalise에서 이 과정이 이루어지기 떄문에 여기에 둬야함
+			if common.GlobalBlockNumber > 0 && common.GlobalTxHash != common.HexToHash("0x0") {
+				addr = obj.Address()
+				substateacc := common.TxWriteList[common.GlobalTxHash][addr]
+				if substateacc == nil {
+					substateacc = common.NewSubstateAccount(obj.data.Nonce, obj.data.Balance, obj.code, s.GetStorageTrieHash(addr))
+				}
+				// substateacc.Balance = s.GetBalance(addr)
+				substateacc.Balance = obj.data.Balance
+				// if obj.data.Balance != s.GetBalance(addr) {
+				// if addr == common.HexToAddress("0x2462AF233D074E331CeA1D19b1B2733Dfd7a2CF7") {
+				// 	fmt.Println("different balance", common.GlobalBlockNumber, common.GlobalTxHash, addr)
+				// 	fmt.Println("    obj.data.balance", obj.data.Balance, "vs. s.getbalance", s.GetBalance((addr)))
+				// }
+				// substateacc.Nonce = s.GetNonce(addr)
+				substateacc.Nonce = obj.data.Nonce
+				substateacc.CodeHash = s.GetCodeHash(addr)
+				substateacc.Code = s.GetCode(addr)
+				substateacc.StorageRoot = s.GetStorageTrieHash(addr)
+
+				common.TxWriteList[common.GlobalTxHash][addr] = substateacc
+				// common.TxWriteList[common.GlobalTxHash][addr].CodeHash = s.GetCodeHash(addr)
+				// common.TxWriteList[common.GlobalTxHash][addr].StorageRoot = s.GetStorageTrieHash(addr)
+				common.PrettyTxWritePrint(common.GlobalTxHash, addr)
+			} else if common.GlobalBlockNumber > 0 && common.GlobalTxHash == common.HexToHash("0x0") { // 192만블록의 하드포크 경우
+				if common.GlobalBlockMiner != obj.Address() && !common.ContainsAddress(obj.Address(), common.GlobalBlockUncles) {
+
+					if common.GlobalBlockNumber == 1920000 {
+						fmt.Println("  hardfork:", obj.Address())
+					} else {
+						fmt.Println("  Not in 1920000 block, but nil txhash stateupdate", common.GlobalBlockNumber, obj.Address())
+						panic(0)
+					}
+
+					addr = obj.Address()
+					substateacc := common.HardFork[addr]
+					if substateacc == nil {
+						substateacc = common.NewSubstateAccount(obj.data.Nonce, obj.data.Balance, obj.code, s.GetStorageTrieHash(addr))
+					} else {
+						if substateacc.Balance != obj.data.Balance {
+							substateacc.Balance = obj.data.Balance
+						}
+						if substateacc.Nonce != obj.data.Nonce {
+							substateacc.Nonce = obj.data.Nonce
+						}
+					}
+					substateacc.CodeHash = s.GetCodeHash(addr)
+					substateacc.Code = s.GetCode(addr)
+					substateacc.StorageRoot = s.GetStorageTrieHash(addr)
+
+					common.HardFork[addr] = substateacc
+				}
+			}
 			obj.finalise(true) // Prefetch slots in the background
 		}
 		s.stateObjectsPending[addr] = struct{}{}
@@ -891,15 +986,15 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 	s.clearJournalAndRefund()
 }
 
-// jhkim
-func containAddress(acclist []common.SimpleAccount, addr common.Address) bool {
-	for _, v := range acclist {
-		if v.Addr == addr {
-			return true
-		}
-	}
-	return false
-}
+// // jhkim
+// func containAddress(acclist []common.SimpleAccount, addr common.Address) bool {
+// 	for _, v := range acclist {
+// 		if v.Addr == addr {
+// 			return true
+// 		}
+// 	}
+// 	return false
+// }
 
 // IntermediateRoot computes the current root hash of the state trie.
 // It is called in between transactions to get the root hash that
@@ -941,7 +1036,15 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 		}
 	}
 	usedAddrs := make([][]byte, 0, len(s.stateObjectsPending))
+	keys := make([]string, 0, len(s.stateObjectsPending))
 	for addr := range s.stateObjectsPending {
+		keys = append(keys, addr.String())
+	}
+	sort.Strings(keys)
+
+	for _, key := range keys {
+		addr := common.HexToAddress(key)
+		// for addr := range s.stateObjectsPending {
 		if obj := s.stateObjects[addr]; obj.deleted {
 			s.deleteStateObject(obj)
 			s.AccountDeleted += 1

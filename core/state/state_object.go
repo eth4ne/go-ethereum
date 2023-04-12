@@ -171,16 +171,39 @@ func (s *stateObject) getTrie(db Database) Trie {
 // GetState retrieves a value from the account storage trie.
 func (s *stateObject) GetState(db Database, key common.Hash) common.Hash {
 	// If the fake storage is set, only lookup the state here(in the debugging mode)
+
 	if s.fakeStorage != nil {
+		if common.Path == "/home/jhkim/replayblock/" {
+
+			if len(common.TxReadList[common.GlobalTxHash][s.Address()].Storage) == 0 {
+				common.TxReadList[common.GlobalTxHash][s.Address()].Storage = make(map[common.Hash]common.Hash)
+			}
+			common.TxReadList[common.GlobalTxHash][s.Address()].Storage[key] = s.fakeStorage[key]
+		}
 		return s.fakeStorage[key]
 	}
 	// If we have a dirty value for this state entry, return it
 	value, dirty := s.dirtyStorage[key]
 	if dirty {
+		if common.Path == "/home/jhkim/replayblock/" {
+
+			if len(common.TxReadList[common.GlobalTxHash][s.Address()].Storage) == 0 {
+				common.TxReadList[common.GlobalTxHash][s.Address()].Storage = make(map[common.Hash]common.Hash)
+			}
+			common.TxReadList[common.GlobalTxHash][s.Address()].Storage[key] = value
+		}
 		return value
 	}
 	// Otherwise return the entry's original value
-	return s.GetCommittedState(db, key)
+	value = s.GetCommittedState(db, key)
+	if common.Path == "/home/jhkim/replayblock/" {
+
+		if len(common.TxReadList[common.GlobalTxHash][s.Address()].Storage) == 0 {
+			common.TxReadList[common.GlobalTxHash][s.Address()].Storage = make(map[common.Hash]common.Hash)
+		}
+		common.TxReadList[common.GlobalTxHash][s.Address()].Storage[key] = value
+	}
+	return value
 }
 
 // GetCommittedState retrieves a value from the committed account storage trie.
@@ -293,6 +316,29 @@ func (s *stateObject) finalise(prefetch bool) {
 		if value != s.originStorage[key] {
 			slotsToPrefetch = append(slotsToPrefetch, common.CopyBytes(key[:])) // Copy needed for closure
 		}
+		// jhkim: write storage trie changes
+		if common.GlobalBlockNumber > 0 && common.GlobalTxHash != common.HexToHash("0x0") {
+			// fmt.Println("@#@#@#@#", common.GlobalBlockNumber, common.GlobalTxHash, s.Address())
+			if common.TxWriteList[common.GlobalTxHash][s.Address()] == nil {
+				common.TxWriteList[common.GlobalTxHash][s.Address()] = common.NewSubstateAccount(s.data.Nonce, s.data.Balance, s.code, s.db.GetStorageTrieHash(s.Address()))
+			}
+
+			// if s.db.GetStorageTrieHash(s.Address()) != tr.Hash() {
+			// 	common.Path = "/home/jhkim/replayblock/"
+			// 	fmt.Println("different storage trie root")
+			// }
+
+			common.TxWriteList[common.GlobalTxHash][s.Address()].Balance = s.db.GetBalance(s.Address())
+			common.TxWriteList[common.GlobalTxHash][s.Address()].Nonce = s.db.GetNonce(s.Address())
+			common.TxWriteList[common.GlobalTxHash][s.Address()].Code = s.db.GetCode(s.Address())
+			common.TxWriteList[common.GlobalTxHash][s.Address()].CodeHash = s.db.GetCodeHash(s.Address())
+			common.TxWriteList[common.GlobalTxHash][s.Address()].Storage[key] = value
+			common.TxWriteList[common.GlobalTxHash][s.Address()].StorageRoot = s.db.GetStorageTrieHash(s.Address())
+
+			common.PrettyTxWritePrint(common.GlobalTxHash, s.Address())
+
+		}
+
 	}
 	if s.db.prefetcher != nil && prefetch && len(slotsToPrefetch) > 0 && s.data.Root != emptyRoot {
 		s.db.prefetcher.prefetch(s.data.Root, slotsToPrefetch)
@@ -327,6 +373,7 @@ func (s *stateObject) updateTrie(db Database) Trie {
 			continue
 		}
 		s.originStorage[key] = value
+		// fmt.Println("storagetrie update", common.GlobalTxHash, s.address, key, value)
 
 		var v []byte
 		if (value == common.Hash{}) {
@@ -335,28 +382,50 @@ func (s *stateObject) updateTrie(db Database) Trie {
 		} else {
 			// Encoding []byte cannot fail, ok to ignore the error.
 			v, _ = rlp.EncodeToBytes(common.TrimLeftZeroes(value[:]))
+			// fmt.Println("storagetrie update", common.GlobalTxHash, s.address, key, value)
+			// tmpTrhash := tr.Hash()
 			s.setError(tr.TryUpdate(key[:], v))
+
+			// fmt.Println("  ", tmpTrhash, "->", tr.Hash())
+			// jhkim: double check code
+
+			if common.GlobalBlockNumber >= 4370000 && common.GlobalTxHash != common.HexToHash("0x0") {
+				addr := s.address
+
+				if sa, exist := common.TxWriteList[common.GlobalTxHash][addr]; exist {
+					if sa.Storage[key] != value {
+						fmt.Println("different Storage", "blk#", common.GlobalBlockNumber, "txhash", common.GlobalTxHash, "address", addr)
+						fmt.Println("  Writelist:", sa.Storage[key], "vs", "trie update:", value)
+						panic(0)
+					}
+				} else {
+					fmt.Println("Writelist doesn't have sa", "blk#", common.GlobalBlockNumber, "txhash", common.GlobalTxHash, "address", addr)
+					fmt.Println("  During write storage", key, value)
+					panic(0)
+				}
+
+			}
 			s.db.StorageUpdated += 1
 		}
 		// jhkim: write storage trie changes
 		if common.GlobalBlockNumber > 0 && common.GlobalTxHash != common.HexToHash("0x0") {
+			// fmt.Println("@#Storagetrie update", common.GlobalBlockNumber, common.GlobalTxHash, s.Address(), key)
+			// fmt.Println()
 			if common.TxWriteList[common.GlobalTxHash][s.Address()] == nil {
-
-				// fmt.Println("update Storage key-value without default txwritelist object")
-				// fmt.Println("block#", common.GlobalBlockNumber, "txhash", common.GlobalTxHash, s.Address())
 				common.TxWriteList[common.GlobalTxHash][s.Address()] = common.NewSubstateAccount(s.data.Nonce, s.data.Balance, s.code, s.db.GetStorageTrieHash(s.Address()))
-
-				// common.TxWriteList[common.GlobalTxHash][s.Address()].StorageRoot = s.db.GetStorageTrieHash(s.Address())
 			}
+
+			// if s.db.GetStorageTrieHash(s.Address()) != tr.Hash() {
+			// 	common.Path = "/home/jhkim/replayblock/"
+			// 	fmt.Println("different storage trie root")
+			// }
+			common.TxWriteList[common.GlobalTxHash][s.Address()].Balance = s.db.GetBalance(s.Address())
+			common.TxWriteList[common.GlobalTxHash][s.Address()].Nonce = s.db.GetNonce(s.Address())
 			common.TxWriteList[common.GlobalTxHash][s.Address()].Code = s.db.GetCode(s.Address())
 			common.TxWriteList[common.GlobalTxHash][s.Address()].CodeHash = s.db.GetCodeHash(s.Address())
-			common.TxWriteList[common.GlobalTxHash][s.Address()].StorageRoot = s.db.GetStorageTrieHash(s.Address())
-			// fmt.Println("updateTrie: block#", common.GlobalBlockNumber, "txhash", common.GlobalTxHash)
-
-			// fmt.Println("  add slot/address:", s.Address(), "storageroot", s.db.GetStorageTrieHash(s.Address()))
-			// fmt.Println("  key:", key, "val:", value)
 			common.TxWriteList[common.GlobalTxHash][s.Address()].Storage[key] = value
-			common.PrettyTxWritePrint(common.GlobalTxHash, s.Address())
+			common.TxWriteList[common.GlobalTxHash][s.Address()].StorageRoot = s.db.GetStorageTrieHash(s.Address())
+			// common.PrettyTxWritePrint(common.GlobalTxHash, s.Address())
 		}
 
 		// If state snapshotting is active, cache the data til commit
@@ -372,6 +441,17 @@ func (s *stateObject) updateTrie(db Database) Trie {
 		}
 		usedStorage = append(usedStorage, common.CopyBytes(key[:])) // Copy needed for closure
 	}
+	// jhkim: storage trie가 모두 업데이트 된 후에 writelist에 최종 storageroot update
+	if common.GlobalBlockNumber > 0 && common.GlobalTxHash != common.HexToHash("0x0") {
+		// fmt.Println("@#@#@#", common.GlobalBlockNumber, common.GlobalTxHash, s.Address())
+		if _, exist := common.TxWriteList[common.GlobalTxHash][s.Address()]; !exist {
+			common.TxWriteList[common.GlobalTxHash][s.Address()] = common.NewSubstateAccount(s.data.Nonce, s.data.Balance, s.code, s.db.GetStorageTrieHash(s.Address()))
+		}
+		common.TxWriteList[common.GlobalTxHash][s.Address()].Code = s.db.GetCode(s.Address())
+		common.TxWriteList[common.GlobalTxHash][s.Address()].CodeHash = s.db.GetCodeHash(s.Address())
+		common.TxWriteList[common.GlobalTxHash][s.Address()].StorageRoot = s.db.GetStorageTrieHash(s.Address())
+	}
+
 	if s.db.prefetcher != nil {
 		s.db.prefetcher.used(s.data.Root, usedStorage)
 	}

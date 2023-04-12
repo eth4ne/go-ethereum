@@ -627,6 +627,9 @@ func opCreate(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 		return res, nil
 	}
 	interpreter.returnData = nil // clear dirty return data buffer
+	if common.GlobalBlockNumber != 0 && common.GlobalTxHash != common.HexToHash("0x0") {
+		common.TxDetail[common.GlobalTxHash].InternalDeployedAddress = append(common.TxDetail[common.GlobalTxHash].InternalDeployedAddress, addr)
+	}
 	return nil, nil
 }
 
@@ -668,6 +671,9 @@ func opCreate2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]
 		return res, nil
 	}
 	interpreter.returnData = nil // clear dirty return data buffer
+	if common.GlobalBlockNumber != 0 && common.GlobalTxHash != common.HexToHash("0x0") {
+		common.TxDetail[common.GlobalTxHash].InternalDeployedAddress = append(common.TxDetail[common.GlobalTxHash].InternalDeployedAddress, addr)
+	}
 	return nil, nil
 }
 
@@ -844,7 +850,9 @@ func opSelfdestruct(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext
 		interpreter.cfg.Tracer.CaptureExit([]byte{}, 0, nil)
 	}
 	// fmt.Println("opSELFDESTRUCT ", common.GlobalBlockNumber, common.GlobalTxHash, scope.Contract.Address())
-	common.TxDetail[common.GlobalTxHash].DeletedAddress = append(common.TxDetail[common.GlobalTxHash].DeletedAddress, scope.Contract.Address())
+	// if common.GlobalTxHash != common.HexToHash("0x0") {
+	// 	common.TxDetail[common.GlobalTxHash].DeletedAddress = append(common.TxDetail[common.GlobalTxHash].DeletedAddress, scope.Contract.Address())
+	// }
 	return nil, errStopToken
 }
 

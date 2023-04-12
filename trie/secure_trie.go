@@ -98,8 +98,106 @@ func (t *SecureTrie) TryUpdateAccount(key []byte, acc *types.StateAccount) error
 	if err := t.trie.TryUpdate(hk, data); err != nil {
 		return err
 	}
-	if common.GlobalBlockNumber == 1155900 {
-		fmt.Println("  TryUpdateAccount", common.Bytes2Hex(key), "trieroot:", t.trie.Hash())
+	addr := common.BytesToAddress(key)
+
+	fmt.Println("tryUpdateAccount", common.GlobalBlockNumber, common.GlobalTxHash, addr, acc.Balance, common.BytesToHash(acc.CodeHash), acc.Nonce, acc.Root)
+	fmt.Println("  -> state trie root", t.trie.Hash())
+	fmt.Println()
+
+	if common.GlobalBlockNumber > 0 && common.GlobalTxHash == common.HexToHash("0x0") {
+		if addr == common.GlobalBlockMiner {
+			if sa, exist := common.BlockMinerList[common.GlobalBlockNumber][addr]; exist {
+				sa.Balance = acc.Balance
+				sa.Nonce = acc.Nonce
+				common.BlockMinerList[common.GlobalBlockNumber][addr] = sa
+
+			} else {
+				tmp := common.SubstateAccount{
+
+					Balance:     acc.Balance,
+					Nonce:       acc.Nonce,
+					CodeHash:    common.BytesToHash(acc.CodeHash),
+					StorageRoot: acc.Root,
+				}
+				common.BlockMinerList[common.GlobalBlockNumber][addr] = tmp
+			}
+
+		} else if common.ContainsAddress(addr, common.GlobalBlockUncles) {
+			if sa, exist := common.BlockUncleList[common.GlobalBlockNumber][addr]; exist {
+				sa.Balance = acc.Balance
+				sa.Nonce = acc.Nonce
+				common.BlockUncleList[common.GlobalBlockNumber][addr] = sa
+
+			} else {
+				tmp := common.SubstateAccount{
+
+					Balance:     acc.Balance,
+					Nonce:       acc.Nonce,
+					CodeHash:    common.BytesToHash(acc.CodeHash),
+					StorageRoot: acc.Root,
+				}
+				common.BlockUncleList[common.GlobalBlockNumber][addr] = tmp
+			}
+		} else {
+			// if common.GlobalBlockNumber != 1920000 {
+			// 	panic(0)
+			// }
+		}
+	}
+	// jhkim: double check code
+	// addr := common.BytesToAddress(key)
+	// if addr == common.HexToAddress("0x3dbdc81a6edc94c720b0b88fb65dbd7e395fdcf6") {
+	// fmt.Println("tryUpdateAccount", common.GlobalBlockNumber, common.GlobalTxHash, addr, acc.Balance, common.BytesToHash(acc.CodeHash), acc.Nonce, acc.Root)
+	// fmt.Println("  -> state trie root", t.trie.Hash())
+	// fmt.Println()
+	// }
+
+	if common.GlobalBlockNumber >= 4370000 && common.GlobalTxHash != common.HexToHash("0x0") {
+
+		if sa, exist := common.TxWriteList[common.GlobalTxHash][addr]; exist {
+			// fmt.Println("DOUBLECHECK", addr, acc.Balance, common.BytesToHash(acc.CodeHash), acc.Nonce, acc.Root)
+			// if addr == common.HexToAddress("0x331d077518216c07c87f4f18ba64cd384c411f84") {
+			// 	fmt.Println("@#@#")
+			// 	fmt.Println(acc.Root)
+			// 	fmt.Println(sa.StorageRoot)
+			// }
+
+			if sa.Balance != acc.Balance {
+				fmt.Println("different balance", "blk#", common.GlobalBlockNumber, "txhash", common.GlobalTxHash, "address", addr)
+				fmt.Println("  Writelist:", sa.Balance, "vs", "trie update:", acc.Balance)
+				panic(0)
+			}
+			if sa.CodeHash != common.BytesToHash(acc.CodeHash) {
+				fmt.Println("different Codehash", "blk#", common.GlobalBlockNumber, "txhash", common.GlobalTxHash, "address", addr)
+				fmt.Println("  Writelist:", sa.CodeHash, "vs", "trie update:", common.BytesToHash(acc.CodeHash))
+				panic(0)
+			}
+			if sa.Nonce != acc.Nonce {
+				fmt.Println("different Nonce", "blk#", common.GlobalBlockNumber, "txhash", common.GlobalTxHash, "address", addr)
+				fmt.Println("  Writelist:", sa.Nonce, "vs", "trie update:", acc.Nonce)
+				panic(0)
+			}
+			if sa.StorageRoot != acc.Root {
+				fmt.Println("different StorageRoot", "blk#", common.GlobalBlockNumber, "txhash", common.GlobalTxHash, "address", addr)
+				fmt.Println("  Writelist:", sa.StorageRoot, "vs", "trie update:", acc.Root)
+				panic(0)
+			}
+			if sa.CodeHash == common.EmptyCodeHash && len(sa.Code) != 0 {
+				fmt.Println("Something wrong with code and codehash - emptycodehash but no 0 length code")
+				fmt.Println(common.GlobalTxHash, addr)
+				panic(0)
+			}
+			if sa.CodeHash != common.EmptyCodeHash && len(sa.Code) == 0 {
+				fmt.Println("Something wrong with code and codehash - 0 length code but emptycodehash")
+				fmt.Println(common.GlobalTxHash, addr)
+				panic(0)
+			}
+
+		} else {
+			fmt.Println("Writelist doesn't have sa", "blk#", common.GlobalBlockNumber, "txhash", common.GlobalTxHash, "address", addr)
+			fmt.Println("  During write account", addr)
+			panic(0)
+		}
 	}
 	t.getSecKeyCache()[string(hk)] = common.CopyBytes(key)
 	return nil
@@ -127,10 +225,17 @@ func (t *SecureTrie) Update(key, value []byte) {
 // If a node was not found in the database, a MissingNodeError is returned.
 func (t *SecureTrie) TryUpdate(key, value []byte) error {
 	hk := t.hashKey(key)
+	// stored, err1 := t.trie.TryGet(hk)
+	// if err1 != nil {
+	// 	fmt.Println("TryGet err", err1)
+	// }
+	// fmt.Println("    TryGet: key:", common.Bytes2Hex(key), "/ hk:", common.Bytes2Hex(hk))
+	// fmt.Println("        /stored:", common.Bytes2Hex(stored), "/update:", common.Bytes2Hex(value))
 	err := t.trie.TryUpdate(hk, value)
 	if err != nil {
 		return err
 	}
+
 	t.getSecKeyCache()[string(hk)] = common.CopyBytes(key)
 	return nil
 }

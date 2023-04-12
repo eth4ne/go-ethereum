@@ -4,9 +4,10 @@ package core
 
 import (
 	"fmt"
-	"math/big"
 	"os"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -30,7 +31,7 @@ func PrintTxSubstate(blocknumber, distance int, chainconfig params.ChainConfig) 
 
 	for i := blocknumber - distance + 1; i <= blocknumber; i++ {
 		// s := fmt.Sprintln("##########################################################################")
-		if i%(distance/5) == 0 {
+		if distance > 5 && i%(distance/5) == 0 {
 			elapsed := time.Since(start)
 			fmt.Println("Writing file.. Block #:", i, "elapsed", elapsed.Seconds(), "s")
 		}
@@ -60,13 +61,16 @@ func PrintTxSubstate(blocknumber, distance int, chainconfig params.ChainConfig) 
 		// 	fmt.Println(chainconfig.IsHardForkBlock(big.NewInt(int64(i))))
 		// 	fmt.Println(chainconfig.DAOForkBlock.Cmp(big.NewInt(int64(i))))
 		// }
-		if chainconfig.IsHardForkBlock(big.NewInt(int64(i))) {
+
+		// if chainconfig.IsHardForkBlock(big.NewInt(int64(i))) {
+		if i == 1920000 {
 			fmt.Println(i, "is hard fork block")
 			fmt.Fprintln(f, "*HardFork")
-			fmt.Fprintln(f, "@ReadList")
-			for addr := range common.HardFork {
-				fmt.Fprintf(f, ".address:%v\n", addr)
-			}
+			// fmt.Fprintln(f, "@ReadList")
+
+			// for addr := range common.HardFork {
+			// 	fmt.Fprintf(f, ".address:%v\n", addr)
+			// }
 			// fmt.Fprintln(f, ".address:", params.DAORefundContract)
 			// for _, addr := range params.DAODrainList() {
 			// 	fmt.Fprintln(f, ".address:", addr)
@@ -74,7 +78,18 @@ func PrintTxSubstate(blocknumber, distance int, chainconfig params.ChainConfig) 
 
 			// Move every DAO account and extra-balance account funds into the refund contract
 			fmt.Fprintln(f, "#WriteList")
-			for addr, sa := range common.HardFork {
+			hardfork := common.HardFork
+			keys := make([]string, 0, len(hardfork))
+			for k := range hardfork {
+				keys = append(keys, strings.ToLower(k.Hex()))
+			}
+			fmt.Println("length of hardfork:", len(keys))
+			sort.Strings(keys)
+			// for addr, stateAccount := range writelist {
+			for _, k := range keys { // print sorted writelist
+				addr := common.HexToAddress(k)
+				sa := hardfork[addr]
+				// for addr, sa := range common.HardFork {
 
 				// jhkim: write DAO Hardfork substate for txSubstate
 				// DAO drainlist
@@ -84,7 +99,7 @@ func PrintTxSubstate(blocknumber, distance int, chainconfig params.ChainConfig) 
 				// fmt.Fprintf(f, "CodeHash:%v\n", common.Bytes2Hex(sa.CodeHash))
 				fmt.Fprintf(f, "CodeHash:%v\n", sa.CodeHash)
 				fmt.Fprintf(f, "StorageRoot:%v\n", sa.StorageRoot)
-				if sa.StorageRoot != types.EmptyRootHash {
+				if sa.StorageRoot != types.EmptyRootHash && len(sa.Storage) != 0 {
 					fmt.Fprintln(f, "Storage:")
 					for key, value := range sa.Storage {
 						fmt.Fprint(f, "slot:", key, ",value:")
@@ -150,7 +165,12 @@ func PrintTxSubstate(blocknumber, distance int, chainconfig params.ChainConfig) 
 					fmt.Fprintf(f, "DeployedCA:%v\n", txDetail.DeployedContractAddress)
 					// s += fmt.Sprintf("DeployedCA:%v\n", txDetail.DeployedContractAddress)
 				} else {
-					// Do nothing
+					if len(txDetail.InternalDeployedAddress) != 0 {
+						for _, v := range txDetail.InternalDeployedAddress {
+							fmt.Fprintf(f, "DeployedCA:%v\n", v)
+						}
+					}
+
 				}
 				// s += fmt.Sprintln()
 				// fmt.Fprint(f, s)
@@ -158,7 +178,15 @@ func PrintTxSubstate(blocknumber, distance int, chainconfig params.ChainConfig) 
 				readlist := common.TxReadList[tx]
 				// fmt.Println("blocknumber", i, "readlist", readlist)
 				fmt.Fprintf(f, "@ReadList\n")
-				for addr := range readlist {
+
+				keys := make([]string, 0, len(readlist))
+				for k := range readlist {
+					keys = append(keys, strings.ToLower(k.Hex()))
+				}
+				sort.Strings(keys)
+				for _, k := range keys { // print sorted writelist
+					addr := common.HexToAddress(k)
+
 					fmt.Fprintf(f, ".address:%v\n", addr)
 					// s += fmt.Sprintf(".address:%v\n", addr)
 					// s += fmt.Sprintln("      Nonce:", stateAccount.Nonce)
@@ -171,17 +199,41 @@ func PrintTxSubstate(blocknumber, distance int, chainconfig params.ChainConfig) 
 					// s += fmt.Sprintln("      StorageRoot:", stateAccount.StorageRoot)
 
 					// s += fmt.Sprintln()
+					if len(readlist[addr].Storage) != 0 {
+						for k, v := range readlist[addr].Storage {
+							fmt.Fprint(f, "slot:", k, ",value:")
+							fmt.Print("slot:", k, ",value:")
+							tmp := common.TrimLeftZeroes(v[:])
+							if len(tmp) != 0 {
+								fmt.Fprintf(f, "0x%v\n", common.Bytes2Hex(tmp))
+								fmt.Printf("0x%v\n", common.Bytes2Hex(tmp))
+								// s += fmt.Sprintf("0x%v\n", common.Bytes2Hex(tmp))
+							} else {
+								fmt.Fprintln(f, "0x0")
+								fmt.Println("0x0")
+								// s += fmt.Sprintln("0x0")
+							}
+						}
+					}
 				}
 				// s += fmt.Sprintln()
 				// fmt.Fprint(f, s)
-				writelist := common.TxWriteList[tx]
-				// s = fmt.Sprintln("  WriteList")
 				fmt.Fprintln(f, "#WriteList")
 				for _, v := range txDetail.DeletedAddress {
 					fmt.Fprintf(f, ".deletedaddress:%v\n", v)
 				}
 
-				for addr, stateAccount := range writelist {
+				writelist := common.TxWriteList[tx]
+				keys = make([]string, 0, len(writelist))
+				for k := range writelist {
+					keys = append(keys, strings.ToLower(k.Hex()))
+				}
+				sort.Strings(keys)
+
+				// for addr, stateAccount := range writelist {
+				for _, k := range keys { // print sorted writelist
+					addr := common.HexToAddress(k)
+					stateAccount := writelist[addr]
 					// if addr == common.HexToAddress("0x9a049f5d18C239EfAA258aF9f3E7002949a977a0") {
 					// 	fmt.Println("writing..", tx, addr)
 					// 	fmt.Println(stateAccount.Balance, stateAccount.CodeHash, stateAccount.Nonce, stateAccount.StorageRoot, stateAccount.Storage)
@@ -383,44 +435,27 @@ func PrintTxSubstate(blocknumber, distance int, chainconfig params.ChainConfig) 
 
 		}
 
-		// s += fmt.Sprintln("##########################################################################")
-		if minerSA, exist := common.BlockMinerList[i]; exist {
-			fmt.Fprintf(f, "$Miner:%v\n", minerSA.Addr)
-			// s = fmt.Sprintf("$Miner:%v\n", minerSA.Addr)
-			fmt.Fprintf(f, "Nonce:%v\n", minerSA.Nonce)
-			// s += fmt.Sprintf("Nonce:%v\n", minerSA.Nonce)
-			fmt.Fprintf(f, "Balance:%v\n", minerSA.Balance)
-			// s += fmt.Sprintf("Balance:%v\n", minerSA.Balance)
-			if emptyCodeHash != minerSA.Codehash {
-				fmt.Fprintf(f, "Codehash:%v\n", minerSA.Codehash)
-				// s += fmt.Sprintf("Codehash:%v\n", minerSA.Codehash)
-			} else {
-				fmt.Fprintf(f, "CodeHash:empty\n")
-				// s += fmt.Sprintf("CodeHash:empty\n")
-			}
-
-			if types.EmptyRootHash != minerSA.StorageRoot {
-				fmt.Fprintf(f, "StorageRoot:%v\n", minerSA.StorageRoot)
-				// s += fmt.Sprintf("StorageRoot:%v\n", minerSA.StorageRoot)
-			} else {
-				fmt.Fprintf(f, "StorageRoot:empty\n")
-				// s += fmt.Sprintf("StorageRoot:empty\n")
-			}
-		}
-		// s += fmt.Sprintf("  RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSimpleAccount(minerSA)))
-		// fmt.Fprint(f, s)
-		// s = fmt.Sprintln("Miner:", common.BlockMinerList[i].Addr, ",Balance:", common.BlockMinerList[i].Balance)
 		if uncles, exist := common.BlockUncleList[i]; exist {
 			if len(uncles) != 0 {
-				for _, uncle := range uncles {
-					fmt.Fprintf(f, "^Uncle:%v\n", uncle.Addr)
+
+				keys := make([]string, 0, len(uncles))
+				for k := range uncles {
+					keys = append(keys, strings.ToLower(k.Hex()))
+				}
+				sort.Strings(keys)
+				// for addr, stateAccount := range writelist {
+				for _, k := range keys { // print sorted writelist
+					addr := common.HexToAddress(k)
+					uncle := uncles[addr]
+
+					fmt.Fprintf(f, "^Uncle:%v\n", addr)
 					// s = fmt.Sprintf("^Uncle:%v\n", uncle.Addr)
 					fmt.Fprintf(f, "Nonce:%v\n", uncle.Nonce)
 					// s += fmt.Sprintf("Nonce:%v\n", uncle.Nonce)
 					fmt.Fprintf(f, "Balance:%v\n", uncle.Balance)
 					// s += fmt.Sprintf("Balance:%v\n", uncle.Balance)
-					if emptyCodeHash != uncle.Codehash {
-						fmt.Fprintf(f, "Codehash:%v\n", uncle.Codehash)
+					if emptyCodeHash != uncle.CodeHash {
+						fmt.Fprintf(f, "Codehash:%v\n", uncle.CodeHash)
 						// s += fmt.Sprintf("Codehash:%v\n", uncle.Codehash)
 					} else {
 						fmt.Fprintf(f, "CodeHash:empty\n")
@@ -441,6 +476,35 @@ func PrintTxSubstate(blocknumber, distance int, chainconfig params.ChainConfig) 
 
 			}
 		}
+		// s += fmt.Sprintln("##########################################################################")
+		if blocks, exist := common.BlockMinerList[i]; exist {
+			for addr, minerSA := range blocks {
+				fmt.Fprintf(f, "$Miner:%v\n", addr)
+				// s = fmt.Sprintf("$Miner:%v\n", minerSA.Addr)
+				fmt.Fprintf(f, "Nonce:%v\n", minerSA.Nonce)
+				// s += fmt.Sprintf("Nonce:%v\n", minerSA.Nonce)
+				fmt.Fprintf(f, "Balance:%v\n", minerSA.Balance)
+				// s += fmt.Sprintf("Balance:%v\n", minerSA.Balance)
+				if emptyCodeHash != minerSA.CodeHash {
+					fmt.Fprintf(f, "Codehash:%v\n", minerSA.CodeHash)
+					// s += fmt.Sprintf("Codehash:%v\n", minerSA.Codehash)
+				} else {
+					fmt.Fprintf(f, "CodeHash:empty\n")
+					// s += fmt.Sprintf("CodeHash:empty\n")
+				}
+
+				if types.EmptyRootHash != minerSA.StorageRoot {
+					fmt.Fprintf(f, "StorageRoot:%v\n", minerSA.StorageRoot)
+					// s += fmt.Sprintf("StorageRoot:%v\n", minerSA.StorageRoot)
+				} else {
+					fmt.Fprintf(f, "StorageRoot:empty\n")
+					// s += fmt.Sprintf("StorageRoot:empty\n")
+				}
+			}
+		}
+		// s += fmt.Sprintf("  RlpEncoded:0x%v\n", common.Bytes2Hex(RLPEncodeSimpleAccount(minerSA)))
+		// fmt.Fprint(f, s)
+		// s = fmt.Sprintln("Miner:", common.BlockMinerList[i].Addr, ",Balance:", common.BlockMinerList[i].Balance)
 
 		// s += fmt.Sprintln("##########################################################################")
 		// fmt.Fprintln(f, s)

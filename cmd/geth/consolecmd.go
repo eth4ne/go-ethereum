@@ -27,6 +27,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/console"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -297,12 +298,12 @@ func replayBlockConsole(ctx *cli.Context) error {
 		}
 		log.Info(fmt.Sprintf("Replay transactions in block #%v", blocknumber))
 	}
-
+	common.Path = "/home/jhkim/replayblock/"
 	chain, _ := utils.MakeChain(ctx, stack)
 	if argnum == 1 {
 
 		replayblock(blocknumber, chain)
-
+		// fmt.Println("#$#$", chain.GetBlockByNumber(uint64(blocknumber)).Header().Root)
 		// for k, v := range common.TxDetail {
 		// 	fmt.Println("  txhash:", k)
 		// 	fmt.Println("    txDetail:")
@@ -322,7 +323,25 @@ func replayBlockConsole(ctx *cli.Context) error {
 		// 	fmt.Println()
 		// }
 
+		// pendingStateObject := make(map[common.Address]common.SubstateAccount)
+		// for _, v := range common.TxWriteList {
+		// 	for kk, vv := range v {
+		// 		if sa, exist := pendingStateObject[kk]; exist {
+		// 			if sa.Nonce > vv.Nonce {
+		// 				pendingStateObject[kk] = sa
+		// 			} else {
+		// 				pendingStateObject[kk] = *vv
+		// 			}
+		// 		} else {
+		// 			pendingStateObject[kk] = *vv
+		// 		}
+		// 	}
+		// }
+		// for k, v := range pendingStateObject {
+		// 	fmt.Println(k, v.Nonce, v.Balance, v.CodeHash, v.StorageRoot)
+		// }
 		core.PrintTxSubstate(blocknumber, 1, *chain.Config())
+
 	} else if argnum == 2 {
 		starttime := time.Now()
 		if end-start > 1000 { // pretty replay for more than 1000 blocks
@@ -336,6 +355,7 @@ func replayBlockConsole(ctx *cli.Context) error {
 			core.PrintTxSubstate(end, end-start+1, *chain.Config())
 		}
 		elapsedtime := time.Since(starttime)
+
 		fmt.Println("Elapsedtime for replaying blocks:", elapsedtime.Seconds(), "seconds")
 	} else {
 		fmt.Println()
@@ -346,6 +366,17 @@ func replayBlockConsole(ctx *cli.Context) error {
 }
 
 func replayblock(blocknumber int, chain *core.BlockChain) {
+
+	if common.TxReadList == nil {
+		// common.TxReadList = make(map[common.Hash]map[common.Address]struct{})
+		common.TxReadList = make(map[common.Hash]map[common.Address]*common.SubstateAccount)
+		common.TxWriteList = make(map[common.Hash]map[common.Address]*common.SubstateAccount)
+		common.BlockMinerList = make(map[int]map[common.Address]common.SubstateAccount)
+		common.BlockUncleList = make(map[int]map[common.Address]common.SubstateAccount)
+		common.BlockTxList = make(map[int][]common.Hash)
+		common.HardFork = make(map[common.Address]*common.SubstateAccount)
+		common.TxDetail = make(map[common.Hash]*common.TxInformation)
+	}
 	parent := chain.GetBlockByNumber(uint64(blocknumber - 1))
 	block := chain.GetBlockByNumber(uint64(blocknumber))
 	statedb, err := chain.StateAt(parent.Root())
@@ -361,32 +392,41 @@ func replayblock(blocknumber int, chain *core.BlockChain) {
 	var (
 		txs    = block.Transactions()
 		signer = types.MakeSigner(chain.Config(), block.Number())
-		failed error
+		// failed error
 	)
-	blockCtx := core.NewEVMBlockContext(block.Header(), chain, nil)
+	common.GlobalTxHash = common.HexToHash("0x0")
+	// Mutate the block and state according to any hard-fork specs
 
-	if common.TxReadList == nil {
-		common.TxReadList = make(map[common.Hash]map[common.Address]struct{})
-		common.TxWriteList = make(map[common.Hash]map[common.Address]*common.SubstateAccount)
-		common.BlockMinerList = make(map[int]common.SimpleAccount)
-		common.BlockUncleList = make(map[int][]common.SimpleAccount)
-		common.BlockTxList = make(map[int][]common.Hash)
-		common.HardFork = make(map[common.Address]*common.SubstateAccount)
+	if chain.Config().DAOForkSupport && chain.Config().DAOForkBlock != nil && chain.Config().DAOForkBlock.Cmp(block.Number()) == 0 {
+		misc.ApplyDAOHardFork(statedb)
 
+		if config := chain.Config(); config.IsByzantium(block.Number()) { // jhkim: 437만 블록 이후
+			statedb.Finalise(true)
+		} else {
+			statedb.Finalise(config.IsEIP158(block.Number())) // jhkim: 267.5만 ~ 437만 블록
+		}
 	}
+	blockCtx := core.NewEVMBlockContext(block.Header(), chain, nil)
 
 	common.GlobalBlockNumber = int(block.Number().Int64()) //jhkim
 	if common.BlockTxList[blocknumber] == nil {
 		common.BlockTxList[blocknumber] = make([]common.Hash, 0)
 	}
-	common.TxDetail = make(map[common.Hash]*common.TxInformation)
 
+	if common.GlobalBlockNumber >= 4370000 {
+		statedb.Finalise(true)
+	} else {
+		statedb.IntermediateRoot(chain.Config().IsEIP158(block.Number()))
+	}
+	// statedb.IntermediateRoot(chain.Config().IsEIP158(block.Number()))
 	for i, tx := range txs {
 		// fmt.Println("txhash", tx.Hash(), tx.To())
+		// fmt.Println("applytx #", i, "txhash:", tx.Hash())
 		// make txsubstate
 		common.GlobalTxHash = tx.Hash()
 
-		common.TxReadList[tx.Hash()] = map[common.Address]struct{}{}
+		// common.TxReadList[tx.Hash()] = map[common.Address]struct{}{}
+		common.TxReadList[tx.Hash()] = map[common.Address]*common.SubstateAccount{}
 		common.TxWriteList[tx.Hash()] = map[common.Address]*common.SubstateAccount{}
 		common.BlockTxList[blocknumber] = append(common.BlockTxList[blocknumber], tx.Hash())
 
@@ -397,8 +437,14 @@ func replayblock(blocknumber int, chain *core.BlockChain) {
 
 		result, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas()))
 		if err != nil {
-			failed = err
-			break
+			// 	// failed = err
+			fmt.Println("err not nil/ blk num:", common.GlobalBlockNumber, tx.Hash(), err)
+			fmt.Println(result)
+			fmt.Println("result.ReturnData", result.ReturnData)
+			fmt.Println("result.UsedGas", result.UsedGas)
+			fmt.Println("result.Err", result.Err)
+			// 	panic(0)
+			// 	break
 		}
 
 		if result.Failed() {
@@ -442,27 +488,34 @@ func replayblock(blocknumber int, chain *core.BlockChain) {
 	// block miner와 uncle에게 reward가 들어가기 전의 상태만 불러올 수 있음
 	// 따라서 편법을 사용함
 	tmpstatedb, _ := chain.StateAt(block.Root())
-	common.BlockMinerList[blocknumber] = common.SimpleAccount{
-		Addr:        block.Coinbase(),
-		Balance:     tmpstatedb.GetBalance(block.Coinbase()),
+	common.BlockMinerList[blocknumber] = make(map[common.Address]common.SubstateAccount)
+	common.BlockMinerList[blocknumber][block.Coinbase()] = common.SubstateAccount{
+		Balance:     tmpstatedb.GetBalance(block.Coinbase()), // 여기 왜 그냥 statedb쓰면 안되더라
 		Nonce:       tmpstatedb.GetNonce(block.Coinbase()),
-		Codehash:    statedb.GetCodeHash(block.Coinbase()),
+		CodeHash:    statedb.GetCodeHash(block.Coinbase()),
 		StorageRoot: statedb.GetStorageTrieHash(block.Coinbase()),
+		Code:        statedb.GetCode(block.Coinbase()),
 	}
 
+	// common.BlockMinerList[blocknumber] = common.SimpleAccount{
+	// 	Addr:        block.Coinbase(),
+	// 	Balance:     tmpstatedb.GetBalance(block.Coinbase()),
+	// 	Nonce:       tmpstatedb.GetNonce(block.Coinbase()),
+	// 	Codehash:    statedb.GetCodeHash(block.Coinbase()),
+	// 	StorageRoot: statedb.GetStorageTrieHash(block.Coinbase()),
+	// }
+
+	common.BlockUncleList[blocknumber] = make(map[common.Address]common.SubstateAccount)
 	for _, uncle := range block.Uncles() {
-		tmp := common.SimpleAccount{
-			Addr:        uncle.Coinbase,
+		tmp := common.SubstateAccount{
+
 			Balance:     tmpstatedb.GetBalance(uncle.Coinbase),
 			Nonce:       tmpstatedb.GetNonce(uncle.Coinbase),
-			Codehash:    statedb.GetCodeHash(uncle.Coinbase),
+			CodeHash:    statedb.GetCodeHash(uncle.Coinbase),
 			StorageRoot: statedb.GetStorageTrieHash(uncle.Coinbase),
+			Code:        statedb.GetCode(block.Coinbase()),
 		}
-		common.BlockUncleList[blocknumber] = append(common.BlockUncleList[blocknumber], tmp)
-	}
-	if failed != nil {
-		fmt.Println("Failed to replay transactions/ block:", int(block.Number().Int64()), err)
-		// return failed
+		common.BlockUncleList[blocknumber][uncle.Coinbase] = tmp
 	}
 
 	// // Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
@@ -473,125 +526,21 @@ func replayblock(blocknumber int, chain *core.BlockChain) {
 }
 
 func replayblocks(start, end int, chain *core.BlockChain) {
-	if common.TxReadList == nil {
-		common.TxReadList = make(map[common.Hash]map[common.Address]struct{})
-		common.TxWriteList = make(map[common.Hash]map[common.Address]*common.SubstateAccount)
-		common.BlockMinerList = make(map[int]common.SimpleAccount)
-		common.BlockUncleList = make(map[int][]common.SimpleAccount)
-		common.BlockTxList = make(map[int][]common.Hash)
-		common.HardFork = make(map[common.Address]*common.SubstateAccount)
+	// if common.TxReadList == nil {
+	// common.TxReadList = make(map[common.Hash]map[common.Address]struct{})
+	common.TxReadList = make(map[common.Hash]map[common.Address]*common.SubstateAccount)
+	common.TxWriteList = make(map[common.Hash]map[common.Address]*common.SubstateAccount)
+	common.BlockMinerList = make(map[int]map[common.Address]common.SubstateAccount)
+	common.BlockUncleList = make(map[int]map[common.Address]common.SubstateAccount)
+	common.BlockTxList = make(map[int][]common.Hash)
+	common.HardFork = make(map[common.Address]*common.SubstateAccount)
 
-	}
+	// }
 
 	common.TxDetail = make(map[common.Hash]*common.TxInformation)
 
 	for blocknumber := start; blocknumber < end+1; blocknumber++ {
-		parent := chain.GetBlockByNumber(uint64(blocknumber - 1))
-		block := chain.GetBlockByNumber(uint64(blocknumber))
-
-		statedb, err := chain.StateAt(parent.Root())
-		if err != nil {
-			log.Error("Failed to get statedb of parent block", err)
-		}
-
-		blockCtx := core.NewEVMBlockContext(block.Header(), chain, nil)
-
-		var (
-			txs    = block.Transactions()
-			signer = types.MakeSigner(chain.Config(), block.Number())
-			failed error
-		)
-
-		common.GlobalBlockNumber = int(block.Number().Int64()) //jhkim
-		if common.BlockTxList[blocknumber] == nil {
-			common.BlockTxList[blocknumber] = make([]common.Hash, 0)
-		}
-
-		for i, tx := range txs {
-			// fmt.Println("block#", blocknumber, "txhash", tx.Hash(), tx.To())
-			// make txsubstate
-			common.GlobalTxHash = tx.Hash()
-
-			common.TxReadList[tx.Hash()] = map[common.Address]struct{}{}
-			common.TxWriteList[tx.Hash()] = map[common.Address]*common.SubstateAccount{}
-			common.BlockTxList[blocknumber] = append(common.BlockTxList[blocknumber], tx.Hash())
-
-			msg, _ := tx.AsMessage(signer, block.BaseFee())
-
-			statedb.Prepare(tx.Hash(), i)
-			vmenv := vm.NewEVM(blockCtx, core.NewEVMTxContext(msg), statedb, chain.Config(), vm.Config{})
-
-			result, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas()))
-			core.WriteTxDetail(tx, msg, block.Number(), statedb)
-			if err != nil {
-				failed = err
-				break
-			}
-
-			if result.Failed() {
-
-				//jhkim: classify fail type (ex. transfer fail, contractcall fail, contract deploy fail)
-				// t := common.TxDetail[tx.Hash()].Types
-				if t := common.TxDetail[tx.Hash()].Types; t == 1 {
-					common.TxDetail[tx.Hash()].Types = 41 // transfer fail
-				} else if t == 2 {
-					common.TxDetail[tx.Hash()].Types = 42 // contract deploy fail
-				} else if t == 3 {
-					common.TxDetail[tx.Hash()].Types = 43 // contract call fail
-				} else {
-					common.TxDetail[tx.Hash()].Types = 4 // ???? wrong tx?
-				}
-
-			}
-
-			if msg.To() == nil {
-				contractaddress := crypto.CreateAddress(msg.From(), tx.Nonce())
-				common.TxDetail[tx.Hash()].DeployedContractAddress = contractaddress
-				if result.Failed() { //jhkim
-					if common.TxWriteList[tx.Hash()][contractaddress] == nil {
-						common.TxWriteList[tx.Hash()][contractaddress] = common.NewSubstateAccount(0, common.Big0, common.Hex2Bytes("0x0"), statedb.GetStorageTrieHash(contractaddress))
-						// fmt.Println("applyTransaction msg.To() == nil")
-						common.PrettyTxWritePrint(tx.Hash(), contractaddress)
-						if statedb.GetCode(contractaddress) != nil {
-							common.TxWriteList[tx.Hash()][contractaddress].Code = statedb.GetCode(contractaddress)
-						}
-					}
-
-				}
-			}
-			// Finalize the state so any modifications are written to the trie
-			// Only delete empty objects if EIP158/161 (a.k.a Spurious Dragon) is in effect
-			statedb.Finalise(vmenv.ChainConfig().IsEIP158(block.Number()))
-
-			statedb.IntermediateRoot(vmenv.ChainConfig().IsEIP158(block.Number()))
-			common.GlobalTxHash = common.HexToHash("0x0")
-		}
-
-		// block miner와 uncle에게 reward가 들어가기 전의 상태만 불러올 수 있음
-		// 따라서 편법을 사용함
-		tmpstatedb, _ := chain.StateAt(block.Root())
-		common.BlockMinerList[blocknumber] = common.SimpleAccount{
-			Addr:        block.Coinbase(),
-			Balance:     tmpstatedb.GetBalance(block.Coinbase()),
-			Nonce:       tmpstatedb.GetNonce(block.Coinbase()),
-			Codehash:    statedb.GetCodeHash(block.Coinbase()),
-			StorageRoot: statedb.GetStorageTrieHash(block.Coinbase()),
-		}
-
-		for _, uncle := range block.Uncles() {
-			tmp := common.SimpleAccount{
-				Addr:        uncle.Coinbase,
-				Balance:     tmpstatedb.GetBalance(uncle.Coinbase),
-				Nonce:       tmpstatedb.GetNonce(uncle.Coinbase),
-				Codehash:    statedb.GetCodeHash(uncle.Coinbase),
-				StorageRoot: statedb.GetStorageTrieHash(uncle.Coinbase),
-			}
-			common.BlockUncleList[blocknumber] = append(common.BlockUncleList[blocknumber], tmp)
-		}
-		if failed != nil {
-			fmt.Println("Failed to replay transactions/ block:", int(block.Number().Int64()), err)
-			// return failed
-		}
+		replayblock(blocknumber, chain)
 
 	}
 

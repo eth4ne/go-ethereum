@@ -13,6 +13,8 @@ import (
 // var Path = "/home/jhkim/go/src/github.com/ethereum/go-ethereum/txDetail/"
 var Path = "/home/jhkim/ethane/"
 
+// var Path = "/home/jhkim/replayblock/"
+
 var (
 	// GlobalDistance                int     = 0
 	GlobalTxHash      Hash    = HexToHash("0x0")
@@ -26,18 +28,23 @@ var (
 	TxDetail = map[Hash]*TxInformation{} // key : TxID, value: struct common.TxInformation
 
 	// TxSubstate     = map[int](map[Hash]SubstateAlloc){} // key: block number, value: map(key: tx hash, value: SubstateAlloc)
-	BlockTxList    = map[int][]Hash{}        // key: block number, value: tx hash
-	BlockMinerList = map[int]SimpleAccount{} // key: block number, value: Address of block miner
-
-	BlockUncleList = map[int][]SimpleAccount{} // key: block number, value: Addresses of block uncles
+	BlockTxList = map[int][]Hash{} // key: block number, value: tx hash
+	// BlockMinerList = map[int]SimpleAccount{}      // key: block number, value: Address of block miner
+	// BlockMinerList = map[int]map[Address]StateAccount{} // key: block number, value: Address of block miner
+	BlockMinerList = map[int]map[Address]SubstateAccount{} // key: block number, value: Address of block miner
+	// BlockUncleList = map[int]map[Address]StateAccount{}    // key: block number, value: Addresses of block uncles
+	BlockUncleList = map[int]map[Address]SubstateAccount{} // key: block number, value: Addresses of block uncles
 
 	// TxReadList = map[Hash]SubstateAlloc{} // key: tx hash, value: SubstateAlloc(map key:address, value:stateAccount)
 	// TxReadList  = map[Hash][]Address{}     // key: tx hash, value: SubstateAlloc(map key:address, value:empty)
 
-	TxReadList  = map[Hash]map[Address]struct{}{}
+	// TxReadList  = map[Hash]map[Address]struct{}{}
+	TxReadList  = map[Hash]map[Address]*SubstateAccount{} // key: tx hash, value: SubstateAlloc(map key:address, value:stateAccount)
 	TxWriteList = map[Hash]map[Address]*SubstateAccount{} // key: tx hash, value: SubstateAlloc(map key:address, value:stateAccount)
 
 	HardFork = map[Address]*SubstateAccount{}
+
+	GlobalCount int = 0
 )
 
 var (
@@ -46,9 +53,16 @@ var (
 	EmptyCodeHash = HexToHash("c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470")
 )
 
-type SimpleAccount struct {
-	Addr Address
+// type SimpleAccount struct {
+// 	Addr Address
 
+// 	Nonce       uint64
+// 	Balance     *big.Int
+// 	Codehash    Hash
+// 	StorageRoot Hash
+// }
+
+type StateAccount struct {
 	Nonce       uint64
 	Balance     *big.Int
 	Codehash    Hash
@@ -96,9 +110,13 @@ func NewSubstateAccount(nonce uint64, balance *big.Int, code []byte, storageRoot
 }
 
 func PrettyTxWritePrint(txhash Hash, addr Address) {
-	if addr != HexToAddress("0x61C5E2A298f40DBB2adEE3b27C584AdAD6833BaC") {
-		return
-	}
+	return
+	// if addr != HexToAddress("0x40Dd7f404a19540c4025D9F5548435253bb26976") {
+	// 	return
+	// }
+	// if GlobalBlockNumber == 4381509 && addr != HexToAddress("0x86Fa049857E0209aa7D9e616F7eb3b3B78ECfdb0") {
+	// 	return
+	// }
 
 	if TxWriteList[txhash] == nil {
 		fmt.Println("  Pretty TxWrite Print Error: no txhash exists/", txhash)
@@ -135,4 +153,13 @@ func PrettyTxWritePrint(txhash Hash, addr Address) {
 
 	}
 
+}
+
+func ContainsAddress(addr Address, addrlist []Address) bool {
+	for _, v := range addrlist {
+		if v == addr {
+			return true
+		}
+	}
+	return false
 }
