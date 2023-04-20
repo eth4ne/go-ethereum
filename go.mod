@@ -67,6 +67,7 @@ require (
 	golang.org/x/tools v0.7.0
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce
+	github.com/go-sql-driver/mysql v1.7.0
 )
 
 require (

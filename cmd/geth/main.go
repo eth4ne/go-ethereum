@@ -141,6 +141,11 @@ var (
 		utils.DeveloperGasLimitFlag,
 		utils.VMEnableDebugFlag,
 		utils.NetworkIdFlag,
+		// hletrd
+		utils.TxMetricsFlag,
+		utils.TxMetricsPathFlag,
+		utils.TxFineMetricsFlag,
+		utils.TxFineMetricsPathFlag,
 		utils.EthStatsURLFlag,
 		utils.FakePoWFlag,
 		utils.NoCompactionFlag,

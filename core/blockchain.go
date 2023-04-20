@@ -18,10 +18,12 @@
 package core
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
 	"math/big"
+	"os"
 	"runtime"
 	"sort"
 	"strings"
@@ -224,6 +226,12 @@ type BlockChain struct {
 	processor  Processor // Block transaction processor interface
 	forker     *ForkChoice
 	vmConfig   vm.Config
+
+	//string
+	TxMetrics         bool
+	TxMetricsPath     string
+	TxFineMetrics     bool
+	TxFineMetricsPath string
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -270,6 +278,11 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 		futureBlocks:  lru.NewCache[common.Hash, *types.Block](maxFutureBlocks),
 		engine:        engine,
 		vmConfig:      vmConfig,
+		// metrics flag (hletrd)
+		TxMetrics:         false,
+		TxMetricsPath:     "",
+		TxFineMetrics:     false,
+		TxFineMetricsPath: "",
 	}
 	bc.flushInterval.Store(int64(cacheConfig.TrieTimeLimit))
 	bc.forker = NewForkChoice(bc, shouldPreserve)
@@ -1334,7 +1347,9 @@ func (bc *BlockChain) writeKnownBlock(block *types.Block) error {
 // database.
 func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.Receipt, state *state.StateDB) error {
 	// Calculate the total difficulty of the block
-	ptd := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
+	// get parent block only using number (hletrd)
+	phash := bc.GetHeaderByNumber(block.NumberU64() - 1).Hash()
+	ptd := bc.GetTd(phash, block.NumberU64()-1)
 	if ptd == nil {
 		return consensus.ErrUnknownAncestor
 	}
@@ -1490,6 +1505,28 @@ func (bc *BlockChain) addFutureBlock(block *types.Block) error {
 	return nil
 }
 
+// Hopefully willing for the new chain to be inserted (hletrd)
+func (bc *BlockChain) InsertChainPlease(chain types.Blocks, txMetrics bool, txMetricsPath string, txFineMetrics bool, txFineMetricsPath string) (int, error) {
+	// Sanity check that we have something meaningful to import
+	if len(chain) == 0 {
+		return 0, nil
+	}
+	bc.blockProcFeed.Send(true)
+	defer bc.blockProcFeed.Send(false)
+
+	bc.TxMetrics = txMetrics
+	bc.TxMetricsPath = txMetricsPath
+	bc.TxFineMetrics = txFineMetrics
+	bc.TxFineMetricsPath = txFineMetricsPath
+
+	// bypass sanity check (hletrd)
+	if !bc.chainmu.TryLock() {
+		return 0, errChainStopped
+	}
+	defer bc.chainmu.Unlock()
+	return bc.insertChain(chain, false, true)
+}
+
 // InsertChain attempts to insert the given batch of blocks in to the canonical
 // chain or, otherwise, create a fork. If an error is returned it will return
 // the index number of the failing block as well an error describing what went
@@ -1560,8 +1597,11 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		headers[i] = block.Header()
 		seals[i] = verifySeals
 	}
-	abort, results := bc.engine.VerifyHeaders(bc, headers, seals)
+	// not to verify (hletrd)
+	results := make(<-chan error, len(headers))
+	abort := make(chan<- struct{}, 0)
 	defer close(abort)
+	abort, results = bc.engine.VerifyHeaders(bc, headers, seals, !verifySeals)
 
 	// Peek the error for the first block to decide the directing import logic
 	it := newInsertIterator(chain, results, bc.validator)
@@ -1718,11 +1758,10 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		}
 
 		// Retrieve the parent block and it's state to execute on top
+		// retrieve using block number (hletrd)
 		start := time.Now()
-		parent := it.previous()
-		if parent == nil {
-			parent = bc.GetHeader(block.ParentHash(), block.NumberU64()-1)
-		}
+		parent := bc.GetHeaderByNumber(block.NumberU64() - 1)
+
 		statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
 		if err != nil {
 			return it.index, err
@@ -1750,9 +1789,51 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 			}
 		}
 
+		// create a new header (hletrd)
+		header_sealed := block.Header()
+		header_sealed.Root = statedb.IntermediateRoot(bc.chainConfig.IsEIP158(header_sealed.Number))
+		header_sealed.UncleHash = types.CalcUncleHash(block.Uncles())
+		header_sealed.TxHash = types.DeriveSha(block.Transactions(), trie.NewStackTrie(nil))
+		header_sealed.ReceiptHash = types.EmptyCodeHash
+		header_sealed.ParentHash = bc.GetHeaderByNumber(block.NumberU64() - 1).Hash()
+		header_sealed.Hash()
+		block = block.WithSeal(header_sealed)
+
 		// Process block using the parent state as reference point
 		pstart := time.Now()
-		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig)
+		receipts, logs, usedGas, timer, timer_per_tx, err := bc.processor.Process(block, statedb, bc.vmConfig)
+
+		// write metrics (hletrd)
+		if bc.TxMetrics {
+			f, _ := os.OpenFile(bc.TxMetricsPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			defer f.Close()
+			bufwriter := bufio.NewWriter(f)
+
+			bufwriter.WriteString(block.Number().String())
+			bufwriter.WriteString(",")
+			for i := range timer {
+				bufwriter.WriteString(fmt.Sprintf("%d,", timer[i]))
+			}
+			bufwriter.WriteString("\n")
+
+			if bc.TxFineMetrics {
+				ffine, _ := os.OpenFile(bc.TxFineMetricsPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+				defer ffine.Close()
+				bufwriter_per_tx := bufio.NewWriter(ffine)
+
+				for i := 0; i < block.Transactions().Len(); i++ {
+					bufwriter_per_tx.WriteString(block.Number().String())
+					bufwriter_per_tx.WriteString(",")
+					bufwriter_per_tx.WriteString(fmt.Sprintf("%d,%d,%d,", i, timer_per_tx[2*i], timer_per_tx[2*i+1]))
+					bufwriter_per_tx.WriteString("\n")
+				}
+
+				bufwriter_per_tx.Flush()
+			}
+
+			bufwriter.Flush()
+		}
+
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			followupInterrupt.Store(true)
@@ -1761,6 +1842,20 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		ptime := time.Since(pstart)
 
 		vstart := time.Now()
+
+		// set header fields (hletrd)
+		// Bloom, stateroot, hash
+		header_sealed = block.Header()
+		header_sealed.Bloom = types.CreateBloom(receipts)
+		header_sealed.Root = statedb.IntermediateRoot(bc.chainConfig.IsEIP158(header_sealed.Number))
+		header_sealed.ReceiptHash = types.DeriveSha(receipts, trie.NewStackTrie(nil))
+		header_sealed.GasUsed = usedGas
+
+		// TODO-ethane: hash should be manipulated if needed
+		header_sealed.Hash()
+
+		block = block.WithSeal(header_sealed)
+
 		if err := bc.validator.ValidateState(block, statedb, receipts, usedGas); err != nil {
 			bc.reportBlock(block, receipts, err)
 			followupInterrupt.Store(true)
@@ -2095,7 +2190,8 @@ func (bc *BlockChain) reorg(oldHead *types.Header, newHead *types.Block) error {
 		}
 	} else {
 		// New chain is longer, stash all blocks away for subsequent insertion
-		for ; newBlock != nil && newBlock.NumberU64() != oldBlock.NumberU64(); newBlock = bc.GetBlock(newBlock.ParentHash(), newBlock.NumberU64()-1) {
+		// get parent by its number (hletrd)
+		for ; newBlock != nil && newBlock.NumberU64() != oldBlock.NumberU64(); newBlock = bc.GetBlockByNumber(newBlock.NumberU64() - 1) {
 			newChain = append(newChain, newBlock)
 		}
 	}
@@ -2125,7 +2221,8 @@ func (bc *BlockChain) reorg(oldHead *types.Header, newHead *types.Block) error {
 		if oldBlock == nil {
 			return fmt.Errorf("invalid old chain")
 		}
-		newBlock = bc.GetBlock(newBlock.ParentHash(), newBlock.NumberU64()-1)
+		// get parent using number (hletrd)
+		newBlock = bc.GetBlockByNumber(newBlock.NumberU64() - 1)
 		if newBlock == nil {
 			return fmt.Errorf("invalid new chain")
 		}

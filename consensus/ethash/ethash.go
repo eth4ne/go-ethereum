@@ -442,6 +442,12 @@ type Config struct {
 	NotifyFull bool
 
 	Log log.Logger `toml:"-"`
+
+	// hletrd
+	TxMetrics bool
+	TxMetricsPath string
+	TxFineMetrics bool
+	TxFineMetricsPath string
 }
 
 // Ethash is a consensus engine based on proof-of-work implementing the ethash

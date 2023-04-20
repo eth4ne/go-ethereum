@@ -5449,6 +5449,36 @@ var methods = function () {
         params: 0
     });
 
+    var connectSQL = new Method({
+        name: 'connectSQL',
+        call: 'eth_connectSQL',
+        params: 2
+    });
+
+    var setBatchSize = new Method({
+        name: 'setBatchSize',
+        call: 'eth_setBatchSize',
+        params: 1
+    });
+
+    var getBatchSize = new Method({
+        name: 'getBatchSize',
+        call: 'eth_getBatchSize',
+        params: 0
+    });
+
+    var insertBlock = new Method({
+        name: 'insertBlock',
+        call: 'eth_insertBlock',
+        params: 1
+    });
+
+    var insertBlockRange = new Method({
+        name: 'insertBlockRange',
+        call: 'eth_insertBlockRange',
+        params: 2
+    });
+
     return [
         getBalance,
         getStorageAt,
@@ -5472,7 +5502,13 @@ var methods = function () {
         compileLLL,
         compileSerpent,
         submitWork,
-        getWork
+        getWork,
+        // (hletrd)
+        connectSQL,
+        setBatchSize,
+        getBatchSize,
+        insertBlock,
+        insertBlockRange,
     ];
 };
 

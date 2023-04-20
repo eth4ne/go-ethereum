@@ -672,7 +672,7 @@ func (db *Database) Commit(node common.Hash, report bool) error {
 	memcacheCommitSizeMeter.Mark(int64(storage - db.dirtiesSize))
 	memcacheCommitNodesMeter.Mark(int64(nodes - len(db.dirties)))
 
-	logger := log.Info
+	logger := log.Debug
 	if !report {
 		logger = log.Debug
 	}
@@ -867,7 +867,7 @@ func (db *Database) saveCache(dir string, threads int) error {
 	if db.cleans == nil {
 		return nil
 	}
-	log.Info("Writing clean trie cache to disk", "path", dir, "threads", threads)
+	log.Debug("Writing clean trie cache to disk", "path", dir, "threads", threads)
 
 	start := time.Now()
 	err := db.cleans.SaveToFileConcurrent(dir, threads)
@@ -875,7 +875,7 @@ func (db *Database) saveCache(dir string, threads int) error {
 		log.Error("Failed to persist clean trie cache", "error", err)
 		return err
 	}
-	log.Info("Persisted the clean trie cache", "path", dir, "elapsed", common.PrettyDuration(time.Since(start)))
+	log.Debug("Persisted the clean trie cache", "path", dir, "elapsed", common.PrettyDuration(time.Since(start)))
 	return nil
 }
 

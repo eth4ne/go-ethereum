@@ -73,6 +73,12 @@ type Backend interface {
 	SubscribeChainHeadEvent(ch chan<- core.ChainHeadEvent) event.Subscription
 	SubscribeChainSideEvent(ch chan<- core.ChainSideEvent) event.Subscription
 
+	ConnectSQL(username string, password string) bool
+	SetBatchSize(batchsize int) error
+	GetBatchSize() int
+	InsertBlock(number int) bool
+	InsertBlockRange(start int, end int) bool
+
 	// Transaction pool API
 	SendTx(ctx context.Context, signedTx *types.Transaction) error
 	GetTransaction(ctx context.Context, txHash common.Hash) (*types.Transaction, common.Hash, uint64, uint64, error)

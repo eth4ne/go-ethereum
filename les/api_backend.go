@@ -333,3 +333,28 @@ func (b *LesApiBackend) StateAtBlock(ctx context.Context, block *types.Block, re
 func (b *LesApiBackend) StateAtTransaction(ctx context.Context, block *types.Block, txIndex int, reexec uint64) (*core.Message, vm.BlockContext, *state.StateDB, tracers.StateReleaseFunc, error) {
 	return b.eth.stateAtTransaction(ctx, block, txIndex, reexec)
 }
+
+func (b *LesApiBackend) ConnectSQL(username string, password string) bool {
+	//does nothing
+	return false
+}
+
+func (b *LesApiBackend) SetBatchSize(batchsize int) error {
+	//does nothing
+	return errors.New("Not implemented in LES")
+}
+
+func (b *LesApiBackend) GetBatchSize() int {
+	//invalid
+	return -1
+}
+
+func (b *LesApiBackend) InsertBlock(number int) bool {
+	//does nothing
+	return false
+}
+
+func (b *LesApiBackend) InsertBlockRange(start int, end int) bool {
+	//does nothing
+	return false
+}

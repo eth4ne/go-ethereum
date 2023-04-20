@@ -50,6 +50,9 @@ func NewBlockValidator(config *params.ChainConfig, blockchain *BlockChain, engin
 // header's transaction and uncle roots. The headers are assumed to be already
 // validated at this point.
 func (v *BlockValidator) ValidateBody(block *types.Block) error {
+	// do not validate (hletrd)
+	return nil
+	// TODO-ethane: may need to disable validations for ethane (hletrd)
 	// Check whether the block is already imported.
 	if v.bc.HasBlockAndState(block.Hash(), block.NumberU64()) {
 		return ErrKnownBlock
@@ -81,8 +84,10 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 		return fmt.Errorf("withdrawals present in block body")
 	}
 
-	if !v.bc.HasBlockAndState(block.ParentHash(), block.NumberU64()-1) {
-		if !v.bc.HasBlock(block.ParentHash(), block.NumberU64()-1) {
+	// find parent block only using number (hletrd)
+	phash := v.bc.GetHeaderByNumber(block.NumberU64()-1).Hash()
+	if !v.bc.HasBlockAndState(phash, block.NumberU64()-1) {
+		if !v.bc.HasBlock(phash, block.NumberU64()-1) {
 			return consensus.ErrUnknownAncestor
 		}
 		return consensus.ErrPrunedAncestor
@@ -93,6 +98,9 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 // ValidateState validates the various changes that happen after a state transition,
 // such as amount of used gas, the receipt roots and the state root itself.
 func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateDB, receipts types.Receipts, usedGas uint64) error {
+	// do not validate (hletrd)
+	return nil
+	// TODO-ethane: may need to disable validations for ethane (hletrd)
 	header := block.Header()
 	if block.GasUsed() != usedGas {
 		return fmt.Errorf("invalid gas used (remote: %d local: %d)", block.GasUsed(), usedGas)
