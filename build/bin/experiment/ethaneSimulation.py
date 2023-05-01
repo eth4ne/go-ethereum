@@ -877,6 +877,8 @@ def simulateEthereum(startBlockNum, endBlockNum, flushInterval):
     batchsize = 200
     # print log interval
     loginterval = 10000
+    # block info save interval
+    blockInfosSaveInterval = 1000000
 
     oldblocknumber = startBlockNum
     start = time.time()
@@ -886,6 +888,7 @@ def simulateEthereum(startBlockNum, endBlockNum, flushInterval):
     # set log file name
     logFileName = "ethereum_simulate_" + str(startBlockNum) + "_" + str(endBlockNum) + ".txt"
     blockInfosLogFileName = "ethereum_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + ".txt"
+    blockInfosTempLogFileName = "ethereum_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + "_temp.txt"
 
     rwList = []
     slotList = []
@@ -909,6 +912,11 @@ def simulateEthereum(startBlockNum, endBlockNum, flushInterval):
                 if item['blocknumber'] <= endBlockNum+1:
                     flush()
                     # print("flush finished -> generated block", oldblocknumber, "\n\n\n")
+                
+                # save intermediate result
+                if item['blocknumber'] % blockInfosSaveInterval == 0 and item['blocknumber'] < endBlockNum:
+                    saveBlockInfos(blockInfosTempLogFileName)
+                    print("create temp log file:", blockInfosTempLogFileName)
                 
                 # check current trie is made correctly
                 if oldblocknumber not in headers:
