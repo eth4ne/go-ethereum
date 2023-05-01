@@ -453,16 +453,24 @@ func flushTrieNodes() {
 	if common.NextBlockNum%common.FlushInterval == 0 || (common.SimulationMode == 2 && (common.NextBlockNum+1)%common.InactivateCriterion == 0) {
 		// fmt.Println("flush at block", common.NextBlockNum)
 		common.FlushStorageTries = false
-		timeToFlushActive := time.Now()
+
+		// flush active trie
+		timeToFlushActiveMem := time.Now()
 		normTrie.Commit(nil)
+		blockInfo.TimeToFlushActiveMem = time.Since(timeToFlushActiveMem).Nanoseconds()
+		timeToFlushActiveDisk := time.Now()
 		normTrie.TrieDB().Commit(normTrie.Hash(), false, nil)
-		blockInfo.TimeToFlushActive = time.Since(timeToFlushActive).Nanoseconds()
+		blockInfo.TimeToFlushActiveDisk = time.Since(timeToFlushActiveDisk).Nanoseconds()
+
+		// flush inactive trie
 		if common.SimulationMode == 1 && common.InactiveTrieExist {
 			common.FlushInactiveTrie = true
-			timeToFlushInactive := time.Now()
+			timeToFlushInactiveMem := time.Now()
 			subNormTrie.Commit(nil)
+			blockInfo.TimeToFlushInactiveMem = time.Since(timeToFlushInactiveMem).Nanoseconds()
+			timeToFlushInactiveDisk := time.Now()
 			subNormTrie.TrieDB().Commit(subNormTrie.Hash(), false, nil)
-			blockInfo.TimeToFlushInactive = time.Since(timeToFlushInactive).Nanoseconds()
+			blockInfo.TimeToFlushInactiveDisk = time.Since(timeToFlushInactiveDisk).Nanoseconds()
 			blockInfo.InactiveRoot = subNormTrie.Hash()
 			common.FlushInactiveTrie = false
 		}
@@ -1868,8 +1876,10 @@ func saveBlockInfos(fileName string, startBlockNum, endBlockNum uint64) {
 		log += blockInfo.TotalInactiveNodeStat.ToString(delimiter)
 
 		// TODO(jmlee): move position later to be with other times (TimeTo...)
-		log += strconv.FormatInt(blockInfo.TimeToFlushActive, 10) + delimiter
-		log += strconv.FormatInt(blockInfo.TimeToFlushInactive, 10) + delimiter
+		log += strconv.FormatInt(blockInfo.TimeToFlushActiveMem, 10) + delimiter
+		log += strconv.FormatInt(blockInfo.TimeToFlushActiveDisk, 10) + delimiter
+		log += strconv.FormatInt(blockInfo.TimeToFlushInactiveMem, 10) + delimiter
+		log += strconv.FormatInt(blockInfo.TimeToFlushInactiveDisk, 10) + delimiter
 		log += strconv.FormatInt(blockInfo.TimeToFlushStorage, 10) + delimiter
 
 		// fmt.Println("log at block", blockNum, ":", log)
