@@ -10,6 +10,7 @@
 /simulator/trieInspects/*
 /simulator/graphs/*
 /simulator/trie_inspect*
+/simulator/dbStats/*
 
 /tmp
 */**/*un~

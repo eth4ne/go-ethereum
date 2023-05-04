@@ -109,6 +109,9 @@ var (
 	// latest flushed block num = next block num - 1 (if next block num == 0, then no block exists)
 	NextBlockNum = uint64(0)
 
+	// DBStats[blockNum] = leveldb stats at that block
+	DBStats = make(map[uint64]string)
+
 	// to convert trie to graph representation
 	TrieGraph TrieGraphInfo
 )

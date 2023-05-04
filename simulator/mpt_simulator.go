@@ -42,6 +42,8 @@ const (
 	logFilePath = "./logFiles/"
 	// block infos log file path
 	blockInfosLogFilePath = "./blockInfos/"
+	// db stats log file path
+	dbStatsLogFilePath = "./dbStats/"
 
 	// trie graph json file path
 	trieGraphPath = "./trieGraphs/"
@@ -192,6 +194,9 @@ func reset(deleteDisk bool) {
 	// reset blocks
 	common.Blocks = make(map[uint64]common.BlockInfo)
 	common.NextBlockNum = 0
+
+	// reset leveldb stats
+	common.DBStats = make(map[uint64]string)
 
 	// reset Ethane related vars
 	common.AddrToKeyActive = make(map[common.Address]common.Hash)
@@ -1824,6 +1829,14 @@ func setEthaneOptions(deleteEpoch, inactivateEpoch, inactivateCriterion uint64, 
 
 // save block infos
 func saveBlockInfos(fileName string, startBlockNum, endBlockNum uint64) {
+
+	// create dir if not exist
+	err := os.MkdirAll(blockInfosLogFilePath, os.ModePerm)
+	if err != nil {
+		fmt.Println("ERROR: mkdirAll failed")
+		os.Exit(1)
+	}
+
 	// delete prev log file if exist
 	os.Remove(blockInfosLogFilePath + fileName)
 	// open new log file
@@ -1888,6 +1901,49 @@ func saveBlockInfos(fileName string, startBlockNum, endBlockNum uint64) {
 		fmt.Fprintln(f, log)
 	}
 
+}
+
+// save leveldb stats
+func saveDatabaseStats (fileName string, currentBlockNum uint64) {
+
+	// create dir if not exist
+	err := os.MkdirAll(dbStatsLogFilePath, os.ModePerm)
+	if err != nil {
+		fmt.Println("ERROR: mkdirAll failed")
+		os.Exit(1)
+	}
+
+	// add current db stats
+	currentDBStats := getDatabaseStats()
+	common.DBStats[currentBlockNum] = currentDBStats
+
+	// delete prev log file if exist
+	os.Remove(dbStatsLogFilePath + fileName)
+	// open new log file
+	f, _ := os.OpenFile(dbStatsLogFilePath+fileName, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	defer f.Close()
+
+	// collect blockNums
+	blockNums := make([]uint64, 0)
+	for blockNum, _ := range common.DBStats {
+		blockNums = append(blockNums, blockNum)
+	}
+	sort.Slice(blockNums, func(i, j int) bool { return blockNums[i] < blockNums[j] })
+
+	// write logs to the file
+	for _, blockNum := range blockNums {
+		// generate log
+		log := ""
+		log += "at block " + strconv.FormatUint(blockNum, 10) + "\n"
+		log += common.DBStats[blockNum]
+
+		// write log to file
+		_, err := fmt.Fprintln(f, log)
+		if err != nil {
+			fmt.Println("ERROR: fail to write db stats log file")
+			// os.Exit(1)
+		}
+	}
 }
 
 // write error logs in file
@@ -1994,6 +2050,12 @@ func connHandler(conn net.Conn) {
 				nodeNum := totalNodesNum + totalStorageNodesNum
 				nodeSize := totalNodesSize + totalStorageNodesSize
 				response = []byte(strconv.FormatUint(nodeNum, 10) + "," + strconv.FormatUint(nodeSize, 10))
+			
+			case "printDatabaseStats":
+				fmt.Println("\nexecute printDatabaseStats()")
+				allResults := getDatabaseStats()
+				print(allResults)
+				response = []byte("success")
 
 			case "inspectDatabase":
 				fmt.Println("execute inspectDatabase()")
@@ -2590,6 +2652,14 @@ func connHandler(conn net.Conn) {
 				logFileName := params[1]
 				fmt.Println("block infos log file name:", logFileName)
 				saveBlockInfos(logFileName, 0, common.NextBlockNum-1)
+
+				response = []byte("success")
+
+			case "saveDatabaseStats":
+				fmt.Println("execute saveDatabaseStats()")
+				logFileName := params[1]
+				fmt.Println("db stats file name:", logFileName)
+				saveDatabaseStats(logFileName, common.NextBlockNum-1)
 
 				response = []byte("success")
 
@@ -3235,6 +3305,19 @@ func inspectTrieInSpecificPath(dbPath, rootHash string) {
 	inspectTrieDisk(hash)
 	elapsed := time.Since(startTime)
 	fmt.Println("inspect trie time:", elapsed)
+}
+
+// get leveldb stats
+func getDatabaseStats() string {
+	allResults := ""
+	// properties := [...]string{"leveldb.stats", "leveldb.iostats", "leveldb.writedelay", "leveldb.compcount", 
+	// 	"leveldb.sstables", "leveldb.blockpool", "leveldb.cachedblock", "leveldb.openedtables", "leveldb.alivesnaps", "leveldb.aliveiters"}
+	properties := [...]string{"leveldb.stats", "leveldb.iostats", "leveldb.writedelay", "leveldb.compcount"}
+	for _, property := range properties {
+		result, _ := diskdb.Stat(property)
+		allResults += property + ": " + result + "\n"
+	}
+	return allResults
 }
 
 func main() {

@@ -209,6 +209,15 @@ def getDBStatistics():
     print("getDBStatistics result -> # of total trie nodes:", '{:,}'.format(totalTrieNodesNum), "/ total db size:", '{:,}'.format(TotalTrieNodesSize), "B")
     return inspectResult
 
+# print levelDB's stats
+def printDatabaseStats():
+    cmd = str("printDatabaseStats")
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    printResult = data.decode().split(',')
+    print("printDatabaseStats result:", printResult)
+    return printResult
+
 # get number and size of all trie nodes in db
 def inspectDatabase():
     cmd = str("inspectDatabase")
@@ -253,6 +262,16 @@ def printAllStats(logFileName):
 
 def saveBlockInfos(logFileName):
     cmd = str("saveBlockInfos")
+    cmd += str(",")
+    cmd += logFileName
+    client_socket.send(cmd.encode())
+    data = client_socket.recv(1024)
+    saveResult = data.decode()
+    # print("saveResult ->", saveResult)
+    return saveResult
+
+def saveDatabaseStats(logFileName):
+    cmd = str("saveDatabaseStats")
     cmd += str(",")
     cmd += logFileName
     client_socket.send(cmd.encode())
@@ -879,6 +898,8 @@ def simulateEthereum(startBlockNum, endBlockNum, flushInterval):
     loginterval = 10000
     # block info save interval
     blockInfosSaveInterval = 1000000
+    # db stats save interval
+    dbStatsSaveInterval = 500000
 
     oldblocknumber = startBlockNum
     start = time.time()
@@ -889,6 +910,8 @@ def simulateEthereum(startBlockNum, endBlockNum, flushInterval):
     logFileName = "ethereum_simulate_" + str(startBlockNum) + "_" + str(endBlockNum) + ".txt"
     blockInfosLogFileName = "ethereum_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + ".txt"
     blockInfosTempLogFileName = "ethereum_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + "_temp.txt"
+    dbStatsLogFileName = "ethereum_db_stats_" + str(startBlockNum) + "_" + str(endBlockNum) + ".txt"
+    dbStatsTempLogFileName = "ethereum_db_stats_" + str(startBlockNum) + "_" + str(endBlockNum) + "_temp.txt"
 
     rwList = []
     slotList = []
@@ -917,6 +940,9 @@ def simulateEthereum(startBlockNum, endBlockNum, flushInterval):
                 if item['blocknumber'] % blockInfosSaveInterval == 0 and item['blocknumber'] < endBlockNum:
                     saveBlockInfos(blockInfosTempLogFileName)
                     print("create temp log file:", blockInfosTempLogFileName)
+                if item['blocknumber'] % dbStatsSaveInterval == 1 and item['blocknumber'] < endBlockNum:
+                    saveDatabaseStats(dbStatsTempLogFileName)
+                    print("create temp log file:", dbStatsTempLogFileName)
                 
                 # check current trie is made correctly
                 if oldblocknumber not in headers:
@@ -1051,8 +1077,11 @@ def simulateEthereum(startBlockNum, endBlockNum, flushInterval):
     # printCurrentTrie()
     # inspectTrie()
     getDBStatistics()
+    printDatabaseStats()
     saveBlockInfos(blockInfosLogFileName)
     print("create log file:", blockInfosLogFileName)
+    saveDatabaseStats(dbStatsLogFileName)
+    print("create log file:", dbStatsLogFileName)
     # printAllStats(logFileName)
     # print("create log file:", logFileName)
 
@@ -1069,6 +1098,10 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
     blockInfosLogFileName = "ethane_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) \
         + "_" + str(deleteEpoch) + "_" + str(inactivateEpoch) + "_" + str(inactivateCriterion) + ".txt"
     blockInfosTempLogFileName = "ethane_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) \
+        + "_" + str(deleteEpoch) + "_" + str(inactivateEpoch) + "_" + str(inactivateCriterion) + "_temp.txt"
+    dbStatsLogFileName = "ethane_db_stats_" + str(startBlockNum) + "_" + str(endBlockNum) \
+        + "_" + str(deleteEpoch) + "_" + str(inactivateEpoch) + "_" + str(inactivateCriterion) + ".txt"
+    dbStatsTempLogFileName = "ethane_db_stats_" + str(startBlockNum) + "_" + str(endBlockNum) \
         + "_" + str(deleteEpoch) + "_" + str(inactivateEpoch) + "_" + str(inactivateCriterion) + "_temp.txt"
 
     # get restore list
@@ -1091,6 +1124,8 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
     loginterval = 10000
     # block info save interval
     blockInfosSaveInterval = 1000000
+    # db stats save interval
+    dbStatsSaveInterval = 500000
 
     oldblocknumber = startBlockNum
     start = time.time()
@@ -1123,6 +1158,9 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
                 if item['blocknumber'] % blockInfosSaveInterval == 0 and item['blocknumber'] < endBlockNum:
                     saveBlockInfos(blockInfosTempLogFileName)
                     print("create temp log file:", blockInfosTempLogFileName)
+                if item['blocknumber'] % dbStatsSaveInterval == 1 and item['blocknumber'] < endBlockNum:
+                    saveDatabaseStats(dbStatsTempLogFileName)
+                    print("create temp log file:", dbStatsTempLogFileName)
 
                 if oldblocknumber % loginterval == 0:
                     currentTime = time.time()
@@ -1247,9 +1285,12 @@ def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, ina
     # printCurrentTrie()
     printEthaneState()
     getDBStatistics()
+    printDatabaseStats()
     # inspectDatabase()
     saveBlockInfos(blockInfosLogFileName)
     print("create log file:", blockInfosLogFileName)
+    saveDatabaseStats(dbStatsLogFileName)
+    print("create log file:", dbStatsLogFileName)
     # printAllStats(logFileName)
     # print("create log file:", logFileName)
 
@@ -1265,6 +1306,8 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel, 
     logFileName = "ethanos_simulate_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateCriterion) + ".txt"
     blockInfosLogFileName = "ethanos_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateCriterion) + ".txt"
     blockInfosTempLogFileName = "ethanos_simulate_block_infos_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateCriterion) + "_temp.txt"
+    dbStatsLogFileName = "ethanos_db_stats_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateCriterion) + ".txt"
+    dbStatsTempLogFileName = "ethanos_db_stats_" + str(startBlockNum) + "_" + str(endBlockNum) + "_" + str(inactivateCriterion) + "_temp.txt"
 
     # get restore list exist
     restoreListVersion = 0
@@ -1286,6 +1329,8 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel, 
     loginterval = 10000
     # block info save interval
     blockInfosSaveInterval = 1000000
+    # db stats save interval
+    dbStatsSaveInterval = 500000
 
     oldblocknumber = startBlockNum
     start = time.time()
@@ -1318,6 +1363,9 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel, 
                 if item['blocknumber'] % blockInfosSaveInterval == 0 and item['blocknumber'] < endBlockNum:
                     saveBlockInfos(blockInfosTempLogFileName)
                     print("create temp log file:", blockInfosTempLogFileName)
+                if item['blocknumber'] % dbStatsSaveInterval == 1 and item['blocknumber'] < endBlockNum:
+                    saveDatabaseStats(dbStatsTempLogFileName)
+                    print("create temp log file:", dbStatsTempLogFileName)
 
                 if oldblocknumber % loginterval == 0:
                     currentTime = time.time()
@@ -1444,8 +1492,11 @@ def simulateEthanos(startBlockNum, endBlockNum, inactivateCriterion, fromLevel, 
     # inspectTrie()
     # printCurrentTrie()
     getDBStatistics()
+    printDatabaseStats()
     saveBlockInfos(blockInfosLogFileName)
     print("create log file:", blockInfosLogFileName)
+    saveDatabaseStats(dbStatsLogFileName)
+    print("create log file:", dbStatsLogFileName)
     # inspectDatabase()
     # printAllStats(logFileName)
     # print("create log file:", logFileName)
