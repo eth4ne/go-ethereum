@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"crypto/rand"
+	"net/http"
+	_ "net/http/pprof"
 	"encoding/hex"
 	"encoding/json"
 	// "encoding/binary"
@@ -3333,6 +3335,13 @@ func getDatabaseStats() string {
 }
 
 func main() {
+	// run pprof server
+	if false {
+	go func() {
+		fmt.Println("run pprof server")
+		http.ListenAndServe("0.0.0.0:7070", nil)
+	}()
+	}
 
 	// initialize
 	reset(false)
