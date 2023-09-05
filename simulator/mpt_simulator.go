@@ -92,9 +92,6 @@ var (
 	// (reset dirtyStorageTries after flush)
 	dirtyStorageTries = make(map[common.Address]*trie.SecureTrie)
 
-	// same as SecureTrie.hashKeyBuf (to mimic SecureTrie)
-	hashKeyBuf = make([]byte, common.HashLength)
-
 	// timer to measure block interval
 	blockIntervalTimer time.Time
 )
@@ -578,16 +575,6 @@ func generateRandomAddress() common.Address {
 	randAddr := common.HexToAddress(randHex)
 	fmt.Println("rand addr:", randAddr.Hex())
 	return randAddr
-}
-
-// hashKey returns the hash of key as an ephemeral buffer
-func hashKey(key []byte) []byte {
-	h := trie.NewHasher(false)
-	h.Sha().Reset()
-	h.Sha().Write(key)
-	h.Sha().Read(hashKeyBuf[:])
-	trie.HasherPool.Put(h)
-	return hashKeyBuf[:]
 }
 
 // call "du -b leveldbPath" and return db size
@@ -3053,10 +3040,10 @@ func makeTestTrie() {
 		//fmt.Println("address hex string:", randHex)
 
 		randAddr := common.HexToAddress(randHex)
+		// randAddrHash := crypto.Keccak256Hash(randAddr[:])
 		// fmt.Println("insert account addr:", randAddr.Hex())
 		// fmt.Println("insert account addr:", randAddr[:])
-		// fmt.Println("addrHash:", hex.EncodeToString(hashKey(randAddr[:])))
-		// fmt.Println("addrHash:", hashKey(randAddr[:]))
+		// fmt.Println("addrHash:", randAddrHash.Hex())
 
 		// encoding value
 		emptyAccount.Nonce++ // to make different leaf node
@@ -3066,8 +3053,7 @@ func makeTestTrie() {
 		// 1. as a normal trie
 		normTrie.TryUpdate(randAddr[:], data)
 		// 2. as a secure trie
-		// hk := hashKey(randAddr[:])
-		// normTrie.TryUpdate(hk, data)
+		// normTrie.TryUpdate(randAddrHash[:], data)
 
 		if (i+1)%trieCommitEpoch == 0 {
 			flushTrieNodes()
