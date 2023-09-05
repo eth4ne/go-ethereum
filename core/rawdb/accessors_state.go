@@ -173,10 +173,11 @@ func WriteTrieNode(db ethdb.KeyValueWriter, hash common.Hash, node []byte) {
 			}
 		}
 
-		// update current block's stat
-		blockInfo, _ := common.Blocks[common.NextBlockNum]
-		blockInfo.FlushedNodeHashes = append(blockInfo.FlushedNodeHashes, hash)
-		common.Blocks[common.NextBlockNum] = blockInfo
+		// collect flushed node hashes
+		// this is only needed when rollback blocks, so just comment out now
+		// blockInfo, _ := common.Blocks[common.NextBlockNum]
+		// blockInfo.FlushedNodeHashes = append(blockInfo.FlushedNodeHashes, hash)
+		// common.Blocks[common.NextBlockNum] = blockInfo
 
 		// check size is correct
 		if nodeInfoDirty.Size != uint(32+len(node)) {

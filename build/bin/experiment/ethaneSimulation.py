@@ -1085,6 +1085,7 @@ def simulateEthereum(startBlockNum, endBlockNum, flushInterval):
     # printAllStats(logFileName)
     # print("create log file:", logFileName)
 
+# TODO(jmlee): oldblocknumber 이거 simulator 에서의 blocknum 값으로 바꾸는게 더 좋을듯
 # replay txs in Ethereum with Ethane client
 def simulateEthane(startBlockNum, endBlockNum, deleteEpoch, inactivateEpoch, inactivateCriterion, fromLevel, flushInterval):
     # set Ethane's options
@@ -1531,6 +1532,7 @@ def inspectTriesEthereum(startBlockNum, endBlockNum, trieInspectIntervals):
         # inspect trie
         if (blockNum+1) in trieInspectIntervals:
             activeTrieRoot = params[0]
+            print("at block", blockNum, "inspect trie", activeTrieRoot)
             startTime = datetime.now()
             nodeStat = inspectSubTrie(activeTrieRoot)[0]
             endTime = datetime.now()

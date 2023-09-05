@@ -2719,8 +2719,8 @@ func connHandler(conn net.Conn) {
 				data, _ := rlp.EncodeToBytes(ethaneAccount)
 
 				updateTrieForEthane(addr, data)
-				normTrie.Hash()
 				// fmt.Println("print state trie\n")
+				// normTrie.Hash()
 				// normTrie.Print()
 
 				response = []byte("success")
@@ -2819,8 +2819,8 @@ func connHandler(conn net.Conn) {
 					fmt.Println("updateTrieForEthanos() failed:", err)
 					os.Exit(1)
 				}
-				normTrie.Hash()
 				// fmt.Println("print state trie\n")
+				// normTrie.Hash()
 				// normTrie.Print()
 
 				response = []byte("success")
@@ -3011,6 +3011,7 @@ func connHandler(conn net.Conn) {
 
 			default:
 				fmt.Println("ERROR: there is no matching request")
+				fmt.Println("  => params:", params)
 				response = []byte("ERROR: there is no matching request")
 			}
 
@@ -3087,6 +3088,7 @@ func testLightInactiveTrieUpdate() {
 	// set account to be inserted in tries
 	var acc types.StateAccount
 	acc.Balance = big.NewInt(0)
+	// acc.Balance, _ = acc.Balance.SetString("17998567139874982375928", 10)
 	acc.Nonce = 0
 	acc.CodeHash = emptyCodeHash
 	acc.Root = emptyRoot
@@ -3193,7 +3195,10 @@ func testLightInactiveTrieUpdate() {
 		// }
 		// get merkle paths to delete
 		mrand.Seed(time.Now().UnixNano())
-		randDeleteNum := mrand.Intn(maxDeleteNum) + 1
+		randDeleteNum := 0
+		if maxDeleteNum != 0 {
+			randDeleteNum = mrand.Intn(maxDeleteNum) + 1
+		}
 		if currentAccNum < maxDeleteNum {
 			randDeleteNum = mrand.Intn(currentAccNum) + 1
 		}
@@ -3266,6 +3271,9 @@ func testLightInactiveTrieUpdate() {
 			fmt.Println("ERROR: cannot open trie")
 			os.Exit(1)
 		}
+
+		fmt.Println("  => total inserted accounts:", totalInsertedAccNum)
+		fmt.Println("  => total deleted accounts:", totalDeletedAccNum)
 	}
 	// myTrie.Print()
 
@@ -3295,6 +3303,7 @@ func inspectTrieInSpecificPath(dbPath, rootHash string) {
 }
 
 // get leveldb stats
+// caution: these results are changed after rebooting simulator, save results before turning off simulator
 func getDatabaseStats() string {
 	allResults := ""
 	// properties := [...]string{"leveldb.stats", "leveldb.iostats", "leveldb.writedelay", "leveldb.compcount", 
