@@ -3334,6 +3334,151 @@ func getDatabaseStats() string {
 	return allResults
 }
 
+// evaluate the performance of a database in Trie-Hashimoto
+// based on the key prefix length of trie nodes.
+func testTrieKeyPrefixing() {
+	fmt.Println("start testTrieKeyPrefixing()")
+
+	deleteDisk := true
+	leveldbPath := "/ethereum/mptSimulator_jmlee/testTH"
+	// set maximum number of open files
+	limit, err := fdlimit.Maximum()
+	if err != nil {
+		// Fatalf("Failed to retrieve file descriptor allowance: %v", err)
+		fmt.Println("Failed to retrieve file descriptor allowance:", err)
+	}
+	raised, err := fdlimit.Raise(uint64(limit))
+	if err != nil {
+		// Fatalf("Failed to raise file descriptor allowance: %v", err)
+		fmt.Println("Failed to raise file descriptor allowance:", err)
+	}
+	if raised <= 1000 {
+		fmt.Println("max open file num is too low")
+		os.Exit(1)
+	}
+	leveldbHandles = int(raised / 2)
+	fmt.Println("open file limit:", limit, "/ raised:", raised, "/ leveldbHandles:", leveldbHandles)
+
+	if deleteDisk {
+		fmt.Println("delete disk, open new disk")
+		err := os.RemoveAll(leveldbPath)
+		if err != nil {
+			fmt.Println("RemoveAll error ! ->", err)
+		}
+	} else {
+		fmt.Println("do not delete disk, open old db if it exist")
+	}
+
+	// open db
+	diskdb, err := leveldb.New(leveldbPath, leveldbCache, leveldbHandles, leveldbNamespace, leveldbReadonly)
+	if err != nil {
+		fmt.Println("leveldb.New error!! ->", err)
+		os.Exit(1)
+	}
+	fmt.Println("leveldb cache size:", leveldbCache, "MB")
+
+	// simulation params
+	blockNumToMine := uint64(500000)
+	trieNodeNumPerBlock := uint64(1000)
+	prefixLen := 6
+	keyLen := 64
+	valueLen := 64
+
+	maxPrefix := uint64(math.Pow(float64(16), float64(prefixLen)))
+	startTime := time.Now()
+	for blockNum := uint64(0); blockNum < blockNumToMine; blockNum++ {
+
+		if (blockNum+1)%1000 == 0 {
+			fmt.Print("current block num: ", blockNum+1, " / ", blockNumToMine,
+				" ( ", fmt.Sprintf("%.3f", float64(blockNum+1)/float64(blockNumToMine)*100),
+				" % ) -> elapsed time: ", time.Since(startTime),
+				" \r",
+			)
+		}
+
+		// get key prefix
+		prefixInt := blockNum % maxPrefix
+		prefixHex := fmt.Sprintf("%x", prefixInt)
+		zerosLen := prefixLen - len(prefixHex)
+		for i := 0; i < zerosLen; i++ {
+			prefixHex = "0" + prefixHex
+		}
+		// fmt.Println("maxPrefix:", maxPrefix)
+		// fmt.Println("blockNum:", blockNum)
+		// fmt.Println("prefixInt:", prefixInt)
+		// fmt.Println("prefixHex:", prefixHex)
+
+		// write random keys
+		batch := diskdb.NewBatch()
+		for nodeIndex := uint64(0); nodeIndex < trieNodeNumPerBlock; nodeIndex++ {
+			randomHexKey := randomHex(keyLen / 2)
+			if prefixLen != 0 {
+				randomHexKey = prefixHex + randomHexKey[prefixLen:]
+			}
+			if len(randomHexKey) != keyLen {
+				fmt.Println("ERROR: wrong random key len")
+				fmt.Println("random key:", randomHexKey, "/ len:", len(randomHexKey))
+				os.Exit(1)
+			}
+			// fmt.Println("random key:", randomHexKey, "/ len:", len(randomHexKey))
+
+			// insert key-value pair into the disk
+			keyBytes := common.Hex2Bytes(randomHexKey)
+			valueBytes := common.Hex2Bytes(randomHex(valueLen / 2))
+			if err := batch.Put(keyBytes, valueBytes); err != nil {
+				fmt.Println("ERROR: WriteTrieNode() error:", err)
+				fmt.Println("  key:", keyBytes)
+				fmt.Println("  value:", valueBytes)
+				os.Exit(1)
+			}
+			// If we've reached an optimal batch size, commit and start over
+			if batch.ValueSize() >= ethdb.IdealBatchSize {
+				if err := batch.Write(); err != nil {
+					fmt.Println("ERROR: batch.Write():", err)
+					os.Exit(1)
+				}
+			}
+		}
+
+		// Trie mostly committed to disk, flush any batch leftovers
+		if err := batch.Write(); err != nil {
+			fmt.Println("ERROR: batch.Write():", err)
+			os.Exit(1)
+		}
+		// fmt.Println()
+	}
+	fmt.Println("\n")
+
+	//
+	// print simulation results
+	//
+	fmt.Println("********** SIMULATION RESULTS **********")
+
+	// simulation params
+	fmt.Println("blockNumToMine:", blockNumToMine)
+	fmt.Println("trieNodeNumPerBlock:", trieNodeNumPerBlock)
+	fmt.Println("prefixLen:", prefixLen)
+	fmt.Println("keyLen:", keyLen)
+	fmt.Println()
+
+	// print db stats
+	allResults := ""
+	// properties := [...]string{"leveldb.stats", "leveldb.iostats", "leveldb.writedelay", "leveldb.compcount",
+	// 	"leveldb.sstables", "leveldb.blockpool", "leveldb.cachedblock", "leveldb.openedtables", "leveldb.alivesnaps", "leveldb.aliveiters"}
+	properties := [...]string{"leveldb.stats", "leveldb.iostats", "leveldb.writedelay", "leveldb.compcount"}
+	for _, property := range properties {
+		result, _ := diskdb.Stat(property)
+		allResults += property + ": " + result + "\n"
+	}
+	fmt.Println(allResults)
+
+	// inspect db
+	// keyNum, dbSize := inspectDatabase(diskdb)
+	// fmt.Println("num of keys in db:", keyNum, "/ db size:", dbSize)
+	fmt.Println("num of keys in db:", blockNumToMine*trieNodeNumPerBlock, "/ key-value pairs size:", blockNumToMine*trieNodeNumPerBlock*uint64((keyLen+valueLen)/2), "B")
+	fmt.Println()
+}
+
 func main() {
 	// run pprof server
 	if false {
