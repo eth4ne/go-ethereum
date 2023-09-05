@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	// "encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -972,7 +973,16 @@ func updateTrieForEthanos(addr common.Address, key, value []byte) error {
 
 	// update bloom filter with address
 	pruner.LatestBloomFilter.Add(key) // key: addrHash
-
+	// TODO(jmlee): try to add hash(addr | epochNum) to bloom filter, not just addrHash
+	// to minimize max restore proof size
+	// epochNum := uint32(common.NextBlockNum / common.InactivateCriterion)
+	// epochNumBytes := make([]byte, 4)
+	// binary.LittleEndian.PutUint32(epochNumBytes, epochNum)
+	// newHashedKey := crypto.Keccak256Hash(append(addr.Bytes(), epochNumBytes...))
+	// pruner.LatestBloomFilter.Add(newHashedKey[:])
+	// fmt.Println("addr:", addr.Hex(), "/ addrHash:", key)
+	// fmt.Println("epochNum:", epochNum, "/ epochNumBytes:", epochNumBytes)
+	// fmt.Println("newHashedKey:", newHashedKey.Hex())
 
 	return nil
 }
@@ -1074,6 +1084,12 @@ func restoreAccountForEthanos(restoreAddr common.Address) {
 	for ; epochNum < currentEpochNum-1; epochNum++ {
 		// check bloom filter first
 		exist, _ := pruner.BloomFilters[epochNum].Contain(addrHash.Bytes())
+		// TODO(jmlee): try to add hash(addr | epochNum) to bloom filter, not just addrHash
+		// to minimize max restore proof size
+		// epochNumBytes := make([]byte, 4)
+		// binary.LittleEndian.PutUint32(epochNumBytes,  uint32(epochNum))
+		// newHashedKey := crypto.Keccak256Hash(append(restoreAddr.Bytes(), epochNumBytes...))
+		// exist, _ := pruner.BloomFilters[epochNum].Contain(newHashedKey[:])
 
 		if !exist {
 			// bloom filter can be void proof
