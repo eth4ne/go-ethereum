@@ -1910,7 +1910,7 @@ func saveBlockInfos(fileName string, startBlockNum, endBlockNum uint64) {
 }
 
 // save leveldb stats
-func saveDatabaseStats (fileName string, currentBlockNum uint64) {
+func saveDatabaseStats(fileName string, currentBlockNum uint64) {
 
 	// create dir if not exist
 	err := os.MkdirAll(dbStatsLogFilePath, os.ModePerm)
@@ -2056,7 +2056,7 @@ func connHandler(conn net.Conn) {
 				nodeNum := totalNodesNum + totalStorageNodesNum
 				nodeSize := totalNodesSize + totalStorageNodesSize
 				response = []byte(strconv.FormatUint(nodeNum, 10) + "," + strconv.FormatUint(nodeSize, 10))
-			
+
 			case "printDatabaseStats":
 				fmt.Println("\nexecute printDatabaseStats()")
 				allResults := getDatabaseStats()
@@ -2886,7 +2886,7 @@ func connHandler(conn net.Conn) {
 				// fmt.Println("execute setHeadWithHash()")
 				blockNum, _ := strconv.ParseUint(params[1], 10, 64)
 				stateRoot := common.HexToHash(params[2])
-				
+
 				normTrie, err = trie.New(stateRoot, normTrieDB)
 				if err != nil {
 					fmt.Println("setHeadWithHash() request err:", err)
@@ -3324,7 +3324,7 @@ func inspectTrieInSpecificPath(dbPath, rootHash string) {
 // caution: these results are changed after rebooting simulator, save results before turning off simulator
 func getDatabaseStats() string {
 	allResults := ""
-	// properties := [...]string{"leveldb.stats", "leveldb.iostats", "leveldb.writedelay", "leveldb.compcount", 
+	// properties := [...]string{"leveldb.stats", "leveldb.iostats", "leveldb.writedelay", "leveldb.compcount",
 	// 	"leveldb.sstables", "leveldb.blockpool", "leveldb.cachedblock", "leveldb.openedtables", "leveldb.alivesnaps", "leveldb.aliveiters"}
 	properties := [...]string{"leveldb.stats", "leveldb.iostats", "leveldb.writedelay", "leveldb.compcount"}
 	for _, property := range properties {
@@ -3337,10 +3337,10 @@ func getDatabaseStats() string {
 func main() {
 	// run pprof server
 	if false {
-	go func() {
-		fmt.Println("run pprof server")
-		http.ListenAndServe("0.0.0.0:7070", nil)
-	}()
+		go func() {
+			fmt.Println("run pprof server")
+			http.ListenAndServe("0.0.0.0:7070", nil)
+		}()
 	}
 
 	// initialize
