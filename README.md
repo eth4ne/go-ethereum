@@ -35,6 +35,10 @@ After running the simulator, set options in build/bin/ethaneSimulation.py (e.g.,
 $ python3 ethaneSimulation.py
 ```
 
+### How to execute transactions
+
+If you want to execute transactions through EVM, go [here](https://github.com/geth-sim/go-ethereum/tree/evmSimulator/simulator)
+
 ## Go Ethereum
 
 Official Golang implementation of the Ethereum protocol.
