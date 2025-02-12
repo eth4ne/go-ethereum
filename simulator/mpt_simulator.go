@@ -160,6 +160,9 @@ func reset(deleteDisk bool) {
 		fmt.Println("set memorydb")
 		diskdb = memorydb.New()
 	}
+	// global pointer for diskdb
+	common.GlobalDiskdb = diskdb
+
 	normTrieDB = trie.NewDatabaseWithConfig(diskdb, &trie.Config{Cache: trieCacheSize})
 	subNormTrieDB = normTrieDB
 	// subNormTrieDB = trie.NewDatabaseWithConfig(diskdb, &trie.Config{Cache: trieCacheSize}) // if want to split clean caches

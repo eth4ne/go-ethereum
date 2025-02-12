@@ -31,6 +31,7 @@ import (
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -67,6 +68,11 @@ var (
 	// (if CollectNodeInfos is true, then TrieNodeHashes is empty, since TrieNodeInfos will collect hashes)
 	// (if CollectNodeHahes, CollectNodeInfos are both false, then TotalNodeStat, TotalStorageNodeStat might be wrong)
 	CollectNodeHashes = false
+
+	// option: check if trie node is already flushed through disk inspection
+	// need to start with empty db for correct result
+	CheckAlreadyFlushedNodeInDisk = false
+	GlobalDiskdb                  ethdb.KeyValueStore
 
 	// option: max number of blocks to store in "Blocks" (i.e., rollback limit)
 	MaxBlocksToStore = uint64(100000000)

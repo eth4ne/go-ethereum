@@ -103,11 +103,14 @@ func WriteTrieNode(db ethdb.KeyValueWriter, hash common.Hash, node []byte) {
 	// measuring db stat: # of trie nodes & db size for trie nodes (jmlee)
 	// fmt.Println("WriteTrieNode() -> node hash:", hash.Hex())
 
-	var alreadyFlushed bool
+	// check if this node is already flushed for correct logging
+	alreadyFlushed := false
 	if common.CollectNodeInfos {
 		_, alreadyFlushed = common.TrieNodeInfos[hash]
-	} else {
+	} else if common.CollectNodeHashes {
 		_, alreadyFlushed = common.TrieNodeHashes[hash]
+	} else if common.CheckAlreadyFlushedNodeInDisk {
+		alreadyFlushed = HasTrieNode(common.GlobalDiskdb, hash)
 	}
 
 	if !alreadyFlushed {
