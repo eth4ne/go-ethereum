@@ -90,7 +90,7 @@ func (h *hasher) hash(n node, force bool) (hashed node, cached node) {
 			if nodeInfo, exist := common.TrieNodeInfosDirty[myHash]; !exist {
 				nodeInfo.IsShortNode = true
 				nodeInfo.Size = 32 + uint(size)
-				if n.Key[len(n.Key)-1] == 16 {
+				if hasTerm(n.Key) {
 					nodeInfo.IsLeafNode = true
 				}
 

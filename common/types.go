@@ -266,6 +266,7 @@ type BlockInfo struct {
 	TotalStorageNodeStat  NodeStat // stats for total storage trie data until this block
 	NewInactiveNodeStat   NodeStat // stats for newly flushed inactive trie nodes in this block
 	TotalInactiveNodeStat NodeStat // stats for total inactive trie data until this block
+	DiskSize              int64    // disk usage (i.e., result of du -b)
 
 	BlockInterval           int64 // time to generate block
 	TimeToDelete            int64 // time to delete previous leaf nodes in Ethane

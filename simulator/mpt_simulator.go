@@ -138,7 +138,7 @@ func reset(deleteDisk bool) {
 		diskdb.Close()
 	}
 	if useLeveldb {
-		fmt.Println("set leveldb")
+		fmt.Println("set leveldb at", leveldbPath)
 		// if do not delete directory, this just reopens existing db
 		if deleteDisk {
 			fmt.Println("delete disk, open new disk")
@@ -460,7 +460,6 @@ func flushTrieNodes() {
 	// flush state trie nodes
 	if common.NextBlockNum%common.FlushInterval == 0 || (common.SimulationMode == 2 && (common.NextBlockNum+1)%common.InactivateCriterion == 0) {
 		// fmt.Println("flush at block", common.NextBlockNum)
-		common.FlushStorageTries = false
 
 		// flush active trie
 		timeToFlushActiveMem := time.Now()
@@ -494,6 +493,7 @@ func flushTrieNodes() {
 			storageTrie.Commit(nil)
 			storageTrie.TrieDB().Commit(storageTrie.Hash(), false, nil)
 		}
+		common.FlushStorageTries = false
 		blockInfo.TimeToFlushStorage = time.Since(timeToFlushStorage).Nanoseconds()
 		// reset dirty storage tries after flush
 		dirtyStorageTries = make(map[common.Address]*trie.SecureTrie)
@@ -522,6 +522,23 @@ func flushTrieNodes() {
 	blockInfo.DeletedActiveNodeNum = common.DeletedActiveNodeNum
 	blockInfo.DeletedInactiveNodeNum = common.DeletedInactiveNodeNum
 	blockInfo.InactivatedNodeNum = common.InactiveBoundaryKey
+	var diskSizeErr error
+	cnt := 0
+	for {
+		cnt++
+		if cnt > 100 {
+			fmt.Println("ERROR: getDirectorySizeV2() stuck")
+			fmt.Println("  cnt:", cnt)
+			os.Exit(1)
+		}
+		blockInfo.DiskSize, diskSizeErr = getDirectorySizeV2(leveldbPath)
+		if diskSizeErr != nil {
+			time.Sleep(3 * time.Second)
+			continue
+		}
+		break
+	}
+
 	common.Blocks[bn] = blockInfo
 	// delete too old block to store
 	blockNumToDelete := bn - common.MaxBlocksToStore - 1
@@ -595,6 +612,39 @@ func getDiskUsage() uint64 {
 	fmt.Println("du result -> disk size:", outputs[0], "bytes")
 	dbSizeInBytes, _ := strconv.ParseUint(outputs[0], 10, 64)
 	return dbSizeInBytes
+}
+
+// get directory size from "du -b" command
+func getDirectorySizeV2(path string) (int64, error) {
+	// call "du -b" command
+	cmd := exec.Command("du", "-b", path)
+	stdout, err := cmd.Output()
+	if err != nil {
+		// this err can be ignored
+		_ = err
+
+		// fmt.Println("exec.Command's Output err:", err)
+		// fmt.Println("  stdout:", string(stdout))
+	}
+	// fmt.Println(string(stdout))
+
+	results := strings.Fields(string(stdout))
+	// fmt.Println("results:", results)
+	if len(results) < 2 {
+		fmt.Println("ERROR: du -b result is wierd")
+		return 0, errors.New("du -b result is wierd")
+	}
+
+	sizeStr := results[len(results)-2]
+	// fmt.Println("sizeStr:", sizeStr)
+
+	size, err := strconv.ParseInt(sizeStr, 10, 64)
+	if err != nil {
+		fmt.Println("strconv.ParseInt err:", err)
+		return 0, err
+	}
+	fmt.Println("directory size:", size, "B")
+	return size, nil
 }
 
 // inspectDatabase iterates db and returns # of total trie nodes and their size
@@ -1257,7 +1307,7 @@ func updateTrieForEthane(addr common.Address, rlpedAccount []byte) error {
 	if addrKeyUint >= common.CheckpointKey {
 		// newly created address or already moved address in this block
 		// do not change its addrKey, just update
-		// fmt.Println("insert -> key:", addrKey.Hex(), "/ addr:", addr.Hex())
+		// fmt.Println("  insert -> key:", addrKey.Hex(), "/ addr:", addr.Hex())
 		if err := normTrie.TryUpdate(addrKey[:], rlpedAccount); err != nil {
 			fmt.Println("ERROR: updateTrieForEthane() failed to update trie 1 -> addr:", addr.Hex(), "/ addrKey:", addrKey)
 			os.Exit(1)
@@ -1278,7 +1328,7 @@ func updateTrieForEthane(addr common.Address, rlpedAccount []byte) error {
 		// insert new leaf node at next key position
 		newAddrHash := common.HexToHash(strconv.FormatUint(common.NextKey, 16))
 		common.AddrToKeyActive[addr] = newAddrHash
-		// fmt.Println("insert -> key:", newAddrHash.Hex(), "/ addr:", addr.Hex())
+		// fmt.Println("  insert -> key:", newAddrHash.Hex(), "/ addr:", addr.Hex())
 		if err := normTrie.TryUpdate(newAddrHash[:], rlpedAccount); err != nil {
 			fmt.Println("ERROR: updateTrieForEthane() failed to update trie 2 -> addr:", addr[:], "/ addrKey:", addrKey)
 			os.Exit(1)
@@ -1305,7 +1355,7 @@ func deletePrevLeafNodes() {
 
 	// delete all keys in trie
 	for _, keyToDelete := range common.KeysToDelete {
-		// fmt.Println("  key to delete:", keyToDelete.Big().Int64())
+		// fmt.Println("  (deleted)delete -> key:", keyToDelete.Big().Int64())
 		err := normTrie.TryDelete(keyToDelete[:])
 		if err != nil {
 			fmt.Println("ERROR deletePrevLeafNodes(): trie.TryDelete ->", err)
@@ -1349,7 +1399,7 @@ func deleteRestoredLeafNodes() {
 
 			keyToInsert := common.Uint64ToHash(common.InactiveBoundaryKey)
 			common.InactiveBoundaryKey++
-			// fmt.Println("(restored)insert -> key:", keyToInsert.Hex())
+			// fmt.Println("  (restored)insert -> key:", keyToInsert.Hex())
 
 			err := inactiveTrie.TryUpdate(keyToInsert[:], data)
 			if err != nil {
@@ -1366,7 +1416,7 @@ func deleteRestoredLeafNodes() {
 
 	// delete all used merkle proofs for restoration
 	for _, keyToDelete := range common.RestoredKeys {
-		// fmt.Println("(restored)delete -> key:", keyToDelete.Hex())
+		// fmt.Println("  (restored)delete -> key:", keyToDelete.Hex())
 		err := inactiveTrie.TryDelete(keyToDelete[:])
 		if err != nil {
 			fmt.Println("ERROR in deleteRestoredLeafNodes(): trie.TryDelete() ->", err)
@@ -1413,6 +1463,7 @@ func inactivateLeafNodes(firstKeyToCheck, lastKeyToCheck common.Hash) {
 				// insert inactive account to right
 				keyToInsert := common.Uint64ToHash(common.InactiveBoundaryKey)
 				common.InactiveBoundaryKey++
+				// fmt.Println("  (inactivated)insert -> key:", keyToInsert.Hex())
 				err = inactiveTrie.TryUpdate(keyToInsert[:], enc)
 				if err != nil {
 					fmt.Println("inactivateLeafNodes insert error:", err)
@@ -1902,6 +1953,8 @@ func saveBlockInfos(fileName string, startBlockNum, endBlockNum uint64) {
 		log += strconv.FormatInt(blockInfo.TimeToFlushInactiveMem, 10) + delimiter
 		log += strconv.FormatInt(blockInfo.TimeToFlushInactiveDisk, 10) + delimiter
 		log += strconv.FormatInt(blockInfo.TimeToFlushStorage, 10) + delimiter
+
+		log += strconv.FormatInt(blockInfo.DiskSize, 10) + delimiter
 
 		// fmt.Println("log at block", blockNum, ":", log)
 
